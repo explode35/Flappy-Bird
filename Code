@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Flappy Bird</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #87CEEB;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            border: 2px solid #000;
+            touch-action: none; /* Prevents default touch behaviors like scrolling */
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game variables
+        let birdY = 300;
+        let birdVelocity = 0;
+        const gravity = 0.5;
+        const jump = -10;
+        let pipes = [];
+        let score = 0;
+        let gameOver = false;
+        let gameStarted = false;
+        const pipeWidth = 50;
+        const pipeGap = 150;
+        const pipeSpeed = 2;
+        let animationFrameId = null; // Track animation frame
+
+        // Bird properties
+        const bird = {
+            x: 100,
+            width: 30,
+            height: 30
+        };
+
+        // Initialize game
+        function init() {
+            // Cancel any existing animation frame
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+
+            // Reset game state
+            pipes = [];
+            score = 0;
+            birdY = 300;
+            birdVelocity = 0;
+            gameOver = false;
+            gameStarted = false;
+
+            // Remove existing event listeners to prevent duplicates
+            canvas.removeEventListener('click', flap);
+            canvas.removeEventListener('touchstart', flap);
+            canvas.addEventListener('click', flap);
+            canvas.addEventListener('touchstart', flap, { passive: false });
+
+            // Add initial pipe
+            addPipe();
+
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Add new pipe
+        function addPipe() {
+            const minGapY = 100;
+            const maxGapY = canvas.height - 100 - pipeGap;
+            const gapY = Math.random() * (maxGapY - minGapY) + minGapY;
+            pipes.push({
+                x: canvas.width,
+                gapY: gapY,
+                scored: false
+            });
+        }
+
+        // Draw bird
+        function drawBird() {
+            ctx.fillStyle = '#FFD700'; // Yellow bird
+            ctx.beginPath();
+            ctx.arc(bird.x + bird.width / 2, birdY + bird.height / 2, bird.width / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+        }
+
+        // Draw pipes
+        function drawPipes() {
+            ctx.fillStyle = '#228B22'; // Green pipes
+            ctx.strokeStyle = '#000';
+            pipes.forEach(pipe => {
+                // Top pipe
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.gapY - pipeGap / 2);
+                ctx.strokeRect(pipe.x, 0, pipeWidth, pipe.gapY - pipeGap / 2);
+                // Bottom pipe
+                ctx.fillRect(pipe.x, pipe.gapY + pipeGap / 2, pipeWidth, canvas.height - (pipe.gapY + pipeGap / 2));
+                ctx.strokeRect(pipe.x, pipe.gapY + pipeGap / 2, pipeWidth, canvas.height - (pipe.gapY + pipeGap / 2));
+            });
+        }
+
+        // Draw score and instructions
+        function drawUI() {
+            ctx.fillStyle = '#000';
+            ctx.font = '20px Arial';
+            ctx.fillText('Score: ' + score, 10, 30);
+            if (!gameStarted) {
+                ctx.font = '20px Arial';
+                ctx.fillText('Tap to start and flap!', canvas.width / 2 - 80, canvas.height / 2 - 20);
+            } else if (gameOver) {
+                ctx.font = '30px Arial';
+                ctx.fillText('Game Over', canvas.width / 2 - 70, canvas.height / 2 - 20);
+                ctx.fillText('Tap to Restart', canvas.width / 2 - 90, canvas.height / 2 + 20);
+            }
+        }
+
+        // Update game state
+        function update() {
+            if (!gameStarted || gameOver) return;
+
+            // Update bird
+            birdVelocity += gravity;
+            birdY += birdVelocity;
+
+            // Update pipes
+            pipes.forEach(pipe => {
+                pipe.x -= pipeSpeed;
+                // Score when bird passes pipe
+                if (!pipe.scored && pipe.x + pipeWidth < bird.x) {
+                    score++;
+                    pipe.scored = true;
+                }
+            });
+
+            // Add new pipe every 100 frames
+            if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 200) {
+                addPipe();
+            }
+
+            // Remove off-screen pipes
+            pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
+
+            // Collision detection
+            if (birdY < 0 || birdY + bird.height > canvas.height) {
+                gameOver = true;
+            }
+            pipes.forEach(pipe => {
+                if (bird.x + bird.width > pipe.x && bird.x < pipe.x + pipeWidth) {
+                    if (birdY < pipe.gapY - pipeGap / 2 || birdY + bird.height > pipe.gapY + pipeGap / 2) {
+                        gameOver = true;
+                    }
+                }
+            });
+        }
+
+        // Game loop
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            update();
+            drawPipes();
+            drawBird();
+            drawUI();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // Handle input
+        function flap(event) {
+            if (event.type === 'touchstart' && event.cancelable) {
+                event.preventDefault();
+            }
+            console.log('Flap triggered:', event.type); // Debug input
+            if (!gameStarted) {
+                gameStarted = true;
+                birdVelocity = jump;
+            } else if (gameOver) {
+                init(); // Reset game fully
+            } else {
+                birdVelocity = jump;
+            }
+        }
+
+        // Start game
+        init();
+    </script>
+</body>
+</html>
+
