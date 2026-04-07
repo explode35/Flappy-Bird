@@ -2,201 +2,131 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Flappy Bird</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zen Bubble Pop Pro</title>
     <style>
         body {
             margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #87CEEB;
             overflow: hidden;
+            /* Relaxing deep-sea gradient */
+            background: linear-gradient(180deg, #1a2a6c, #2a4858, #1a2a6c);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            font-family: 'Helvetica Neue', sans-serif;
+            touch-action: none;
         }
-        canvas {
-            display: block;
-            border: 2px solid #000;
-            touch-action: none; /* Prevents default touch behaviors like scrolling */
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
+
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            z-index: 10;
+            pointer-events: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        #score-display { font-size: 1.5rem; opacity: 0.8; }
+
+        .bubble {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(2px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            animation: float Upwards linear forwards;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(110vh) scale(1); opacity: 0; }
+            20% { opacity: 0.6; }
+            100% { transform: translateY(-20vh) scale(1.5); opacity: 0; }
+        }
+
+        .popping { animation: pop 0.2s ease-out forwards !important; }
+        @keyframes pop { to { transform: scale(2); opacity: 0; } }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+    <div id="ui-layer">
+        <div id="score-display">Zen: 0</div>
+    </div>
+    <div id="game-container"></div>
+
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-
-        // Game variables
-        let birdY = 300;
-        let birdVelocity = 0;
-        const gravity = 0.5;
-        const jump = -10;
-        let pipes = [];
+        const container = document.getElementById('game-container');
+        const scoreElement = document.getElementById('score-display');
         let score = 0;
-        let gameOver = false;
-        let gameStarted = false;
-        const pipeWidth = 50;
-        const pipeGap = 150;
-        const pipeSpeed = 2;
-        let animationFrameId = null; // Track animation frame
 
-        // Bird properties
-        const bird = {
-            x: 100,
-            width: 30,
-            height: 30
-        };
+        // 1. Synth Sound Engine (Generates a soft 'plink')
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // Initialize game
-        function init() {
-            // Cancel any existing animation frame
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-                animationFrameId = null;
-            }
+        function playPopSound() {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
 
-            // Reset game state
-            pipes = [];
-            score = 0;
-            birdY = 300;
-            birdVelocity = 0;
-            gameOver = false;
-            gameStarted = false;
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(600 + Math.random() * 200, audioCtx.currentTime);
 
-            // Remove existing event listeners to prevent duplicates
-            canvas.removeEventListener('click', flap);
-            canvas.removeEventListener('touchstart', flap);
-            canvas.addEventListener('click', flap);
-            canvas.addEventListener('touchstart', flap, { passive: false });
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
 
-            // Add initial pipe
-            addPipe();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
 
-            // Start game loop
-            requestAnimationFrame(gameLoop);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1);
         }
 
-        // Add new pipe
-        function addPipe() {
-            const minGapY = 100;
-            const maxGapY = canvas.height - 100 - pipeGap;
-            const gapY = Math.random() * (maxGapY - minGapY) + minGapY;
-            pipes.push({
-                x: canvas.width,
-                gapY: gapY,
-                scored: false
-            });
+        function createBubble() {
+            const bubble = document.createElement('div');
+            const size = Math.random() * 60 + 30;
+            const posX = Math.random() * (window.innerWidth - size);
+            const duration = Math.random() * 5 + 5;
+
+            bubble.className = 'bubble';
+            bubble.style.width = `${size}px`;
+            bubble.style.height = `${size}px`;
+            bubble.style.left = `${posX}px`;
+            bubble.style.animationDuration = `${duration}s`;
+
+            // Mobile & Desktop support
+            const handleInteraction = (e) => {
+                e.preventDefault();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                popBubble(bubble);
+            };
+
+            bubble.addEventListener('touchstart', handleInteraction);
+            bubble.addEventListener('mousedown', handleInteraction);
+
+            container.appendChild(bubble);
+            setTimeout(() => { if(bubble.parentNode) container.removeChild(bubble); }, duration * 1000);
         }
 
-        // Draw bird
-        function drawBird() {
-            ctx.fillStyle = '#FFD700'; // Yellow bird
-            ctx.beginPath();
-            ctx.arc(bird.x + bird.width / 2, birdY + bird.height / 2, bird.width / 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#000';
-            ctx.stroke();
+        function popBubble(bubble) {
+            if (bubble.classList.contains('popping')) return;
+
+            bubble.classList.add('popping');
+            playPopSound();
+
+            score++;
+            scoreElement.innerText = `Zen: ${score}`;
+
+            setTimeout(() => {
+                if(bubble.parentNode) container.removeChild(bubble);
+            }, 200);
         }
 
-        // Draw pipes
-        function drawPipes() {
-            ctx.fillStyle = '#228B22'; // Green pipes
-            ctx.strokeStyle = '#000';
-            pipes.forEach(pipe => {
-                // Top pipe
-                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.gapY - pipeGap / 2);
-                ctx.strokeRect(pipe.x, 0, pipeWidth, pipe.gapY - pipeGap / 2);
-                // Bottom pipe
-                ctx.fillRect(pipe.x, pipe.gapY + pipeGap / 2, pipeWidth, canvas.height - (pipe.gapY + pipeGap / 2));
-                ctx.strokeRect(pipe.x, pipe.gapY + pipeGap / 2, pipeWidth, canvas.height - (pipe.gapY + pipeGap / 2));
-            });
-        }
-
-        // Draw score and instructions
-        function drawUI() {
-            ctx.fillStyle = '#000';
-            ctx.font = '20px Arial';
-            ctx.fillText('Score: ' + score, 10, 30);
-            if (!gameStarted) {
-                ctx.font = '20px Arial';
-                ctx.fillText('Tap to start and flap!', canvas.width / 2 - 80, canvas.height / 2 - 20);
-            } else if (gameOver) {
-                ctx.font = '30px Arial';
-                ctx.fillText('Game Over', canvas.width / 2 - 70, canvas.height / 2 - 20);
-                ctx.fillText('Tap to Restart', canvas.width / 2 - 90, canvas.height / 2 + 20);
-            }
-        }
-
-        // Update game state
-        function update() {
-            if (!gameStarted || gameOver) return;
-
-            // Update bird
-            birdVelocity += gravity;
-            birdY += birdVelocity;
-
-            // Update pipes
-            pipes.forEach(pipe => {
-                pipe.x -= pipeSpeed;
-                // Score when bird passes pipe
-                if (!pipe.scored && pipe.x + pipeWidth < bird.x) {
-                    score++;
-                    pipe.scored = true;
-                }
-            });
-
-            // Add new pipe every 100 frames
-            if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 200) {
-                addPipe();
-            }
-
-            // Remove off-screen pipes
-            pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
-
-            // Collision detection
-            if (birdY < 0 || birdY + bird.height > canvas.height) {
-                gameOver = true;
-            }
-            pipes.forEach(pipe => {
-                if (bird.x + bird.width > pipe.x && bird.x < pipe.x + pipeWidth) {
-                    if (birdY < pipe.gapY - pipeGap / 2 || birdY + bird.height > pipe.gapY + pipeGap / 2) {
-                        gameOver = true;
-                    }
-                }
-            });
-        }
-
-        // Game loop
-        function gameLoop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            update();
-            drawPipes();
-            drawBird();
-            drawUI();
-            animationFrameId = requestAnimationFrame(gameLoop);
-        }
-
-        // Handle input
-        function flap(event) {
-            if (event.type === 'touchstart' && event.cancelable) {
-                event.preventDefault();
-            }
-            console.log('Flap triggered:', event.type); // Debug input
-            if (!gameStarted) {
-                gameStarted = true;
-                birdVelocity = jump;
-            } else if (gameOver) {
-                init(); // Reset game fully
-            } else {
-                birdVelocity = jump;
-            }
-        }
-
-        // Start game
-        init();
+        setInterval(createBubble, 700);
     </script>
 </body>
 </html>
-
