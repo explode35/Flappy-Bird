@@ -26,35 +26,46 @@ export default function GameCanvas({ gameState, onTileClick, onTowerClick, selec
     renderFrame(ctx, gameState, hoveredTile, selectedTowerId);
   });
 
-  const getCellFromEvent = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
+  const getCellFromCoords = useCallback((clientX: number, clientY: number, rect: DOMRect) => {
     const scaleX = width / rect.width;
     const scaleY = height / rect.height;
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top) * scaleY;
+    const cx = (clientX - rect.left) * scaleX;
+    const cy = (clientY - rect.top) * scaleY;
     return {
       r: Math.floor(cy / TILE_SIZE),
       c: Math.floor(cx / TILE_SIZE),
     };
   }, [width, height]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { r, c } = getCellFromEvent(e);
-    setHoveredTile({ r, c });
-  }, [getCellFromEvent]);
-
-  const handleMouseLeave = useCallback(() => setHoveredTile(null), []);
-
-  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { r, c } = getCellFromEvent(e);
-    // Check if a tower was clicked
+  const handleCellAction = useCallback((r: number, c: number) => {
     const tower = gameState.towers.find(t => t.row === r && t.col === c);
     if (tower) {
       onTowerClick(tower.id);
     } else {
       onTileClick(r, c);
     }
-  }, [getCellFromEvent, gameState.towers, onTileClick, onTowerClick]);
+  }, [gameState.towers, onTileClick, onTowerClick]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { r, c } = getCellFromCoords(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect());
+    setHoveredTile({ r, c });
+  }, [getCellFromCoords]);
+
+  const handleMouseLeave = useCallback(() => setHoveredTile(null), []);
+
+  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { r, c } = getCellFromCoords(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect());
+    handleCellAction(r, c);
+  }, [getCellFromCoords, handleCellAction]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const { r, c } = getCellFromCoords(touch.clientX, touch.clientY, rect);
+    handleCellAction(r, c);
+  }, [getCellFromCoords, handleCellAction]);
 
   return (
     <canvas
@@ -62,10 +73,11 @@ export default function GameCanvas({ gameState, onTileClick, onTowerClick, selec
       width={width}
       height={height}
       className="block max-w-full max-h-full"
-      style={{ imageRendering: 'pixelated', cursor: gameState.placingTower ? 'crosshair' : 'default' }}
+      style={{ imageRendering: 'pixelated', cursor: gameState.placingTower ? 'crosshair' : 'default', touchAction: 'none' }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
+      onTouchEnd={handleTouchEnd}
     />
   );
 }

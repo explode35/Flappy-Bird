@@ -38,7 +38,7 @@ export default function Sidebar({
         <button
           onClick={onBuyTower}
           disabled={gold < TOWER_COST || waveActive || gameOver || placingTower}
-          className={`w-full py-2 px-3 rounded text-sm font-semibold transition-all
+          className={`w-full py-3 px-3 rounded text-sm font-semibold transition-all
             ${placingTower
               ? 'bg-green-600 text-white ring-2 ring-green-400'
               : gold >= TOWER_COST && !waveActive && !gameOver
@@ -60,7 +60,7 @@ export default function Sidebar({
         <button
           onClick={onStartWave}
           disabled={waveActive}
-          className={`w-full py-2 rounded font-bold text-sm transition-all
+          className={`w-full py-3 rounded font-bold text-sm transition-all
             ${!waveActive
               ? 'bg-blue-600 hover:bg-blue-500 text-white'
               : 'bg-gray-700 text-gray-500 cursor-not-allowed'
@@ -71,7 +71,7 @@ export default function Sidebar({
       ) : (
         <button
           onClick={onReset}
-          className="w-full py-2 rounded font-bold text-sm bg-red-700 hover:bg-red-600 text-white"
+          className="w-full py-3 rounded font-bold text-sm bg-red-700 hover:bg-red-600 text-white"
         >
           Play Again
         </button>
