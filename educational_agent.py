@@ -260,11 +260,56 @@ def extract_and_save_latex(text: str, session_dir: Path, counter: list) -> None:
 
     for match in matches:
         counter[0] += 1
-        content = match.group(1).strip()
+        content = _patch_latex(match.group(1).strip())
         filename = session_dir / f"content_{counter[0]:02d}.tex"
         filename.write_text(content, encoding="utf-8")
         print(f"\n  [SAVED] LaTeX source -> {filename}")
         _copy_to_clipboard(content)
+
+
+def _patch_latex(src: str) -> str:
+    """Auto-fix common Overleaf compilation errors in generated LaTeX."""
+
+    # 1. Strip any stray code-fence lines (```latex / ```)
+    src = re.sub(r'^```[a-z]*\s*\n?', '', src, flags=re.IGNORECASE)
+    src = re.sub(r'\n?```\s*$', '', src, flags=re.IGNORECASE)
+    src = src.strip()
+
+    # 2. Ensure colortbl is loaded (needed for \rowcolor in tables)
+    if r'\usepackage{colortbl}' not in src and r'[table]{xcolor}' not in src:
+        src = src.replace(
+            r'\usepackage{tabularx}',
+            r'\usepackage{tabularx}' + '\n' + r'\usepackage{colortbl}',
+            1,
+        )
+
+    # 3. Ensure TikZ positioning + calc libraries are loaded
+    if 'positioning' not in src:
+        if r'\usetikzlibrary{' in src:
+            # append to the first existing \usetikzlibrary call
+            src = re.sub(
+                r'(\\usetikzlibrary\{)([^}]+)(\})',
+                lambda m: m.group(1) + m.group(2) + ',positioning,calc' + m.group(3),
+                src, count=1,
+            )
+        elif r'\usepackage{tikz}' in src:
+            src = src.replace(
+                r'\usepackage{tikz}',
+                r'\usepackage{tikz}' + '\n' + r'\usetikzlibrary{positioning,calc}',
+                1,
+            )
+
+    # 4. Fix \headheight too small (fancyhdr warning → compile error on some builds)
+    if r'\pagestyle{fancy}' in src and r'\setlength{\headheight}' not in src:
+        src = src.replace(
+            r'\pagestyle{fancy}',
+            r'\setlength{\headheight}{24.65pt}' + '\n'
+            + r'\addtolength{\topmargin}{-12.65pt}' + '\n'
+            + r'\pagestyle{fancy}',
+            1,
+        )
+
+    return src
 
 
 def _copy_to_clipboard(text: str) -> None:
