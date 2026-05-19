@@ -7,6 +7,7 @@ Powered by the Anthropic SDK with streaming.
 
 import anthropic
 import os
+import subprocess
 import sys
 import json
 import re
@@ -247,9 +248,27 @@ def extract_and_save_latex(text: str, session_dir: Path, counter: list) -> None:
 
     for match in matches:
         counter[0] += 1
+        content = match.group(1).strip()
         filename = session_dir / f"content_{counter[0]:02d}.tex"
-        filename.write_text(match.group(1).strip(), encoding="utf-8")
+        filename.write_text(content, encoding="utf-8")
         print(f"\n  [SAVED] LaTeX source -> {filename}")
+        _copy_to_clipboard(content)
+
+
+def _copy_to_clipboard(text: str) -> None:
+    """Copy text to the system clipboard (macOS pbcopy, Linux xclip/xsel)."""
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["pbcopy"], input=text.encode(), check=True)
+            print("  [CLIPBOARD] LaTeX copied -- paste directly into Overleaf.")
+        else:
+            for cmd in (["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
+                result = subprocess.run(cmd, input=text.encode(), capture_output=True)
+                if result.returncode == 0:
+                    print("  [CLIPBOARD] LaTeX copied -- paste directly into Overleaf.")
+                    break
+    except Exception:
+        pass  # clipboard is a convenience; never block on failure
 
 
 # ---------------------------------------------------------------------------
