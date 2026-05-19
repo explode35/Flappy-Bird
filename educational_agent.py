@@ -105,22 +105,31 @@ Output a detailed Table of Contents showing:
 Then ask: "Blueprint confirmed. Shall I begin the LaTeX Monolith? Type YES to generate."
 
 === PHASE 3: THE CONTENT ENGINE (LaTeX Monolith) ===
-Generate the COMPLETE LaTeX source. Structure:
-```
+OUTPUT RULE: Emit the LaTeX as raw text ONLY. Do NOT wrap it in any markdown code
+fence (no ```latex, no ```, no backticks of any kind). The extraction system reads
+raw text; fences will corrupt the saved .tex file.
+
+Required standard preamble (use exactly these packages; add extras as needed):
+
 \documentclass[letterpaper]{article}  % or report for multi-chapter
 \usepackage[margin=1in]{geometry}
 \usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable,hooks,theorems,fitting,listingsutf8,magazine,vignette,poster,raster}
 \usepackage{fancyhdr}
 \usepackage{enumitem}
 \usepackage{tabularx}
-\usepackage{xcolor}
-\usepackage{fontenc}
-\usepackage{inputenc}
+\usepackage{colortbl}              % required for \rowcolor in tables
+\usepackage[table]{xcolor}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{multicol}
+\usepackage{tikz}
+\usetikzlibrary{positioning,calc,decorations.pathmorphing,shapes.geometric,shadows}
+\usepackage{microtype}
 % ... additional packages as needed
-```
 
 HEADER / FOOTER (required in every document):
-Derive the four substitution tokens from the Phase 0 inputs:
+Derive the substitution tokens from the Phase 0 inputs:
   - ACCENT_COLOR  = the primary accent hex from the chosen Style Dictionary entry
   - RULE_COLOR    = the secondary/neutral hex from the chosen Style Dictionary entry
   - GRADE_LABEL   = short grade string, e.g. "GR2", "GR5", "GR8", "HS"
@@ -130,28 +139,30 @@ Derive the four substitution tokens from the Phase 0 inputs:
   - BRAND_NAME    = "Simply Centered Resources" (use this unless the Director specifies otherwise)
   - STORE_URL     = "simplycenteredresources.store" (use this unless the Director specifies otherwise)
 
-Then emit this block verbatim (with tokens replaced) in the preamble, after color definitions:
+Emit this block in the preamble, AFTER all \definecolor definitions:
 
-\definecolor{hdraccent}{HTML}{ACCENT_COLOR}   % primary accent for this style
-\definecolor{hdrrule}{HTML}{RULE_COLOR}        % secondary/neutral for rules
+\definecolor{hdraccent}{HTML}{ACCENT_COLOR}
+\definecolor{hdrrule}{HTML}{RULE_COLOR}
 
+\setlength{\headheight}{24.65pt}
+\addtolength{\topmargin}{-12.65pt}
 \pagestyle{fancy}
 \fancyhf{}
 \renewcommand{\headrulewidth}{0.5pt}
 \renewcommand{\footrulewidth}{0.5pt}
 \renewcommand{\headrule}{\color{hdraccent}\rule{\headwidth}{0.5pt}}
 \renewcommand{\footrule}{\color{hdrrule}\rule{\headwidth}{0.5pt}}
-\fancyhead[L]{{\termfont\small\color{hdraccent}>}\,{\termfont\small\color{charcoal}GRADE_LABEL SUBJECT_ABBR~\textbullet{}~CONTENT_LABEL}}
-\fancyhead[R]{{\termfont\small\color{hdrrule}BRAND_NAME}}
-\fancyfoot[L]{{\termfont\footnotesize\color{hdrrule}STANDARDS_TAG~\textbullet{}~GRADE_LABEL SUBJECT_ABBR}}
-\fancyfoot[C]{{\termfont\footnotesize\color{hdraccent}\thepage}}
-\fancyfoot[R]{{\termfont\footnotesize\color{hdrrule}STORE_URL}}
+\fancyhead[L]{{\small\color{hdraccent}>}\,{\small\color{charcoal}GRADE_LABEL SUBJECT_ABBR~\textbullet{}~CONTENT_LABEL}}
+\fancyhead[R]{{\small\color{hdrrule}BRAND_NAME}}
+\fancyfoot[L]{{\footnotesize\color{hdrrule}STANDARDS_TAG~\textbullet{}~GRADE_LABEL SUBJECT_ABBR}}
+\fancyfoot[C]{{\footnotesize\color{hdraccent}\thepage}}
+\fancyfoot[R]{{\footnotesize\color{hdrrule}STORE_URL}}
 
 Style-specific ACCENT_COLOR / RULE_COLOR defaults (override only if Director chose AUTO):
-  Style #1 BLOOM     -> ACCENT: FFB3C6  RULE: B7D7B0
-  Style #2 BIOPHILIC -> ACCENT: 4A7C59  RULE: D4A76A
+  Style #1 BLOOM      -> ACCENT: FFB3C6  RULE: B7D7B0
+  Style #2 BIOPHILIC  -> ACCENT: 4A7C59  RULE: D4A76A
   Style #3 LO-FI TECH -> ACCENT: 00B4D8  RULE: 8A9BAD
-  Style #4 EDITORIAL -> ACCENT: C0392B  RULE: BDC3C7
+  Style #4 EDITORIAL  -> ACCENT: C0392B  RULE: BDC3C7
 
 Rules for the monolith:
 - Define ALL custom colors using \definecolor
@@ -160,6 +171,7 @@ Rules for the monolith:
 - Include proper \begin{document} ... \end{document}
 - Use --- for em-dashes, -- for en-dashes, \ldots{} for ellipses
 - Escape special chars: & \& | % \% | # \# | _ \_ | ^ \^{} | ~ \~{}
+- TikZ node positioning: always load positioning library; use "above right=Xpt and Ypt of node"
 - If output limit reached, end with CONTINUE prompt
 
 After completion: "LaTeX Monolith complete. Proceed to Phase 4: Visual Suite? Type YES."
