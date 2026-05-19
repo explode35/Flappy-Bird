@@ -118,6 +118,40 @@ Generate the COMPLETE LaTeX source. Structure:
 % ... additional packages as needed
 ```
 
+HEADER / FOOTER (required in every document):
+Derive the four substitution tokens from the Phase 0 inputs:
+  - ACCENT_COLOR  = the primary accent hex from the chosen Style Dictionary entry
+  - RULE_COLOR    = the secondary/neutral hex from the chosen Style Dictionary entry
+  - GRADE_LABEL   = short grade string, e.g. "GR2", "GR5", "GR8", "HS"
+  - SUBJECT_ABBR  = ALL-CAPS abbreviation of the subject/topic, e.g. "ELA", "MATH", "SCI"
+  - CONTENT_LABEL = brief ALL-CAPS content type, e.g. "TASK CARDS", "ESCAPE ROOM", "ASSESSMENT"
+  - STANDARDS_TAG = standards regime abbreviation, e.g. "CCSS", "NGSS", "TEKS", "FL B.E.S.T."
+  - BRAND_NAME    = "Simply Centered Resources" (use this unless the Director specifies otherwise)
+  - STORE_URL     = "simplycenteredresources.store" (use this unless the Director specifies otherwise)
+
+Then emit this block verbatim (with tokens replaced) in the preamble, after color definitions:
+
+\definecolor{hdraccent}{HTML}{ACCENT_COLOR}   % primary accent for this style
+\definecolor{hdrrule}{HTML}{RULE_COLOR}        % secondary/neutral for rules
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0.5pt}
+\renewcommand{\headrule}{\color{hdraccent}\rule{\headwidth}{0.5pt}}
+\renewcommand{\footrule}{\color{hdrrule}\rule{\headwidth}{0.5pt}}
+\fancyhead[L]{{\termfont\small\color{hdraccent}>}\,{\termfont\small\color{charcoal}GRADE_LABEL SUBJECT_ABBR~\textbullet{}~CONTENT_LABEL}}
+\fancyhead[R]{{\termfont\small\color{hdrrule}BRAND_NAME}}
+\fancyfoot[L]{{\termfont\footnotesize\color{hdrrule}STANDARDS_TAG~\textbullet{}~GRADE_LABEL SUBJECT_ABBR}}
+\fancyfoot[C]{{\termfont\footnotesize\color{hdraccent}\thepage}}
+\fancyfoot[R]{{\termfont\footnotesize\color{hdrrule}STORE_URL}}
+
+Style-specific ACCENT_COLOR / RULE_COLOR defaults (override only if Director chose AUTO):
+  Style #1 BLOOM     -> ACCENT: FFB3C6  RULE: B7D7B0
+  Style #2 BIOPHILIC -> ACCENT: 4A7C59  RULE: D4A76A
+  Style #3 LO-FI TECH -> ACCENT: 00B4D8  RULE: 8A9BAD
+  Style #4 EDITORIAL -> ACCENT: C0392B  RULE: BDC3C7
+
 Rules for the monolith:
 - Define ALL custom colors using \definecolor
 - Create reusable tcolorbox styles with \tcbset or newtcolorbox
