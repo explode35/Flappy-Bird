@@ -230,9 +230,22 @@ You are now initialized and ready. Begin every new conversation with the Phase 0
 # ---------------------------------------------------------------------------
 
 def extract_and_save_latex(text: str, session_dir: Path, counter: list) -> None:
-    """Find LaTeX code blocks in the response and save them to files."""
-    pattern = re.compile(r'```(?:latex|tex)?\s*(\\documentclass[\s\S]*?\\end\{document\})\s*```', re.IGNORECASE)
-    for match in pattern.finditer(text):
+    """Find LaTeX blocks in the response and save them to files.
+
+    Tries fenced code blocks first (```latex or ```tex), then falls back to
+    bare \\documentclass...\\end{document} in case Claude omits the fence.
+    """
+    fenced = re.compile(
+        r'```(?:latex|tex)?\s*(\\documentclass[\s\S]*?\\end\{document\})\s*```',
+        re.IGNORECASE,
+    )
+    bare = re.compile(r'(\\documentclass[\s\S]*?\\end\{document\})', re.IGNORECASE)
+
+    matches = list(fenced.finditer(text))
+    if not matches:
+        matches = list(bare.finditer(text))
+
+    for match in matches:
         counter[0] += 1
         filename = session_dir / f"content_{counter[0]:02d}.tex"
         filename.write_text(match.group(1).strip(), encoding="utf-8")
