@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Parser tests — Fitness Operations Engine</title>
+<style>
+  body { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; margin: 30px; }
+  .pass { color: #1f9d55; }
+  .fail { color: #dc2626; font-weight: bold; }
+  h1 { font-size: 16px; }
+</style>
+</head>
+<body>
+<h1>Parser + progression tests</h1>
+<div id="out"></div>
+<script src="../js/parser.js"></script>
+<script src="../js/progression.js"></script>
+<script>
+(function () {
+  var out = document.getElementById('out');
+  var passed = 0, failed = 0;
+
+  function assert(name, cond, detail) {
+    var div = document.createElement('div');
+    if (cond) { passed++; div.className = 'pass'; div.textContent = 'PASS ' + name; }
+    else { failed++; div.className = 'fail'; div.textContent = 'FAIL ' + name + (detail ? ' — ' + detail : ''); }
+    out.appendChild(div);
+  }
+  function eq(name, actual, expected) {
+    assert(name, JSON.stringify(actual) === JSON.stringify(expected),
+      'got ' + JSON.stringify(actual) + ', want ' + JSON.stringify(expected));
+  }
+
+  var P = window.FitParser, G = window.FitProgression;
+
+  // --- exercise parsing ---
+  var ex = P.parseExercise('Bench Press 4x8 @ RPE 7 rest 2min');
+  eq('bench name', ex.name, 'Bench Press');
+  eq('bench sets', ex.sets, 4);
+  eq('bench reps', ex.reps, '8');
+  eq('bench rpe', ex.rpe, 7);
+  eq('bench rest', ex.restSeconds, 120);
+
+  ex = P.parseExercise('Deadlift 3x5 @ 80% rest 3min');
+  eq('deadlift percent', ex.percent, 80);
+  eq('deadlift rest', ex.restSeconds, 180);
+  eq('deadlift rpe null', ex.rpe, null);
+
+  ex = P.parseExercise('A1. Cable Fly 3x15');
+  eq('superset group', ex.superset, 'A');
+  eq('superset name', ex.name, 'Cable Fly');
+
+  ex = P.parseExercise('Lat Pulldown 3x10-12 rest 90s tempo 3010');
+  eq('range reps', ex.reps, '10-12');
+  eq('tempo', ex.tempo, '3010');
+  eq('rest 90s', ex.restSeconds, 90);
+
+  ex = P.parseExercise('Walking Lunge 2x10/side rest 90s');
+  eq('per-side reps', ex.reps, '10/side');
+  eq('per-side name', ex.name, 'Walking Lunge');
+
+  ex = P.parseExercise('Pull-ups 4xAMRAP rest 2min');
+  eq('amrap reps', ex.reps, 'AMRAP');
+
+  ex = P.parseExercise('Back Squat 4x6 @ RPE 7-8 rest 3min');
+  eq('rpe range keeps low end', ex.rpe, 7);
+  eq('rpe range name', ex.name, 'Back Squat');
+
+  ex = P.parseExercise('Plank 3 sets 45s');
+  eq('sets-of style sets', ex.sets, 3);
+  eq('sets-of style name', ex.name, 'Plank');
+
+  // --- rest parsing ---
+  eq('rest 1:30', P.parseRest('rest 1:30'), 90);
+  eq('rest 2-3min takes low', P.parseRest('rest 2-3min'), 120);
+  eq('no rest', P.parseRest('Bench Press 4x8'), null);
+
+  // --- full program ---
+  var raw = [
+    'Program: Test Block', 'Weeks: 6', '',
+    'Day 1 - Push',
+    'Bench Press 4x8 @ RPE 7 rest 2min',
+    'A1. Cable Fly 3x15', 'A2. Lateral Raise 3x15',
+    '- brace hard', '',
+    'Monday',
+    'Row 3x10', '',
+    'Upper A:',
+    'OHP 5x5 @ 75%'
+  ].join('\n');
+  var prog = P.parseProgram(raw);
+  eq('program name', prog.name, 'Test Block');
+  eq('program weeks', prog.weeks, 6);
+  eq('day count', prog.days.length, 3);
+  eq('day 1 label', prog.days[0].label, 'Day 1 - Push');
+  eq('weekday header', prog.days[1].label, 'Monday');
+  eq('colon header', prog.days[2].label, 'Upper A');
+  eq('day 1 exercise count', prog.days[0].exercises.length, 3);
+  eq('note attaches to exercise', prog.days[0].exercises[2].notes, ['brace hard']);
+  eq('ohp percent', prog.days[2].exercises[0].percent, 75);
+  eq('no warnings', prog.warnings.length, 0);
+
+  // exercises before any day header get a default day
+  var prog2 = P.parseProgram('Squat 3x5\nBench 3x5');
+  eq('default day created', prog2.days.length, 1);
+  eq('default day label', prog2.days[0].label, 'Day 1');
+  eq('default day exercises', prog2.days[0].exercises.length, 2);
+
+  // --- progression ---
+  var bench = { name: 'Bench', sets: 3, reps: '8-10', rpe: 8 };
+  eq('topped range -> increase',
+     G.suggest(bench, { weight: 80, repsDone: 10, rpe: 7.5 }).action, 'increase');
+  eq('inside range -> add-rep',
+     G.suggest(bench, { weight: 80, repsDone: 9, rpe: 8 }).action, 'add-rep');
+  eq('below range -> reduce',
+     G.suggest(bench, { weight: 80, repsDone: 6, rpe: 9 }).action, 'reduce');
+  eq('overshot rpe -> reduce',
+     G.suggest(bench, { weight: 80, repsDone: 9, rpe: 10 }).action, 'reduce');
+
+  var squat = { name: 'Squat', sets: 5, reps: '5', rpe: 7 };
+  eq('fixed hit -> increase', G.suggest(squat, { weight: 100, repsDone: 5, rpe: 7 }).action, 'increase');
+  eq('fixed missed -> hold', G.suggest(squat, { weight: 100, repsDone: 4, rpe: 9 }).action, 'hold');
+  eq('increase rounds to 2.5', G.suggest(squat, { weight: 100, repsDone: 5, rpe: 7 }).nextWeight, 102.5);
+
+  eq('no data -> hold', G.suggest(bench, {}).action, 'hold');
+
+  // --- adherence ---
+  var today = new Date().toISOString().slice(0, 10);
+  var adh = G.adherence([{ date: today }, { date: today }], 3, 14);
+  eq('adherence done', adh.done, 2);
+  eq('adherence expected', adh.expected, 6);
+
+  var h = document.createElement('h1');
+  h.textContent = passed + ' passed, ' + failed + ' failed';
+  h.className = failed ? 'fail' : 'pass';
+  out.insertBefore(h, out.firstChild);
+  document.title = (failed ? 'FAIL' : 'PASS') + ' — parser tests';
+})();
+</script>
+</body>
+</html>

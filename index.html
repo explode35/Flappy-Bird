@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fitness Operations Engine</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">Fitness Ops<small>Operations Engine</small></div>
+    <nav class="nav" id="nav">
+      <button data-view="dashboard" class="active">Dashboard</button>
+      <button data-view="import">Import</button>
+      <button data-view="programs">Programs</button>
+      <button data-view="clients">Clients</button>
+    </nav>
+    <div class="spacer"></div>
+    <div class="tools">
+      <button id="btn-export">Backup (JSON export)</button>
+      <button id="btn-import-backup">Restore backup</button>
+      <input type="file" id="file-backup" accept=".json,application/json" hidden>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- Dashboard -->
+    <section class="view active" id="view-dashboard">
+      <h1>Dashboard</h1>
+      <p class="sub">The week at a glance — check-ins due, adherence flags, and blocks ending soon.</p>
+      <div class="stats" id="dash-stats"></div>
+      <h2>Check-ins due today</h2>
+      <div class="panel" id="dash-checkins"></div>
+      <h2>Adherence flags (last 14 days)</h2>
+      <div class="panel" id="dash-adherence"></div>
+      <h2>Blocks ending within 7 days</h2>
+      <div class="panel" id="dash-ending"></div>
+    </section>
+
+    <!-- Import -->
+    <section class="view" id="view-import">
+      <h1>Import raw programming</h1>
+      <p class="sub">Paste a program the way you'd write it in your notes app. The engine structures it for you.</p>
+      <div class="panel">
+        <textarea id="raw-text" class="raw" placeholder="Program: Hypertrophy Block 1&#10;Weeks: 4&#10;&#10;Day 1 - Push&#10;Bench Press 4x8 @ RPE 7 rest 2min&#10;..."></textarea>
+        <div class="btnrow">
+          <button class="btn primary" id="btn-parse">Parse</button>
+          <button class="btn" id="btn-sample">Load sample</button>
+          <button class="btn" id="btn-clear-raw">Clear</button>
+        </div>
+      </div>
+      <div id="parse-result"></div>
+    </section>
+
+    <!-- Programs -->
+    <section class="view" id="view-programs">
+      <h1>Programs</h1>
+      <p class="sub">Your structured program library. Deliverables are generated per client from here or from a client page.</p>
+      <div class="panel" id="program-list"></div>
+      <div id="program-detail"></div>
+    </section>
+
+    <!-- Clients -->
+    <section class="view" id="view-clients">
+      <h1>Clients</h1>
+      <p class="sub">Roster, assignments, and per-client operations.</p>
+      <div class="panel">
+        <div class="row">
+          <div><label class="f">Name</label><input type="text" id="c-name" placeholder="Sarah Nguyen"></div>
+          <div><label class="f">Email</label><input type="email" id="c-email" placeholder="sarah@example.com"></div>
+        </div>
+        <div class="row">
+          <div><label class="f">Goal</label><input type="text" id="c-goal" placeholder="Build muscle, first pull-up"></div>
+          <div><label class="f">Check-in day</label>
+            <select id="c-checkin">
+              <option>Sunday</option><option>Monday</option><option>Tuesday</option>
+              <option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option>
+            </select>
+          </div>
+        </div>
+        <div class="btnrow"><button class="btn primary" id="btn-add-client">Add client</button></div>
+      </div>
+      <div class="panel" id="client-list"></div>
+    </section>
+
+    <!-- Client detail -->
+    <section class="view" id="view-client">
+      <button class="back" id="btn-back-clients">← All clients</button>
+      <div id="client-detail"></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/parser.js"></script>
+<script src="js/store.js"></script>
+<script src="js/progression.js"></script>
+<script src="js/deliver.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
