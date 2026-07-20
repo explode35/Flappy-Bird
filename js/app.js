@@ -208,7 +208,29 @@
     'Leg Press 3x12 rest 90s',
     'Walking Lunge 2x10/side rest 90s',
     'Standing Calf Raise 4x12-15 rest 60s',
-    'note: last set of leg press is AMRAP if feeling good'
+    'note: last set of leg press is AMRAP if feeling good',
+    '',
+    'Day 4 - Conditioning',
+    'Strength:',
+    'Push Press 5x3 @ 80% rest 2min',
+    '',
+    'AMRAP 12 min',
+    '10 Kettlebell Swings',
+    '15 cal Row',
+    'Max Push-ups',
+    '- pace the first few rounds, don\'t redline early',
+    '',
+    'Tabata 8 x 20/10',
+    'Air Squats',
+    '',
+    'EMOM 10',
+    'Odd: 12 Wall Balls',
+    'Even: 10 Burpees',
+    '',
+    'Finisher - 3 Rounds For Time',
+    '400m Run',
+    '21 Deadlifts',
+    '12 Pull-ups'
   ].join('\n');
 
   $('btn-sample').addEventListener('click', function () {
@@ -256,15 +278,25 @@
     program.days.forEach(function (day) {
       var d = el('div', 'day');
       d.appendChild(el('h3', null, esc(day.label)));
-      day.notes.forEach(function (n) { d.appendChild(el('div', 'dnote', esc(n))); });
-      day.exercises.forEach(function (ex) {
-        var line = el('div', 'exline');
-        line.appendChild(el('span', 'ss', ex.superset ? esc(ex.superset) : ''));
-        var nm = el('span', 'nm', esc(ex.name) +
-          (ex.notes.length ? ' <span class="nt">— ' + esc(ex.notes.join(' · ')) + '</span>' : ''));
-        line.appendChild(nm);
-        line.appendChild(el('span', 'sch', esc(P.schemeLabel(ex) || '—')));
-        d.appendChild(line);
+      (day.notes || []).forEach(function (n) { d.appendChild(el('div', 'dnote', esc(n))); });
+      (day.blocks || []).forEach(function (block) {
+        if (block.format !== 'standard' || block.label) {
+          var tag = block.format === 'standard' ? block.label : P.formatLabel(block);
+          var fmt = el('div', 'blocktag fmt-' + block.format);
+          fmt.appendChild(el('span', 'tag', esc(tag)));
+          if (block.format !== 'standard') fmt.appendChild(el('span', 'exp', esc(P.formatExplainer(block))));
+          d.appendChild(fmt);
+        }
+        (block.notes || []).forEach(function (n) { d.appendChild(el('div', 'dnote', esc(n))); });
+        block.exercises.forEach(function (ex) {
+          var line = el('div', 'exline');
+          line.appendChild(el('span', 'ss', ex.superset ? esc(ex.superset) : ''));
+          var nm = el('span', 'nm', esc(ex.name) +
+            (ex.notes.length ? ' <span class="nt">— ' + esc(ex.notes.join(' · ')) + '</span>' : ''));
+          line.appendChild(nm);
+          line.appendChild(el('span', 'sch', esc(P.schemeLabel(ex) || '—')));
+          d.appendChild(line);
+        });
       });
       wrap.appendChild(d);
     });
@@ -285,7 +317,7 @@
     table.innerHTML = '<thead><tr><th>Program</th><th>Weeks</th><th>Days</th><th>Exercises</th><th></th></tr></thead>';
     var tbody = el('tbody');
     progs.forEach(function (p) {
-      var exCount = p.days.reduce(function (n, d) { return n + d.exercises.length; }, 0);
+      var exCount = p.days.reduce(function (n, d) { return n + P.dayExerciseCount(d); }, 0);
       var tr = el('tr');
       tr.innerHTML = '<td><strong>' + esc(p.name) + '</strong></td><td>' + p.weeks +
         '</td><td>' + p.days.length + '</td><td>' + exCount + '</td>';
@@ -333,6 +365,13 @@
     return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'program';
   }
   function coachName() { return 'Your Coaching'; }
+  function portalUrl(client) {
+    var origin = (global_location() || '').replace(/\/+$/, '');
+    return origin + '/p/' + (client.portalToken || '');
+  }
+  function global_location() {
+    try { return window.location.origin; } catch (e) { return ''; }
+  }
 
   // ---------- clients ----------
   $('btn-add-client').addEventListener('click', function () {
@@ -424,6 +463,18 @@
     });
     prow.appendChild(pin);
     prow.appendChild(pbtn);
+    // TCPA consent: SMS only sends when the client has agreed to texts.
+    var consentLabel = el('label', 'consent');
+    var consentBox = el('input');
+    consentBox.type = 'checkbox';
+    consentBox.checked = !!c.smsConsent;
+    consentBox.addEventListener('change', function () {
+      S.updateClient(c.id, { smsConsent: consentBox.checked });
+      toast(consentBox.checked ? 'SMS consent recorded' : 'SMS consent removed');
+    });
+    consentLabel.appendChild(consentBox);
+    consentLabel.appendChild(el('span', null, ' Client consented to SMS'));
+    prow.appendChild(consentLabel);
     if (c.phone) {
       prow.appendChild(el('span', 'badge ' + (smsConnected ? 'good' : 'gray'),
         smsConnected ? 'SMS sequence active' : 'SMS engine offline'));
@@ -490,6 +541,29 @@
     ap.appendChild(arow);
     box.appendChild(ap);
 
+    // client portal panel
+    var pp = el('div', 'panel');
+    pp.appendChild(el('h2', null, 'Client portal'));
+    var url = portalUrl(c);
+    if (smsConnected) {
+      pp.appendChild(el('p', 'sub', 'Private link — each session shows its exact format (AMRAP, Tabata, straight sets) with built-in timers, and the client can check in from their phone.'));
+      var linkbox = el('div', 'msgbox');
+      linkbox.textContent = url;
+      pp.appendChild(linkbox);
+      var prow2 = el('div', 'btnrow');
+      var openBtn = el('button', 'btn small', 'Open portal');
+      openBtn.addEventListener('click', function () { window.open(url, '_blank'); });
+      var copyLink = el('button', 'btn small', 'Copy link');
+      copyLink.addEventListener('click', function () { copyText(url); });
+      var portalMsg = el('button', 'btn small', 'Copy portal message');
+      portalMsg.addEventListener('click', function () { copyText(D.portalMessage(c, url)); });
+      [openBtn, copyLink, portalMsg].forEach(function (b) { prow2.appendChild(b); });
+      pp.appendChild(prow2);
+    } else {
+      pp.appendChild(el('div', 'empty', 'Run the SMS engine (node sms/server.js) and open the app from http://localhost:3000 to host client portals. The client\'s private link will be ' + esc(url) + '.'));
+    }
+    box.appendChild(pp);
+
     // deliverables panel
     var dp = el('div', 'panel');
     dp.appendChild(el('h2', null, 'Deliver'));
@@ -506,7 +580,7 @@
     var msgBtn = el('button', 'btn small', 'Copy check-in message');
     msgBtn.addEventListener('click', function () { copyText(D.checkinMessage(c)); });
     var welBtn = el('button', 'btn small', 'Copy welcome message');
-    welBtn.addEventListener('click', function () { copyText(D.welcomeMessage(c, prog)); });
+    welBtn.addEventListener('click', function () { copyText(D.welcomeMessage(c, prog, smsConnected ? url : null)); });
     var csvBtn = el('button', 'btn small', 'Program CSV');
     csvBtn.disabled = !prog;
     csvBtn.addEventListener('click', function () {
@@ -548,10 +622,20 @@
     function renderGrid() {
       gridWrap.innerHTML = '';
       var day = prog.days[parseInt(daySel.value, 10)];
+      var flat = P.flatExercises(day);
       var table = el('table', 'list loggrid');
       table.innerHTML = '<thead><tr><th>Exercise</th><th>Target</th><th>Weight</th><th>Last-set reps</th><th>RPE</th></tr></thead>';
       var tbody = el('tbody');
-      day.exercises.forEach(function (ex, i) {
+      var lastBlock = null;
+      flat.forEach(function (item, i) {
+        var ex = item.exercise;
+        if (item.block !== lastBlock && (item.block.format !== 'standard' || item.block.label)) {
+          lastBlock = item.block;
+          var htr = el('tr');
+          var label = item.block.format === 'standard' ? item.block.label : P.formatLabel(item.block);
+          htr.innerHTML = '<td colspan="5" style="font-weight:700;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em">' + esc(label) + '</td>';
+          tbody.appendChild(htr);
+        }
         var tr = el('tr');
         tr.innerHTML = '<td>' + esc(ex.name) + '</td><td style="color:var(--muted)">' +
           esc(P.schemeLabel(ex) || '—') + '</td>';
@@ -578,9 +662,10 @@
     save.style.marginTop = '12px';
     save.addEventListener('click', function () {
       var dayIndex = parseInt(daySel.value, 10);
-      var day = prog.days[dayIndex];
+      var flat = P.flatExercises(prog.days[dayIndex]);
       var entries = [];
-      day.exercises.forEach(function (ex, i) {
+      flat.forEach(function (item, i) {
+        var ex = item.exercise;
         var get = function (f) {
           var inp = gridWrap.querySelector('input[data-ex="' + i + '"][data-field="' + f + '"]');
           return inp && inp.value !== '' ? inp.value : null;
@@ -601,7 +686,8 @@
       suggBox.innerHTML = '';
       suggBox.appendChild(el('h2', null, 'Next time'));
       var list = el('div');
-      day.exercises.forEach(function (ex, i) {
+      flat.forEach(function (item, i) {
+        var ex = item.exercise;
         var entry = entries[i];
         if (entry.weight == null && entry.repsDone == null && entry.rpe == null) return;
         var sug = G.suggest(ex, entry);
@@ -687,7 +773,8 @@
       var tbody = el('tbody');
       history.forEach(function (ci) {
         var v = function (x) { return x != null ? esc(x) : '—'; };
-        var tag = ci.source === 'sms' ? ' <span class="badge gray">SMS</span>' : '';
+        var tag = ci.source === 'sms' ? ' <span class="badge gray">SMS</span>'
+          : ci.source === 'portal' ? ' <span class="badge good">Portal</span>' : '';
         tbody.appendChild(el('tr', null, '<td>' + esc(ci.date) + tag + '</td><td>' + v(ci.weight) +
           '</td><td>' + v(ci.sessions) + '</td><td>' + v(ci.sleep) + '</td><td>' + v(ci.stress) +
           '</td><td>' + v(ci.adherence) +

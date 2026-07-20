@@ -9,21 +9,25 @@
  *   days: [{
  *     label: string,
  *     notes: [string],
- *     exercises: [{
- *       name: string,
- *       sets: number|null,
- *       reps: string|null,        // "8", "8-10", "AMRAP", "10/side"
- *       rpe: number|null,
- *       percent: number|null,     // %1RM
- *       restSeconds: number|null,
- *       tempo: string|null,       // e.g. "3010"
- *       superset: string|null,    // group key, e.g. "A"
+ *     blocks: [{
+ *       format: 'standard'|'amrap'|'emom'|'tabata'|'fortime'|'circuit',
+ *       label: string,            // section title ("Strength") or raw header
+ *       minutes: number|null,     // amrap/emom cap
+ *       rounds: number|null,      // tabata/fortime/circuit
+ *       workSec: number|null,     // tabata
+ *       restSec: number|null,     // tabata
  *       notes: [string],
- *       raw: string,
+ *       exercises: [{
+ *         name, sets, reps, rpe, percent, restSeconds, tempo, superset,
+ *         notes: [string], raw
+ *       }]
  *     }]
  *   }],
  *   warnings: [string],
  * }
+ *
+ * The workout style is explicit per block, so the client-facing views can
+ * say "AMRAP · 12 MIN" or "TABATA · 8 × 20s/10s" before anyone hits start.
  */
 (function (global) {
   'use strict';
@@ -32,6 +36,9 @@
     'monday', 'tuesday', 'wednesday', 'thursday',
     'friday', 'saturday', 'sunday'
   ];
+
+  // Section titles that mean "new block in the same day", not "new day".
+  var SECTION_RE = /^(warm[\s-]?up|cool[\s-]?down|strength|conditioning|metcon|accessor(?:y|ies)|core|finisher|cardio|mobility|skill|power)$/i;
 
   function parseRest(text) {
     // "rest 90s", "rest 2min", "rest 2 min", "rest 2-3min" (takes low end), "rest 1:30"
@@ -51,6 +58,106 @@
     return seconds + 's';
   }
 
+  // ---------- workout-format blocks ----------
+  function newBlock(format, props) {
+    var b = {
+      format: format, label: '', minutes: null, rounds: null,
+      workSec: null, restSec: null, notes: [], exercises: []
+    };
+    Object.keys(props || {}).forEach(function (k) { b[k] = props[k]; });
+    return b;
+  }
+
+  /** The core format matchers, run on a cleaned string. Returns a block or null. */
+  function matchFormat(l) {
+    var m;
+
+    m = l.match(/^amrap\s*[-–·]?\s*(\d+)?\s*(?:min(?:ute)?s?)?$/i) ||
+        l.match(/^(\d+)\s*min(?:ute)?s?\s*amrap$/i);
+    if (m) return newBlock('amrap', { minutes: m[1] ? parseInt(m[1], 10) : null, label: l });
+
+    m = l.match(/^tabata(?:\s*[-–·]?\s*(\d+)\s*(?:rounds?|x))?(?:\s*(?:of)?\s*(\d+)\s*[\/-]\s*(\d+)\s*s?(?:ec)?)?$/i);
+    if (m) {
+      return newBlock('tabata', {
+        rounds: m[1] ? parseInt(m[1], 10) : 8,
+        workSec: m[2] ? parseInt(m[2], 10) : 20,
+        restSec: m[3] ? parseInt(m[3], 10) : 10,
+        label: l
+      });
+    }
+
+    m = l.match(/^emom\s*[-–·]?\s*(\d+)\s*(?:min(?:ute)?s?)?$/i) ||
+        l.match(/^every minute on the minute(?:\s*(?:for)?\s*(\d+)\s*min(?:ute)?s?)?$/i);
+    if (m) return newBlock('emom', { minutes: m[1] ? parseInt(m[1], 10) : null, label: l });
+
+    m = l.match(/^(?:(\d+)\s*rounds?\s*[-–·,]?\s*)?for time$/i);
+    if (m) return newBlock('fortime', { rounds: m[1] ? parseInt(m[1], 10) : null, label: l });
+
+    m = l.match(/^circuit\s*[x×]?\s*(\d+)?\s*(?:rounds?)?$/i) ||
+        l.match(/^(\d+)\s*rounds?\s*circuit$/i);
+    if (m) return newBlock('circuit', { rounds: m[1] ? parseInt(m[1], 10) : null, label: l });
+
+    return null;
+  }
+
+  /**
+   * Recognise a workout-format header line; returns a block or null. Also
+   * handles a leading section prefix, e.g. "Finisher - 3 Rounds For Time" or
+   * "Metcon: AMRAP 12", keeping the prefix as the block's section label.
+   */
+  function parseBlockHeader(line) {
+    var l = line.trim().replace(/:$/, '').trim();
+    if (!l || l.length > 60) return null;
+
+    var block = matchFormat(l);
+    if (block) return block;
+
+    // Try stripping a leading "Section - " / "Section: " prefix.
+    var m = l.match(/^(.{1,24}?)\s*[-–:]\s*(.+)$/);
+    if (m) {
+      var inner = matchFormat(m[2].trim());
+      if (inner) {
+        inner.label = m[1].trim() + ' · ' + inner.label;
+        return inner;
+      }
+    }
+    return null;
+  }
+
+  function formatLabel(block) {
+    switch (block.format) {
+      case 'amrap': return 'AMRAP' + (block.minutes ? ' · ' + block.minutes + ' MIN' : '');
+      case 'emom': return 'EMOM' + (block.minutes ? ' · ' + block.minutes + ' MIN' : '');
+      case 'tabata': return 'TABATA · ' + block.rounds + ' × ' + block.workSec + 's/' + block.restSec + 's';
+      case 'fortime': return (block.rounds ? block.rounds + ' ROUNDS ' : '') + 'FOR TIME';
+      case 'circuit': return 'CIRCUIT' + (block.rounds ? ' · ' + block.rounds + ' ROUNDS' : '');
+      default: return 'STANDARD SETS';
+    }
+  }
+
+  function formatExplainer(block) {
+    switch (block.format) {
+      case 'amrap':
+        return 'As many rounds of this list as possible' +
+          (block.minutes ? ' in ' + block.minutes + ' minutes' : '') + '. Rest only as needed.';
+      case 'emom':
+        return 'Every minute on the minute' + (block.minutes ? ' for ' + block.minutes + ' minutes' : '') +
+          ': start the work at the top of each minute, rest whatever is left.';
+      case 'tabata':
+        return block.workSec + ' seconds all-out, ' + block.restSec + ' seconds off — ' +
+          block.rounds + ' times through.';
+      case 'fortime':
+        return 'Complete ' + (block.rounds ? 'all ' + block.rounds + ' rounds' : 'the work') +
+          ' as fast as possible with good form. Note your time.';
+      case 'circuit':
+        return 'Go through the exercises in order' +
+          (block.rounds ? ', ' + block.rounds + ' rounds total' : '') + ', minimal rest between moves.';
+      default:
+        return 'Finish all sets of each exercise before moving to the next.';
+    }
+  }
+
+  // ---------- day / note / exercise line classification ----------
   function isDayHeader(line) {
     var l = line.trim();
     if (!l) return false;
@@ -134,12 +241,10 @@
     m = work.match(SCHEME_RE);
     if (m) {
       ex.sets = parseInt(m[1], 10);
-      ex.reps = m[2].replace(/\s+/g, '').toUpperCase() === 'MAX'
+      var repsTok = m[2].replace(/\s+/g, '').toUpperCase();
+      ex.reps = (repsTok === 'MAX' || repsTok === 'FAILURE' || repsTok === 'AMRAP')
         ? 'AMRAP'
-        : m[2].replace(/\s+/g, '').toUpperCase() === 'FAILURE'
-          ? 'AMRAP'
-          : m[2].replace(/\s+/g, '');
-      if (/^amrap$/i.test(ex.reps)) ex.reps = 'AMRAP';
+        : m[2].replace(/\s+/g, '');
       ex.name = work.slice(0, m.index).trim();
       var tail = work.slice(m.index + m[0].length).trim();
       tail = tail.replace(/^[@,\-–\s]+|[@,\-–\s]+$/g, '').trim();
@@ -162,6 +267,49 @@
     return ex;
   }
 
+  /**
+   * Exercise lines inside AMRAP/EMOM/tabata/etc. blocks are usually written
+   * reps-first: "10 Kettlebell Swings", "15 cal Row", "Max Burpees",
+   * "Even: 12 Wall Balls". Falls back to parseExercise for "3x10" style.
+   */
+  function parseFormatExercise(line) {
+    var raw = line.trim();
+    if (SCHEME_RE.test(raw)) return parseExercise(raw);
+
+    var ex = {
+      name: '', sets: null, reps: null, rpe: null, percent: null,
+      restSeconds: null, tempo: null, superset: null, notes: [], raw: raw
+    };
+    var work = raw;
+    var tag = null;
+
+    // EMOM minute tags: "Odd: ..." / "Even: ..." / "Min 3: ..."
+    var m = work.match(/^((?:odd|even)(?:\s*min(?:ute)?s?)?|min(?:ute)?\s*\d+)[.:\-\s]+\s*(.+)$/i);
+    if (m) {
+      tag = m[1].replace(/\s+/g, ' ').trim();
+      tag = tag.charAt(0).toUpperCase() + tag.slice(1).toLowerCase();
+      work = m[2];
+    }
+
+    m = work.match(/^max\s+(.+)$/i);
+    if (m) {
+      ex.reps = 'AMRAP';
+      ex.name = m[1].trim();
+    } else if ((m = work.match(/^(\d+)\s*cal(?:s|ories)?\s+(.+)$/i))) {
+      ex.reps = m[1] + ' cal';
+      ex.name = m[2].trim();
+    } else if ((m = work.match(/^(\d+(?:\s*\/\s*(?:side|leg|arm))?)\s+(.+)$/))) {
+      ex.reps = m[1].replace(/\s+/g, '');
+      ex.name = m[2].trim();
+    } else {
+      ex.name = work.trim();
+    }
+
+    if (tag) ex.name = tag + ': ' + ex.name;
+    ex.name = ex.name.replace(/[\s,\-–:]+$/g, '').replace(/\s{2,}/g, ' ');
+    return ex;
+  }
+
   function looksLikeExercise(line) {
     var l = line.trim();
     if (!l) return false;
@@ -171,6 +319,7 @@
     return false;
   }
 
+  // ---------- the main parse ----------
   function parseProgram(text) {
     var program = {
       name: 'Untitled Program',
@@ -186,11 +335,27 @@
 
     var lines = text.replace(/\r\n?/g, '\n').split('\n');
     var currentDay = null;
+    var currentBlock = null;
     var lastExercise = null;
 
     function ensureDay(label) {
-      currentDay = { label: label, notes: [], exercises: [] };
+      currentDay = { label: label, notes: [], blocks: [] };
       program.days.push(currentDay);
+      currentBlock = null;
+      lastExercise = null;
+    }
+    function ensureBlock() {
+      if (!currentDay) ensureDay('Day 1');
+      if (!currentBlock) {
+        currentBlock = newBlock('standard');
+        currentDay.blocks.push(currentBlock);
+      }
+      return currentBlock;
+    }
+    function pushBlock(block) {
+      if (!currentDay) ensureDay('Day 1');
+      currentDay.blocks.push(block);
+      currentBlock = block;
       lastExercise = null;
     }
 
@@ -213,6 +378,19 @@
         continue;
       }
 
+      // Workout-format headers ("AMRAP 12 min:", "Tabata", "EMOM 10") come
+      // before day-header detection — the colon rule would otherwise eat them.
+      var block = parseBlockHeader(l);
+      if (block) { pushBlock(block); continue; }
+
+      // Section titles ("Strength:", "Conditioning:") inside an open day are
+      // new standard blocks, not new days.
+      var sectionLabel = cleanDayLabel(l);
+      if (currentDay && /:$/.test(l) && SECTION_RE.test(sectionLabel)) {
+        pushBlock(newBlock('standard', { label: sectionLabel }));
+        continue;
+      }
+
       if (isDayHeader(l) && !looksLikeExercise(l)) {
         ensureDay(cleanDayLabel(l));
         continue;
@@ -222,19 +400,28 @@
         var note = cleanNote(l);
         if (!note) continue;
         if (lastExercise) lastExercise.notes.push(note);
+        else if (currentBlock) currentBlock.notes.push(note);
         else if (currentDay) currentDay.notes.push(note);
         else program.warnings.push('Note before any day, ignored: "' + note + '"');
         continue;
       }
 
+      // Inside a format block, every remaining line is an exercise
+      // (reps-first style like "10 Burpees" has no set/rep scheme).
+      if (currentBlock && currentBlock.format !== 'standard') {
+        var fx = parseFormatExercise(l);
+        currentBlock.exercises.push(fx);
+        lastExercise = fx;
+        continue;
+      }
+
       if (looksLikeExercise(l)) {
-        if (!currentDay) ensureDay('Day 1');
         var ex = parseExercise(l);
         if (!ex.name) {
           program.warnings.push('Could not read exercise name on line ' + (i + 1) + ': "' + l + '"');
           ex.name = 'Unnamed exercise';
         }
-        currentDay.exercises.push(ex);
+        ensureBlock().exercises.push(ex);
         lastExercise = ex;
         continue;
       }
@@ -244,7 +431,7 @@
       if (!currentDay) {
         if (program.name === 'Untitled Program') { program.name = l; }
         else ensureDay(l);
-      } else if (l.length <= 30 && currentDay.exercises.length > 0) {
+      } else if (l.length <= 30 && dayExerciseCount(currentDay) > 0) {
         ensureDay(l);
       } else {
         currentDay.notes.push(l);
@@ -255,11 +442,36 @@
       program.warnings.push('No training days found — check the day headers.');
     }
     program.days.forEach(function (d) {
-      if (d.exercises.length === 0) {
+      if (dayExerciseCount(d) === 0) {
         program.warnings.push('Day "' + d.label + '" has no exercises.');
       }
     });
     return program;
+  }
+
+  function dayExerciseCount(day) {
+    return (day.blocks || []).reduce(function (n, b) { return n + b.exercises.length; }, 0);
+  }
+
+  /** Flatten a day's blocks into [{exercise, block}] for logging grids etc. */
+  function flatExercises(day) {
+    var out = [];
+    (day.blocks || []).forEach(function (b) {
+      b.exercises.forEach(function (ex) { out.push({ exercise: ex, block: b }); });
+    });
+    return out;
+  }
+
+  /** Wrap legacy {exercises: []} days (pre-blocks data) into a standard block. */
+  function migrateDays(days) {
+    (days || []).forEach(function (d) {
+      if (!d.blocks) {
+        d.blocks = [newBlock('standard')];
+        d.blocks[0].exercises = d.exercises || [];
+        delete d.exercises;
+      }
+    });
+    return days;
   }
 
   function schemeLabel(ex) {
@@ -276,8 +488,15 @@
   global.FitParser = {
     parseProgram: parseProgram,
     parseExercise: parseExercise,
+    parseFormatExercise: parseFormatExercise,
+    parseBlockHeader: parseBlockHeader,
     parseRest: parseRest,
     formatRest: formatRest,
-    schemeLabel: schemeLabel
+    schemeLabel: schemeLabel,
+    formatLabel: formatLabel,
+    formatExplainer: formatExplainer,
+    flatExercises: flatExercises,
+    migrateDays: migrateDays,
+    dayExerciseCount: dayExerciseCount
   };
 })(typeof window !== 'undefined' ? window : this);

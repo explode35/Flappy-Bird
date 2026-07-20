@@ -20,9 +20,9 @@ eq('phones: different numbers', engine.phonesMatch('+15551234567', '+15559876543
 eq('phones: empty', engine.phonesMatch('', '+15551234567'), false);
 
 var clients = [
-  { id: 'c1', name: 'Sarah Nguyen', phone: '+1 555 123 4567', status: 'active', checkinDay: 'Sunday' },
-  { id: 'c2', name: 'Marc Ito', phone: '', status: 'active', checkinDay: 'Sunday' },
-  { id: 'c3', name: 'Dee Cole', phone: '+15550001111', status: 'paused', checkinDay: 'Sunday' }
+  { id: 'c1', name: 'Sarah Nguyen', phone: '+1 555 123 4567', status: 'active', checkinDay: 'Sunday', smsConsent: true, portalToken: 'tok1' },
+  { id: 'c2', name: 'Marc Ito', phone: '', status: 'active', checkinDay: 'Sunday', smsConsent: true },
+  { id: 'c3', name: 'Dee Cole', phone: '+15550001111', status: 'paused', checkinDay: 'Sunday', smsConsent: true }
 ];
 eq('find by phone', engine.findClientByPhone(clients, '15551234567').id, 'c1');
 eq('find by phone: none', engine.findClientByPhone(clients, '+15557778888'), null);
@@ -39,6 +39,10 @@ var actions = engine.plan(st, cfg, sundayMorning);
 eq('request due on check-in day', actions, [{ type: 'request', clientId: 'c1' }]);
 eq('no request before sendHour', engine.plan(st, cfg, sundayEarly), []);
 eq('no request on other days', engine.plan(st, cfg, monday), []);
+
+eq('no request without consent', engine.plan({ clients: [
+  { id: 'x', name: 'No Consent', phone: '+15551112222', status: 'active', checkinDay: 'Sunday', smsConsent: false }
+], smsSequences: [] }, cfg, sundayMorning), []);
 
 st.smsSequences = [{ id: 'q1', clientId: 'c1', date: engine.dateKey(sundayMorning),
                      requestSentAt: sundayMorning.toISOString(), reminderSentAt: null, repliedAt: null }];
@@ -115,6 +119,39 @@ eq('merge: server owns sequences', merged.smsSequences, [{ id: 'q1' }]);
 eq('merge: server owns log', merged.smsLog, [{ id: 'sm1' }]);
 var merged2 = engine.mergeState(serverState, { clients: [], checkins: [] });
 eq('merge: UI deletions of its own data respected', merged2.checkins.length, 1);
+
+// ---------- opt-out / opt-in ----------
+eq('opt-out: STOP', engine.isOptOut('STOP'), true);
+eq('opt-out: unsubscribe', engine.isOptOut('Unsubscribe'), true);
+eq('opt-out: normal reply', engine.isOptOut('72.5 4 7 2 4'), false);
+eq('opt-in: START', engine.isOptIn('START'), true);
+eq('opt-in: yes', engine.isOptIn('yes'), true);
+
+// ---------- portal ----------
+var portalState = {
+  clients: [
+    { id: 'c1', name: 'Sarah Nguyen', phone: '+15551234567', email: 'sarah@x.com',
+      status: 'active', checkinDay: 'Sunday', portalToken: 'tok1' },
+    { id: 'c3', name: 'Dee Cole', status: 'paused', portalToken: 'tok3' }
+  ],
+  assignments: [{ id: 'a1', clientId: 'c1', programId: 'p1', startDate: '2026-07-01' }],
+  programs: [{ id: 'p1', name: 'Block 1', weeks: 4, days: [{ label: 'Day 1', blocks: [] }] }]
+};
+eq('portal: find by token', engine.findClientByToken(portalState.clients, 'tok1').id, 'c1');
+eq('portal: unknown token', engine.findClientByToken(portalState.clients, 'nope'), null);
+var view = engine.portalView(portalState, 'tok1', 'Iron Path Coaching');
+eq('portal: coach name', view.coachName, 'Iron Path Coaching');
+eq('portal: client name only', view.client.name, 'Sarah Nguyen');
+eq('portal: no phone leaked', view.client.phone, undefined);
+eq('portal: no email leaked', view.client.email, undefined);
+eq('portal: program name', view.program.name, 'Block 1');
+eq('portal: paused client no view', engine.portalView(portalState, 'tok3', 'X'), null);
+eq('portal: unknown token no view', engine.portalView(portalState, 'nope', 'X'), null);
+var noProg = engine.portalView({ clients: [{ id: 'c9', name: 'New', status: 'active', portalToken: 'tok9' }],
+  assignments: [], programs: [] }, 'tok9', 'X');
+eq('portal: unassigned -> null program', noProg.program, null);
+eq('portal: url built', engine.portalUrl('https://coach.example.com/', { portalToken: 'tok1' }),
+   'https://coach.example.com/p/tok1');
 
 console.log(passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

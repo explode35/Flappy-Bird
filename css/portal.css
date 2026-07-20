@@ -1,0 +1,155 @@
+/* portal.css — mobile-first client-facing workout portal. Dark, high-contrast,
+   thumb-friendly. Distinct from the coach app so clients feel a real product. */
+:root {
+  --bg: #0f1420;
+  --bg2: #171d2b;
+  --card: #1c2333;
+  --line: #2a3346;
+  --ink: #eef2f8;
+  --muted: #9aa5b8;
+  --faint: #6b7688;
+  --accent: #3b82f6;
+  --accent2: #22c55e;
+  --amrap: #f59e0b;
+  --tabata: #ef4444;
+  --emom: #8b5cf6;
+  --fortime: #06b6d4;
+  --circuit: #ec4899;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.portal {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: max(20px, env(safe-area-inset-top)) 16px calc(48px + env(safe-area-inset-bottom));
+}
+
+.phead { padding: 8px 4px 18px; }
+.phead .coach {
+  font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint);
+  font-weight: 700;
+}
+.phead h1 { font-size: 26px; margin: 6px 0 4px; font-weight: 800; letter-spacing: -.01em; }
+.phead .pmeta { color: var(--muted); font-size: 14px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.card.center { text-align: center; padding: 40px 20px; }
+.muted { color: var(--muted); font-size: 14.5px; }
+
+/* ---------- day tabs ---------- */
+.daytabs {
+  display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 12px;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.daytabs::-webkit-scrollbar { display: none; }
+.daytab {
+  flex: 0 0 auto; background: var(--bg2); border: 1px solid var(--line);
+  color: var(--muted); font: inherit; font-size: 14px; font-weight: 600;
+  padding: 9px 16px; border-radius: 99px; cursor: pointer; white-space: nowrap;
+}
+.daytab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.dtitle { font-size: 19px; margin: 4px 2px 12px; font-weight: 800; }
+.dnote { color: var(--muted); font-size: 14px; font-style: italic; margin: 0 2px 12px; }
+.bnote { color: var(--muted); font-size: 13.5px; font-style: italic; margin: 8px 0; }
+
+/* ---------- format block ---------- */
+.block { border-left: 4px solid var(--line); }
+.block.fmt-amrap { border-left-color: var(--amrap); }
+.block.fmt-tabata { border-left-color: var(--tabata); }
+.block.fmt-emom { border-left-color: var(--emom); }
+.block.fmt-fortime { border-left-color: var(--fortime); }
+.block.fmt-circuit { border-left-color: var(--circuit); }
+
+.banner { margin-bottom: 12px; }
+.banner .tag {
+  display: inline-block; font-size: 13px; font-weight: 800; letter-spacing: .04em;
+  text-transform: uppercase; padding: 6px 12px; border-radius: 8px;
+  background: var(--bg2); color: var(--ink); border: 1px solid var(--line);
+}
+.fmt-amrap .tag { background: rgba(245,158,11,.15); color: #fbbf24; border-color: rgba(245,158,11,.4); }
+.fmt-tabata .tag { background: rgba(239,68,68,.15); color: #f87171; border-color: rgba(239,68,68,.4); }
+.fmt-emom .tag { background: rgba(139,92,246,.15); color: #a78bfa; border-color: rgba(139,92,246,.4); }
+.fmt-fortime .tag { background: rgba(6,182,212,.15); color: #22d3ee; border-color: rgba(6,182,212,.4); }
+.fmt-circuit .tag { background: rgba(236,72,153,.15); color: #f472b6; border-color: rgba(236,72,153,.4); }
+.banner .exp { display: block; color: var(--muted); font-size: 13.5px; margin-top: 8px; }
+
+.exlist { display: flex; flex-direction: column; gap: 2px; }
+.ex { display: flex; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.ex:last-child { border-bottom: 0; }
+.ssbadge {
+  flex: 0 0 auto; font-size: 11px; font-weight: 800; color: var(--accent);
+  background: rgba(59,130,246,.14); border-radius: 6px; padding: 3px 7px; margin-top: 1px;
+}
+.exmain { flex: 1; min-width: 0; }
+.exname { font-size: 16px; font-weight: 600; }
+.exscheme { font-size: 14.5px; color: var(--accent2); font-weight: 600; margin-top: 2px; }
+.exnote { font-size: 13px; color: var(--muted); font-style: italic; margin-top: 3px; }
+
+/* ---------- buttons ---------- */
+.btn {
+  font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+  padding: 12px 18px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--bg2); color: var(--ink);
+}
+.btn:active { transform: scale(.98); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.ghost { background: transparent; color: var(--muted); }
+.btn.block-btn, .timer-btn { display: block; width: 100%; margin-top: 14px; }
+.timer-btn { background: var(--bg2); color: var(--ink); font-size: 15px; }
+.fmt-amrap .timer-btn { color: #fbbf24; }
+.fmt-tabata .timer-btn { color: #f87171; }
+.fmt-emom .timer-btn { color: #a78bfa; }
+.fmt-fortime .timer-btn { color: #22d3ee; }
+
+/* ---------- check-in ---------- */
+.checkin-card { border: 1px solid var(--accent); background: linear-gradient(180deg, rgba(59,130,246,.08), var(--card)); }
+.ci-form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 12px 0; }
+.ci-field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.ci-field.wide { grid-column: 1 / -1; }
+.ci-field span { text-transform: uppercase; letter-spacing: .04em; font-size: 11.5px; }
+.ci-field input, .ci-field textarea {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--ink); font: inherit; font-size: 16px; padding: 11px 12px; width: 100%;
+}
+.ci-field textarea { resize: vertical; }
+.ci-status { font-size: 13.5px; color: var(--muted); margin-top: 8px; text-align: center; min-height: 18px; }
+.ci-status.err { color: #f87171; }
+
+/* ---------- timer overlay ---------- */
+.timer-overlay {
+  position: fixed; inset: 0; background: rgba(8,11,18,.97);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom));
+}
+.timer-panel { text-align: center; width: 100%; max-width: 420px; }
+.timer-format { font-size: 15px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.timer-phase { font-size: 20px; font-weight: 800; letter-spacing: .05em; margin: 18px 0 6px; color: var(--ink); }
+.timer-clock {
+  font-size: clamp(72px, 26vw, 120px); font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em; margin: 4px 0;
+}
+.timer-sub { color: var(--muted); font-size: 15px; margin-top: 8px; min-height: 20px; }
+.timer-controls { display: flex; gap: 10px; justify-content: center; margin-top: 32px; }
+.timer-controls .btn { min-width: 96px; }
+
+@media (min-width: 480px) {
+  .phead h1 { font-size: 30px; }
+}

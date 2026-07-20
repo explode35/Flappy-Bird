@@ -88,22 +88,84 @@
     'OHP 5x5 @ 75%'
   ].join('\n');
   var prog = P.parseProgram(raw);
+  var flat = function (d) { return P.flatExercises(d).map(function (x) { return x.exercise; }); };
   eq('program name', prog.name, 'Test Block');
   eq('program weeks', prog.weeks, 6);
   eq('day count', prog.days.length, 3);
   eq('day 1 label', prog.days[0].label, 'Day 1 - Push');
   eq('weekday header', prog.days[1].label, 'Monday');
   eq('colon header', prog.days[2].label, 'Upper A');
-  eq('day 1 exercise count', prog.days[0].exercises.length, 3);
-  eq('note attaches to exercise', prog.days[0].exercises[2].notes, ['brace hard']);
-  eq('ohp percent', prog.days[2].exercises[0].percent, 75);
+  eq('day 1 exercise count', P.dayExerciseCount(prog.days[0]), 3);
+  eq('note attaches to exercise', flat(prog.days[0])[2].notes, ['brace hard']);
+  eq('ohp percent', flat(prog.days[2])[0].percent, 75);
   eq('no warnings', prog.warnings.length, 0);
 
   // exercises before any day header get a default day
   var prog2 = P.parseProgram('Squat 3x5\nBench 3x5');
   eq('default day created', prog2.days.length, 1);
   eq('default day label', prog2.days[0].label, 'Day 1');
-  eq('default day exercises', prog2.days[0].exercises.length, 2);
+  eq('default day exercises', P.dayExerciseCount(prog2.days[0]), 2);
+
+  // --- workout formats ---
+  var wf = [
+    'Day 1 - Conditioning',
+    'AMRAP 12 min',
+    '10 Kettlebell Swings',
+    '15 cal Row',
+    'Max Push-ups',
+    '',
+    'Tabata 8 x 20/10',
+    'Air Squats',
+    '',
+    'EMOM 10',
+    'Odd: 12 Wall Balls',
+    'Even: 10 Burpees',
+    '',
+    '3 Rounds For Time',
+    '400m Run',
+    '21 Deadlifts',
+    '',
+    'Strength:',
+    'Back Squat 5x5 @ 80%'
+  ].join('\n');
+  var wp = P.parseProgram(wf);
+  var blocks = wp.days[0].blocks;
+  eq('format: 5 blocks', blocks.length, 5);
+  eq('format: amrap type', blocks[0].format, 'amrap');
+  eq('format: amrap minutes', blocks[0].minutes, 12);
+  eq('format: amrap label', P.formatLabel(blocks[0]), 'AMRAP · 12 MIN');
+  eq('format: reps-first exercise', blocks[0].exercises[0].reps, '10');
+  eq('format: reps-first name', blocks[0].exercises[0].name, 'Kettlebell Swings');
+  eq('format: cal reps', blocks[0].exercises[1].reps, '15 cal');
+  eq('format: max reps', blocks[0].exercises[2].reps, 'AMRAP');
+  eq('format: tabata type', blocks[1].format, 'tabata');
+  eq('format: tabata rounds', blocks[1].rounds, 8);
+  eq('format: tabata work', blocks[1].workSec, 20);
+  eq('format: tabata rest', blocks[1].restSec, 10);
+  eq('format: emom type', blocks[2].format, 'emom');
+  eq('format: emom minutes', blocks[2].minutes, 10);
+  eq('format: emom odd tag', blocks[2].exercises[0].name, 'Odd: Wall Balls');
+  eq('format: emom odd reps', blocks[2].exercises[0].reps, '12');
+  eq('format: fortime type', blocks[3].format, 'fortime');
+  eq('format: fortime rounds', blocks[3].rounds, 3);
+  eq('format: strength section standard', blocks[4].format, 'standard');
+  eq('format: strength section label', blocks[4].label, 'Strength');
+  eq('format: strength exercise percent', blocks[4].exercises[0].percent, 80);
+  eq('format: no warnings', wp.warnings.length, 0);
+
+  // standalone header parsers
+  eq('header: emom bare', P.parseBlockHeader('EMOM 8').minutes, 8);
+  eq('header: tabata defaults', P.parseBlockHeader('Tabata').workSec, 20);
+  eq('header: circuit rounds', P.parseBlockHeader('Circuit x3').rounds, 3);
+  eq('header: not a format', P.parseBlockHeader('Bench Press 4x8'), null);
+
+  // legacy migration: old {exercises:[]} day gets wrapped into a standard block
+  var legacy = [{ label: 'Day 1', notes: [], exercises: [{ name: 'Squat', sets: 5, reps: '5' }] }];
+  P.migrateDays(legacy);
+  eq('migrate: block created', legacy[0].blocks.length, 1);
+  eq('migrate: standard format', legacy[0].blocks[0].format, 'standard');
+  eq('migrate: exercise preserved', legacy[0].blocks[0].exercises[0].name, 'Squat');
+  eq('migrate: old field removed', legacy[0].exercises, undefined);
 
   // --- progression ---
   var bench = { name: 'Bench', sets: 3, reps: '8-10', rpe: 8 };

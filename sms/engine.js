@@ -39,6 +39,49 @@ function findClientByPhone(clients, phone) {
   return null;
 }
 
+// ---------- portal ----------
+function findClientByToken(clients, token) {
+  if (!token) return null;
+  for (var i = 0; i < (clients || []).length; i++) {
+    if (clients[i].portalToken && clients[i].portalToken === token) return clients[i];
+  }
+  return null;
+}
+
+function activeAssignmentFor(state, clientId) {
+  var list = (state.assignments || []).filter(function (a) { return a.clientId === clientId; });
+  return list.length ? list[list.length - 1] : null;
+}
+
+function programById(state, programId) {
+  var progs = state.programs || [];
+  for (var i = 0; i < progs.length; i++) if (progs[i].id === programId) return progs[i];
+  return null;
+}
+
+/**
+ * Token-scoped view for the client portal: only this client's name/check-in day
+ * and their currently assigned program. Never exposes other clients, phone
+ * numbers, emails, logs, or the coach's full store. Returns null if the token
+ * matches no active client.
+ */
+function portalView(state, token, coachName) {
+  var client = findClientByToken(state.clients, token);
+  if (!client || client.status !== 'active') return null;
+  var assignment = activeAssignmentFor(state, client.id);
+  var program = assignment ? programById(state, assignment.programId) : null;
+  return {
+    coachName: coachName || 'Your Coaching',
+    client: { name: client.name, checkinDay: client.checkinDay || 'Sunday' },
+    program: program ? { name: program.name, weeks: program.weeks, days: program.days || [] } : null
+  };
+}
+
+function portalUrl(baseUrl, client) {
+  var base = String(baseUrl || '').replace(/\/+$/, '');
+  return base + '/p/' + (client && client.portalToken ? client.portalToken : '');
+}
+
 // ---------- scheduling ----------
 /**
  * Decide what to send right now. Returns [{type:'request'|'reminder', clientId, sequenceId?}].
@@ -53,7 +96,7 @@ function plan(state, config, now) {
   var dayName = DAY_NAMES[now.getDay()];
 
   clients.forEach(function (c) {
-    if (c.status !== 'active' || !c.phone) return;
+    if (c.status !== 'active' || !c.phone || !c.smsConsent) return;
     if (c.checkinDay !== dayName) return;
     if (now.getHours() < config.sendHour) return;
     var already = seqs.some(function (q) { return q.clientId === c.id && q.date === today; });
@@ -64,7 +107,7 @@ function plan(state, config, now) {
     if (q.repliedAt || q.reminderSentAt) return;
     var c = null;
     for (var i = 0; i < clients.length; i++) if (clients[i].id === q.clientId) { c = clients[i]; break; }
-    if (!c || c.status !== 'active' || !c.phone) return;
+    if (!c || c.status !== 'active' || !c.phone || !c.smsConsent) return;
     var hours = (now.getTime() - Date.parse(q.requestSentAt)) / 3600000;
     if (hours >= config.reminderAfterHours && hours <= 48) {
       actions.push({ type: 'reminder', clientId: c.id, sequenceId: q.id });
@@ -72,6 +115,14 @@ function plan(state, config, now) {
   });
 
   return actions;
+}
+
+// ---------- opt-out / opt-in (TCPA keywords) ----------
+function isOptOut(body) {
+  return /^\s*(stop|stopall|unsubscribe|cancel|end|quit)\s*$/i.test(String(body || ''));
+}
+function isOptIn(body) {
+  return /^\s*(start|unstop|yes|subscribe)\s*$/i.test(String(body || ''));
 }
 
 // ---------- reply parsing ----------
@@ -205,6 +256,13 @@ module.exports = {
   dateKey: dateKey,
   phonesMatch: phonesMatch,
   findClientByPhone: findClientByPhone,
+  isOptOut: isOptOut,
+  isOptIn: isOptIn,
+  findClientByToken: findClientByToken,
+  activeAssignmentFor: activeAssignmentFor,
+  programById: programById,
+  portalView: portalView,
+  portalUrl: portalUrl,
   plan: plan,
   parseReply: parseReply,
   buildRequest: buildRequest,

@@ -26,6 +26,9 @@
     '.ss{font-family:Helvetica,Arial,sans-serif;font-size:11px;font-weight:bold;color:#8a94a6}',
     '.note{color:#5b6472;font-size:12.5px;font-style:italic}',
     '.daynote{color:#5b6472;font-size:13px;font-style:italic;margin:4px 0 8px}',
+    '.fmt{font-family:Helvetica,Arial,sans-serif;margin:16px 0 6px}',
+    '.fmt .tag{display:inline-block;background:#1c2430;color:#fff;font-size:11px;font-weight:bold;letter-spacing:.06em;padding:3px 9px;border-radius:4px;text-transform:uppercase}',
+    '.fmt .exp{color:#5b6472;font-size:12.5px;font-style:italic;margin-top:4px}',
     '.log td{height:26px;border-bottom:1px dotted #c3cad4}',
     '.foot{margin-top:36px;color:#8a94a6;font-size:12px;border-top:1px solid #edf0f4;padding-top:12px}',
     '.field{margin:14px 0}.field label{display:block;font-family:Helvetica,Arial,sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#5b6472;margin-bottom:4px}',
@@ -52,17 +55,28 @@
     h += '<div class="meta">' + (client ? 'Prepared for <strong>' + esc(client.name) + '</strong> · ' : '') +
       esc(program.weeks) + '-week block · ' + program.days.length + ' training days/week</div>';
 
+    var FP = global.FitParser;
     program.days.forEach(function (day) {
       h += '<h2>' + esc(day.label) + '</h2>';
-      day.notes.forEach(function (n) { h += '<div class="daynote">' + esc(n) + '</div>'; });
-      h += '<table><thead><tr><th style="width:42%">Exercise</th><th>Prescription</th><th style="width:22%">Notes</th></tr></thead><tbody>';
-      day.exercises.forEach(function (ex, i) {
-        var label = global.FitParser.schemeLabel(ex);
-        var ssTag = ex.superset ? '<span class="ss">' + esc(ex.superset) + (countInGroup(day, ex, i)) + '&nbsp;</span>' : '';
-        h += '<tr><td>' + ssTag + esc(ex.name) + '</td><td>' + esc(label || '—') + '</td><td class="note">' +
-          esc(ex.notes.join(' · ')) + '</td></tr>';
+      (day.notes || []).forEach(function (n) { h += '<div class="daynote">' + esc(n) + '</div>'; });
+      (day.blocks || []).forEach(function (block) {
+        // Only label a block if it's a real format or a named section — a bare
+        // standard block just renders its table with no header noise.
+        if (block.format !== 'standard' || block.label) {
+          h += '<div class="fmt"><span class="tag">' +
+            esc(block.label && block.format === 'standard' ? block.label : FP.formatLabel(block)) +
+            '</span><div class="exp">' + esc(FP.formatExplainer(block)) + '</div></div>';
+        }
+        (block.notes || []).forEach(function (n) { h += '<div class="daynote">' + esc(n) + '</div>'; });
+        h += '<table><thead><tr><th style="width:42%">Exercise</th><th>Prescription</th><th style="width:22%">Notes</th></tr></thead><tbody>';
+        block.exercises.forEach(function (ex, i) {
+          var label = FP.schemeLabel(ex);
+          var ssTag = ex.superset ? '<span class="ss">' + esc(ex.superset) + countInGroup(block, ex, i) + '&nbsp;</span>' : '';
+          h += '<tr><td>' + ssTag + esc(ex.name) + '</td><td>' + esc(label || '—') + '</td><td class="note">' +
+            esc(ex.notes.join(' · ')) + '</td></tr>';
+        });
+        h += '</tbody></table>';
       });
-      h += '</tbody></table>';
     });
 
     h += '<h2>Session Log</h2><table class="log"><thead><tr><th>Date</th><th>Day</th><th>Top sets / weights</th><th>How it felt</th></tr></thead><tbody>';
@@ -73,11 +87,11 @@
     return openSheet(program.name + (client ? ' — ' + client.name : ''), h);
   }
 
-  function countInGroup(day, ex, index) {
+  function countInGroup(block, ex, index) {
     // Position of this exercise inside its superset group, for "A1"/"A2" labels.
     var n = 0;
     for (var i = 0; i <= index; i++) {
-      if (day.exercises[i].superset === ex.superset) n++;
+      if (block.exercises[i].superset === ex.superset) n++;
     }
     return n;
   }
@@ -110,28 +124,39 @@
       'Two-line answers are fine. I’ll review tonight and adjust next week’s plan.';
   }
 
-  function welcomeMessage(client, program) {
+  function welcomeMessage(client, program, portalUrl) {
     var first = client && client.name ? client.name.split(/\s+/)[0] : 'there';
     return 'Welcome aboard, ' + first + '!\n\n' +
-      'Your program “' + (program ? program.name : 'Block 1') + '” is attached — ' +
+      'Your program “' + (program ? program.name : 'Block 1') + '” is ready — ' +
       (program ? program.days.length : 3) + ' sessions a week for ' + (program ? program.weeks : 4) + ' weeks.\n\n' +
+      (portalUrl ? 'Your private workout portal (bookmark it):\n' + portalUrl + '\n\n' : '') +
       'How this works:\n' +
-      '• Follow the sheet in order; rest times and effort targets are on it.\n' +
-      '• Log your top sets after each session.\n' +
+      '• Open the portal on your phone — each day shows exactly what to do and how (AMRAP, Tabata, straight sets) before you start.\n' +
+      '• Built-in timers for the timed pieces.\n' +
       '• Check-ins land every ' + (client && client.checkinDay ? client.checkinDay : 'Sunday') + ' — short and honest.\n' +
       '• Anything hurts or doesn’t make sense, message me straight away.\n\n' +
       'First session: just move well and find your working weights. We build from there.';
   }
 
+  function portalMessage(client, portalUrl) {
+    var first = client && client.name ? client.name.split(/\s+/)[0] : 'there';
+    return 'Hey ' + first + '! Here’s your private workout portal — bookmark it on your phone:\n' +
+      portalUrl + '\nEvery session shows the exact format and reps before you hit start.';
+  }
+
   function programCSV(program) {
-    var rows = [['Day', 'Order', 'Superset', 'Exercise', 'Sets', 'Reps', 'RPE', '%1RM', 'Rest (s)', 'Tempo', 'Notes']];
+    var FP = global.FitParser;
+    var rows = [['Day', 'Block', 'Format', 'Order', 'Superset', 'Exercise', 'Sets', 'Reps', 'RPE', '%1RM', 'Rest (s)', 'Tempo', 'Notes']];
     program.days.forEach(function (day) {
-      day.exercises.forEach(function (ex, i) {
-        rows.push([day.label, i + 1, ex.superset || '', ex.name,
-          ex.sets != null ? ex.sets : '', ex.reps != null ? ex.reps : '',
-          ex.rpe != null ? ex.rpe : '', ex.percent != null ? ex.percent : '',
-          ex.restSeconds != null ? ex.restSeconds : '', ex.tempo || '',
-          ex.notes.join('; ')]);
+      (day.blocks || []).forEach(function (block) {
+        var fmt = block.format === 'standard' ? (block.label || 'Standard') : FP.formatLabel(block);
+        block.exercises.forEach(function (ex, i) {
+          rows.push([day.label, block.label || '', fmt, i + 1, ex.superset || '', ex.name,
+            ex.sets != null ? ex.sets : '', ex.reps != null ? ex.reps : '',
+            ex.rpe != null ? ex.rpe : '', ex.percent != null ? ex.percent : '',
+            ex.restSeconds != null ? ex.restSeconds : '', ex.tempo || '',
+            ex.notes.join('; ')]);
+        });
       });
     });
     return rows.map(function (r) {
@@ -159,6 +184,7 @@
     checkinForm: checkinForm,
     checkinMessage: checkinMessage,
     welcomeMessage: welcomeMessage,
+    portalMessage: portalMessage,
     programCSV: programCSV,
     download: download
   };

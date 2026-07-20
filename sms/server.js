@@ -173,6 +173,26 @@ function handleInbound(req, params, respond) {
     return;
   }
 
+  // TCPA opt-out / opt-in. Carriers also enforce STOP at the network level;
+  // we mirror it so the app stops scheduling and flagging opted-out clients.
+  if (engine.isOptOut(body)) {
+    client.smsConsent = false;
+    state.smsSequences.forEach(function (q) {
+      if (q.clientId === client.id && !q.repliedAt) q.repliedAt = new Date().toISOString();
+    });
+    logSMS({ direction: 'in', from: from, to: config.fromNumber, clientId: client.id, kind: 'opt-out', body: body, status: 'unsubscribed' });
+    rev++; persist();
+    respond(200, 'text/xml', '<?xml version="1.0" encoding="UTF-8"?><Response/>');
+    return;
+  }
+  if (engine.isOptIn(body)) {
+    client.smsConsent = true;
+    logSMS({ direction: 'in', from: from, to: config.fromNumber, clientId: client.id, kind: 'opt-in', body: body, status: 'resubscribed' });
+    rev++; persist();
+    respond(200, 'text/xml', '<?xml version="1.0" encoding="UTF-8"?><Response/>');
+    return;
+  }
+
   var parsed = engine.parseReply(body);
   var checkin = {
     id: engine.uid('ch'), clientId: client.id, date: engine.dateKey(new Date()),
@@ -282,6 +302,53 @@ var server = http.createServer(function (req, res) {
     });
     return;
   }
+
+  // ---- client portal (token-scoped, no auth cookie needed) ----
+  if (urlPath === '/api/portal' && req.method === 'GET') {
+    var token = new URLSearchParams(req.url.split('?')[1] || '').get('t');
+    var view = engine.portalView(state, token, config.coachName);
+    if (!view) { respond(404, 'application/json', JSON.stringify({ error: 'not found' })); return; }
+    respond(200, 'application/json', JSON.stringify(view));
+    return;
+  }
+  if (urlPath === '/api/portal/checkin' && req.method === 'POST') {
+    var ptoken = new URLSearchParams(req.url.split('?')[1] || '').get('t');
+    var pclient = engine.findClientByToken(state.clients, ptoken);
+    if (!pclient || pclient.status !== 'active') {
+      respond(404, 'application/json', JSON.stringify({ error: 'not found' }));
+      return;
+    }
+    readBody(req, function (raw) {
+      var b = {};
+      try { b = JSON.parse(raw) || {}; } catch (e) {}
+      var num = function (x) { return x != null && x !== '' && !isNaN(parseFloat(x)) ? parseFloat(x) : null; };
+      var checkin = {
+        id: engine.uid('ch'), clientId: pclient.id, date: engine.dateKey(new Date()),
+        weight: num(b.weight), sessions: b.sessions != null ? Math.round(num(b.sessions)) : null,
+        sleep: num(b.sleep), stress: num(b.stress), adherence: num(b.adherence),
+        notes: typeof b.notes === 'string' ? b.notes.slice(0, 2000) : '', source: 'portal'
+      };
+      state.checkins.push(checkin);
+      // Close any open SMS sequence so we don't nag a client who checked in via the portal.
+      var open = state.smsSequences.filter(function (q) { return q.clientId === pclient.id && !q.repliedAt; });
+      if (open.length) {
+        var seq = open[open.length - 1];
+        seq.repliedAt = new Date().toISOString();
+        seq.checkinId = checkin.id;
+      }
+      logSMS({ direction: 'in', from: '(portal)', to: '', clientId: pclient.id, kind: 'portal-checkin',
+               body: 'weight ' + (checkin.weight != null ? checkin.weight : '—'), status: 'parsed' });
+      rev++; persist();
+      respond(200, 'application/json', JSON.stringify({ ok: true }));
+    });
+    return;
+  }
+  // Pretty portal links: /p/<token> serves the portal shell.
+  if (/^\/p\/[A-Za-z0-9]+\/?$/.test(urlPath) && req.method === 'GET') {
+    serveStatic('/portal.html', respond);
+    return;
+  }
+
   if (req.method === 'GET') {
     serveStatic(urlPath, respond);
     return;

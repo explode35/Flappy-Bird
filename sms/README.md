@@ -52,11 +52,34 @@ sequence before buying a number.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /` | Serves the web app |
-| `GET/PUT /api/state` | Shared data store (the app syncs through this) |
+| `GET /` | Serves the coach web app |
+| `GET /p/<token>` | Client-facing workout portal (token-scoped) |
+| `GET /api/portal?t=<token>` | Scoped view: one client's name + assigned program |
+| `POST /api/portal/checkin?t=<token>` | Client submits a check-in from the portal |
+| `GET/PUT /api/state` | Coach data store (the app syncs through this) |
 | `GET /api/sms/status` | Engine status (dry-run, send hour, server time) |
 | `POST /api/sms/run-now` | Force a scheduler tick (useful for testing) |
-| `POST /webhooks/sms` | Twilio inbound-SMS webhook |
+| `POST /webhooks/sms` | Twilio inbound-SMS webhook (also handles STOP/START) |
+
+## Consent & opt-out (TCPA)
+
+The engine only sends to a client whose `smsConsent` flag is set — record it
+with the "Client consented to SMS" checkbox on the client's page (capture
+consent at intake and keep proof). Inbound `STOP` / `UNSUBSCRIBE` clears
+consent and halts any open sequence; `START` re-subscribes. Carriers also
+enforce these keywords at the network level; the app mirrors them so it stops
+scheduling and flagging opted-out clients. For US A2P traffic you still need
+10DLC registration of your Twilio number.
+
+## Client portal
+
+Each client has a private `portalToken` and a link at `/p/<token>`. The portal
+API is strictly scoped to that one client — it never returns other clients,
+phone numbers, emails, logs, or the coach's full store. Portal check-ins are
+saved with `source: "portal"`, shown on the coach dashboard tagged `Portal`,
+and close that week's open SMS sequence so the client isn't also nagged by
+text. Send a client their link with the "Copy portal message" button on their
+page. Set `publicUrl` so the links coaches copy use your real domain.
 
 ## Config reference
 
@@ -69,7 +92,7 @@ sequence before buying a number.
 | `sendHour` / `FITOPS_SEND_HOUR` | 8 | Local hour to send weekly requests |
 | `reminderAfterHours` / `FITOPS_REMINDER_HOURS` | 6 | Hours before the one reminder |
 | `coachName` / `FITOPS_COACH_NAME` | Your Coaching | Name used in messages |
-| `publicUrl` / `FITOPS_PUBLIC_URL` | — | Public origin; enables webhook signature checks |
+| `publicUrl` / `FITOPS_PUBLIC_URL` | — | Public origin; enables webhook signature checks and real portal links |
 | `dataFile` / `FITOPS_DATA_FILE` | `sms/data/state.json` | Where shared state is stored |
 
 ## Tests

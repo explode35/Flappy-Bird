@@ -175,6 +175,23 @@ table.loggrid td { padding: 6px 8px; }
 .back { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13.5px; padding: 0; margin-bottom: 14px; }
 .back:hover { text-decoration: underline; }
 
+/* ---------- format tags in program preview ---------- */
+.blocktag { margin: 14px 0 6px; }
+.blocktag .tag {
+  display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; padding: 3px 9px; border-radius: 5px;
+  background: var(--ink); color: #fff;
+}
+.blocktag.fmt-amrap .tag { background: #b45309; }
+.blocktag.fmt-tabata .tag { background: #b91c1c; }
+.blocktag.fmt-emom .tag { background: #6d28d9; }
+.blocktag.fmt-fortime .tag { background: #0e7490; }
+.blocktag.fmt-circuit .tag { background: #be185d; }
+.blocktag .exp { display: block; color: var(--muted); font-size: 12.5px; font-style: italic; margin-top: 4px; }
+
+.consent { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.consent input { width: auto; }
+
 .toast {
   position: fixed; bottom: 22px; right: 22px; background: var(--ink); color: #fff;
   padding: 10px 18px; border-radius: 8px; font-size: 14px; opacity: 0;

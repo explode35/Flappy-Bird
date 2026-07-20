@@ -2,12 +2,14 @@
  * store.js — localStorage persistence for the Fitness Operations Engine.
  *
  * Data model:
- *   clients:  [{ id, name, email, goal, status, checkinDay, startDate, notes }]
- *   programs: [{ id, name, weeks, days, createdAt }]
+ *   clients:  [{ id, name, email, phone, goal, status, checkinDay, startDate,
+ *               notes, portalToken, smsConsent }]
+ *   programs: [{ id, name, weeks, days:[{label,notes,blocks:[...]}], createdAt }]
  *   assignments: [{ id, clientId, programId, startDate, notes }]
  *   sessions: [{ id, clientId, assignmentId, dayIndex, date,
  *               entries: [{ exerciseIndex, name, weight, setsDone, repsDone, rpe, note }] }]
- *   checkins: [{ id, clientId, date, weight, sleep, stress, adherence, notes }]
+ *   checkins: [{ id, clientId, date, weight, sessions, sleep, stress, adherence,
+ *               notes, source }]
  */
 (function (global) {
   'use strict';
@@ -34,7 +36,32 @@
     Object.keys(base).forEach(function (k) {
       if (Array.isArray(data[k])) base[k] = data[k];
     });
+    // Migrate legacy programs (pre-blocks) and back-fill client portal tokens
+    // so data written by an older version keeps working.
+    base.programs.forEach(function (p) {
+      if (p.days && global.FitParser && global.FitParser.migrateDays) {
+        global.FitParser.migrateDays(p.days);
+      }
+    });
+    base.clients.forEach(function (c) {
+      if (!c.portalToken) c.portalToken = makeToken();
+    });
     return base;
+  }
+
+  function makeToken() {
+    var s = '';
+    var chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+    var rnd;
+    if (global.crypto && global.crypto.getRandomValues) {
+      rnd = new Uint8Array(16);
+      global.crypto.getRandomValues(rnd);
+    } else {
+      rnd = [];
+      for (var j = 0; j < 16; j++) rnd.push(Math.floor(Math.random() * 256));
+    }
+    for (var i = 0; i < rnd.length; i++) s += chars[rnd[i] % chars.length];
+    return s;
   }
 
   function applyRemote(res) {
@@ -152,7 +179,9 @@
         status: data.status || 'active',
         checkinDay: data.checkinDay || 'Sunday',
         startDate: data.startDate || new Date().toISOString().slice(0, 10),
-        notes: data.notes || ''
+        notes: data.notes || '',
+        portalToken: makeToken(),
+        smsConsent: data.smsConsent || false
       };
       state.clients.push(c);
       save();
@@ -173,6 +202,13 @@
       save();
     },
     getClient: function (id) { return findById(state.clients, id); },
+    getClientByToken: function (token) {
+      if (!token) return null;
+      for (var i = 0; i < state.clients.length; i++) {
+        if (state.clients[i].portalToken === token) return state.clients[i];
+      }
+      return null;
+    },
 
     addProgram: function (parsed) {
       var p = {
@@ -182,6 +218,7 @@
         days: parsed.days || [],
         createdAt: new Date().toISOString()
       };
+      if (global.FitParser && global.FitParser.migrateDays) global.FitParser.migrateDays(p.days);
       state.programs.push(p);
       save();
       return p;
