@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blaine&rsquo;s Barbershop — Holly Springs, NC</title>
+<style>
+  :root{
+    --ink:#221D17;
+    --ink-soft:#4A4238;
+    --paper:#F1EBDD;
+    --paper-deep:#E7DCC4;
+    --walnut:#201A14;
+    --walnut-2:#2B2218;
+    --oxblood:#7E2D26;
+    --oxblood-deep:#63211B;
+    --brass:#9C7A3C;
+    --brass-bright:#C29A4B;
+    --navy:#26364F;
+    --line:rgba(34,29,23,.22);
+    --line-light:rgba(241,235,221,.25);
+    --display:"Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    --body:Georgia,"Times New Roman",serif;
+    --util:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:17px;
+    line-height:1.6;
+  }
+  img{max-width:100%}
+  a{color:inherit}
+  a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
+    outline:3px solid var(--brass);outline-offset:2px;
+  }
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+  .label{
+    font-family:var(--util);
+    font-size:12px;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+  }
+  .pole{
+    height:9px;
+    background:repeating-linear-gradient(-55deg,
+      var(--oxblood) 0 16px,
+      var(--paper) 16px 24px,
+      var(--navy) 24px 40px,
+      var(--paper) 40px 48px);
+  }
+
+  /* ── Top bar ─────────────────────────── */
+  .topbar{background:var(--walnut);color:var(--paper)}
+  .topbar .wrap{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:16px;padding-top:14px;padding-bottom:14px;flex-wrap:wrap;
+  }
+  .wordmark{font-family:var(--display);font-size:20px;letter-spacing:.08em;text-transform:uppercase}
+  .wordmark b{color:var(--brass-bright);font-weight:700}
+  .topbar nav{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .topbar nav a{
+    text-decoration:none;font-family:var(--util);font-size:12px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--paper);
+    opacity:.85;
+  }
+  .topbar nav a:hover{opacity:1;color:var(--brass-bright)}
+  .btn{
+    display:inline-block;text-decoration:none;cursor:pointer;
+    font-family:var(--util);font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+    padding:13px 26px;border:1px solid transparent;
+  }
+  .btn-primary{background:var(--oxblood);color:var(--paper)}
+  .btn-primary:hover{background:var(--oxblood-deep)}
+  .btn-ghost{background:transparent;color:var(--paper);border-color:var(--brass)}
+  .btn-ghost:hover{background:var(--brass);color:var(--walnut)}
+
+  /* ── Hero ────────────────────────────── */
+  .hero{background:var(--walnut);color:var(--paper);position:relative;overflow:hidden}
+  .hero .wrap{padding-top:84px;padding-bottom:92px;position:relative}
+  .hero .label{color:var(--brass-bright)}
+  .hero h1{
+    font-family:var(--display);
+    font-size:clamp(40px,7vw,76px);
+    line-height:1.04;
+    letter-spacing:.015em;
+    text-transform:uppercase;
+    text-wrap:balance;
+    max-width:14ch;
+    margin:20px 0 8px;
+  }
+  .hero h1 .flourish{color:var(--brass-bright)}
+  .hero .tagline{
+    font-style:italic;font-size:clamp(18px,2.4vw,22px);
+    color:#D8CDB8;max-width:52ch;margin:14px 0 36px;
+  }
+  .hero .cta-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .hero .est{
+    position:absolute;right:24px;top:88px;
+    font-family:var(--util);font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--brass);
+    writing-mode:vertical-rl;
+    border-left:1px solid var(--line-light);
+    padding-left:14px;
+  }
+  @media (max-width:720px){.hero .est{display:none}}
+
+  /* ── Social proof bar ────────────────── */
+  .proof{background:var(--brass);color:var(--walnut)}
+  .proof .wrap{
+    display:flex;align-items:center;justify-content:center;gap:14px;
+    padding-top:16px;padding-bottom:16px;flex-wrap:wrap;text-align:center;
+  }
+  .stars{font-size:18px;letter-spacing:.2em}
+  .proof p{font-family:var(--util);font-size:13px;letter-spacing:.1em;text-transform:uppercase}
+
+  /* ── Sections ────────────────────────── */
+  section .wrap{padding-top:76px;padding-bottom:76px}
+  .kicker-row{display:flex;align-items:baseline;gap:18px;margin-bottom:40px}
+  .kicker-row .label{color:var(--oxblood)}
+  .kicker-row .rule{flex:1;height:1px;background:var(--line)}
+  h2{
+    font-family:var(--display);
+    font-size:clamp(28px,4vw,40px);
+    text-transform:uppercase;letter-spacing:.03em;
+    line-height:1.1;text-wrap:balance;
+    margin-bottom:14px;
+  }
+  .lede{color:var(--ink-soft);max-width:58ch}
+
+  /* Why us */
+  .why-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-top:44px}
+  @media (max-width:820px){.why-grid{grid-template-columns:1fr}}
+  .why-card{background:var(--paper);padding:34px 28px}
+  .why-card .glyph{
+    font-family:var(--display);font-size:30px;color:var(--brass);
+    display:block;margin-bottom:14px;
+  }
+  .why-card h3{font-family:var(--display);font-size:20px;letter-spacing:.02em;margin-bottom:10px}
+  .why-card p{font-size:15.5px;color:var(--ink-soft)}
+
+  /* Services */
+  .services{background:var(--paper-deep)}
+  .svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 56px;margin-top:40px}
+  @media (max-width:720px){.svc-grid{grid-template-columns:1fr}}
+  .svc{
+    display:flex;justify-content:space-between;align-items:baseline;gap:18px;
+    padding:20px 0;border-bottom:1px dotted var(--ink-soft);
+  }
+  .svc h3{font-family:var(--display);font-size:19px;letter-spacing:.02em;white-space:nowrap}
+  .svc p{font-size:14.5px;color:var(--ink-soft);text-align:right;max-width:30ch}
+
+  /* Form */
+  .book{background:var(--walnut);color:var(--paper)}
+  .book .kicker-row .label{color:var(--brass-bright)}
+  .book .kicker-row .rule{background:var(--line-light)}
+  .book .lede{color:#C8BCA6}
+  .book form{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media (max-width:640px){.book form{grid-template-columns:1fr}}
+  .field{display:flex;flex-direction:column;gap:8px}
+  .field label{font-family:var(--util);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-bright)}
+  .field input,.field select{
+    background:var(--walnut-2);border:1px solid rgba(241,235,221,.35);
+    color:var(--paper);font-family:var(--body);font-size:16px;
+    padding:13px 14px;border-radius:0;width:100%;
+  }
+  .field input::placeholder{color:rgba(241,235,221,.4)}
+  .field input:hover,.field select:hover{border-color:var(--brass)}
+  .book .submit-row{grid-column:1 / -1;display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-top:6px}
+  .book .submit-row .btn-primary{padding:16px 34px;font-size:14px}
+  .book .fine{font-size:13.5px;font-style:italic;color:#A99C84}
+
+  /* Hours */
+  .hours-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;margin-top:40px}
+  @media (max-width:760px){.hours-grid{grid-template-columns:1fr}}
+  .hours-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  .hours-table td{padding:11px 0;border-bottom:1px solid var(--line);font-size:16px}
+  .hours-table td:last-child{text-align:right;font-family:var(--util);font-size:14px;letter-spacing:.05em}
+  .hours-table .closed td{color:var(--ink-soft);font-style:italic}
+  .visit-card{border:1px solid var(--ink);padding:30px 28px;background:var(--paper)}
+  .visit-card h3{font-family:var(--display);font-size:20px;margin-bottom:12px;letter-spacing:.02em}
+  .visit-card p{margin-bottom:16px;color:var(--ink-soft)}
+  .visit-card .phone{
+    font-family:var(--display);font-size:26px;color:var(--oxblood);
+    text-decoration:none;display:inline-block;margin-bottom:20px;
+  }
+  .visit-card .phone:hover{color:var(--oxblood-deep)}
+
+  /* Footer */
+  footer{background:var(--walnut);color:#A99C84}
+  footer .wrap{
+    padding-top:34px;padding-bottom:34px;
+    display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center;
+  }
+  footer .wordmark{font-size:16px;color:var(--paper)}
+  footer .concept{
+    font-family:var(--util);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    border:1px solid rgba(241,235,221,.3);padding:7px 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="pole" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="wordmark">Blaine&rsquo;s <b>Barbershop</b></div>
+    <nav aria-label="Main">
+      <a href="#services">Services</a>
+      <a href="#hours">Hours</a>
+      <a href="tel:+16038672595">(603)&nbsp;867-2595</a>
+      <a class="btn btn-primary" href="#book">Book a Cut</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <span class="label">Holly Springs &middot; North Carolina</span>
+      <span class="est" aria-hidden="true">Hot Towel &middot; Straight Razor &middot; Classic Chairs</span>
+      <h1>A Proper Cut,<br>Right Here in <span class="flourish">Holly&nbsp;Springs</span></h1>
+      <p class="tagline">Classic cuts, sharp fades, and straight-razor hot towel shaves — the way a barbershop is supposed to feel.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#book">Book My Cut</a>
+        <a class="btn btn-ghost" href="tel:+16038672595">Call (603) 867-2595</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="proof">
+    <div class="wrap">
+      <span class="stars" aria-hidden="true">★★★★★</span>
+      <p>Rated 4.9 stars by 151+ Holly Springs neighbors</p>
+    </div>
+  </div>
+
+  <section id="why">
+    <div class="wrap">
+      <div class="kicker-row">
+        <span class="label">Why Blaine&rsquo;s</span>
+        <span class="rule" aria-hidden="true"></span>
+      </div>
+      <h2>The Shop Worth Waiting For — Except You Won&rsquo;t Have To</h2>
+      <p class="lede">Holly Springs has plenty of places to get a haircut. It has one place where the cut, the conversation, and the hot towel are all part of the service.</p>
+      <div class="why-grid">
+        <div class="why-card">
+          <span class="glyph" aria-hidden="true">I.</span>
+          <h3>Walk Out Sharp, Every Time</h3>
+          <p>Fades, classic cuts, and grey blending done by a barber who remembers exactly how you like it — no explaining your cut twice.</p>
+        </div>
+        <div class="why-card">
+          <span class="glyph" aria-hidden="true">II.</span>
+          <h3>Old-School Service</h3>
+          <p>Straight-razor hot towel shaves and real barbershop chairs. The kind of service most towns lost twenty years ago.</p>
+        </div>
+        <div class="why-card">
+          <span class="glyph" aria-hidden="true">III.</span>
+          <h3>Your Chair Is Ready</h3>
+          <p>Book your slot in seconds and skip the wait. Early-morning hours for the before-work crowd — in the chair at 7 a.m., at your desk by 8.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="services" class="services">
+    <div class="wrap">
+      <div class="kicker-row">
+        <span class="label">The Menu</span>
+        <span class="rule" aria-hidden="true"></span>
+      </div>
+      <h2>Services</h2>
+      <div class="svc-grid">
+        <div>
+          <div class="svc">
+            <h3>Classic Cut</h3>
+            <p>Traditional scissor work, finished with a clean neck shave.</p>
+          </div>
+          <div class="svc">
+            <h3>Skin Fade</h3>
+            <p>Tight, blended fades with crisp line-ups.</p>
+          </div>
+        </div>
+        <div>
+          <div class="svc">
+            <h3>Hot Towel Shave</h3>
+            <p>Straight razor, hot lather, warm towels — the full ritual.</p>
+          </div>
+          <div class="svc">
+            <h3>Grey Blending</h3>
+            <p>Subtle, natural color work that keeps it looking like you.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="book" class="book">
+    <div class="wrap">
+      <div class="kicker-row">
+        <span class="label">Reserve Your Chair</span>
+        <span class="rule" aria-hidden="true"></span>
+      </div>
+      <h2>Book Your Next Cut</h2>
+      <p class="lede">Leave your details and we&rsquo;ll confirm your appointment — usually within the hour.</p>
+      <form action="#" method="post">
+        <div class="field">
+          <label for="f-name">Name</label>
+          <input id="f-name" name="name" type="text" placeholder="Your name" autocomplete="name">
+        </div>
+        <div class="field">
+          <label for="f-phone">Phone Number</label>
+          <input id="f-phone" name="phone" type="tel" placeholder="(919) 555-0100" autocomplete="tel">
+        </div>
+        <div class="field">
+          <label for="f-service">Service Needed</label>
+          <select id="f-service" name="service">
+            <option>Classic Cut</option>
+            <option>Skin Fade</option>
+            <option>Hot Towel Shave</option>
+            <option>Grey Blending</option>
+            <option>Cut + Shave Combo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-time">Preferred Contact Time</label>
+          <select id="f-time" name="contact-time">
+            <option>Morning (7–11 a.m.)</option>
+            <option>Midday (11 a.m.–2 p.m.)</option>
+            <option>Afternoon (2–5 p.m.)</option>
+            <option>Any time</option>
+          </select>
+        </div>
+        <div class="submit-row">
+          <button class="btn btn-primary" type="submit">Reserve My Chair</button>
+          <span class="fine">Prefer to talk? Call (603) 867-2595 — we answer.</span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="hours">
+    <div class="wrap">
+      <div class="kicker-row">
+        <span class="label">Hours &amp; Location</span>
+        <span class="rule" aria-hidden="true"></span>
+      </div>
+      <h2>Stop By the Shop</h2>
+      <div class="hours-grid">
+        <table class="hours-table">
+          <caption class="label" style="text-align:left;padding-bottom:14px;color:var(--oxblood)">Weekly Hours</caption>
+          <tbody>
+            <tr class="closed"><td>Monday</td><td>Closed</td></tr>
+            <tr><td>Tuesday</td><td>7:00 – 3:00</td></tr>
+            <tr><td>Wednesday</td><td>7:00 – 3:00</td></tr>
+            <tr><td>Thursday</td><td>11:00 – 7:00</td></tr>
+            <tr><td>Friday</td><td>8:00 – 5:00</td></tr>
+            <tr><td>Saturday</td><td>7:00 – 11:00</td></tr>
+            <tr class="closed"><td>Sunday</td><td>Closed</td></tr>
+          </tbody>
+        </table>
+        <div class="visit-card">
+          <h3>Blaine&rsquo;s Barbershop</h3>
+          <p>2104 Crossway Ln<br>Holly Springs, NC 27540</p>
+          <a class="phone" href="tel:+16038672595">(603) 867-2595</a>
+          <div><a class="btn btn-primary" href="#book">Book a Cut</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="pole" aria-hidden="true"></div>
+
+<footer>
+  <div class="wrap">
+    <div class="wordmark">Blaine&rsquo;s <b>Barbershop</b></div>
+    <span class="concept">Website design concept — prepared for the owner&rsquo;s review</span>
+  </div>
+</footer>
+
+</body>
+</html>
