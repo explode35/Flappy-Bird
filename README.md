@@ -23,10 +23,17 @@ be exported/imported as JSON for backup.
    next load/rep adjustments (double-progression style).
 5. **Run the week.** The dashboard shows which check-ins are due today, who is
    falling behind on adherence, and which programs are ending soon.
+6. **Automate check-ins over SMS.** An optional zero-dependency Node service
+   (`sms/`) runs the weekly sequence: check-in request on each client's
+   check-in day → one reminder if they go quiet → their reply auto-parsed
+   into a check-in record → confirmation text back. Runs in dry-run mode
+   without Twilio credentials. See `sms/README.md`.
 
 ## Quick start
 
-1. Open `index.html`.
+1. Open `index.html` directly, **or** run `node sms/server.js` and open
+   http://localhost:3000 to also get automated SMS check-ins and server-side
+   data storage.
 2. Go to **Import** and click "Load sample" (or paste your own raw program —
    see `samples/sample-program.txt` for the accepted notation).
 3. Click **Parse**, review the structured preview, then **Save program**.
@@ -77,3 +84,7 @@ Deadlift 3x5 @ 80% rest 3min tempo 2010
 | `js/app.js` | UI wiring, views, and state |
 | `samples/sample-program.txt` | Example raw program for the importer |
 | `tests/parser-tests.html` | Browser-run parser test suite |
+| `sms/engine.js` | SMS sequence logic: scheduling, reply parsing, templates |
+| `sms/server.js` | Node service: Twilio send/receive, shared state API, static hosting |
+| `sms/test.js` | Node-run SMS engine test suite (`node sms/test.js`) |
+| `sms/README.md` | SMS setup, config, and Twilio wiring |

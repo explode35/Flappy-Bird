@@ -15,22 +15,66 @@
   var KEY = 'fitops.v1';
 
   function blank() {
-    return { clients: [], programs: [], assignments: [], sessions: [], checkins: [] };
+    return { clients: [], programs: [], assignments: [], sessions: [], checkins: [],
+             smsSequences: [], smsLog: [] };
   }
 
   var state = blank();
 
+  // Remote sync: when the app is served by sms/server.js, state lives
+  // server-side so the SMS engine and the UI share one store.
+  var remote = false;
+  var lastRev = 0;
+  var pushTimer = null;
+  var pollTimer = null;
+  var onRemoteChange = null;
+
+  function fromRaw(data) {
+    var base = blank();
+    Object.keys(base).forEach(function (k) {
+      if (Array.isArray(data[k])) base[k] = data[k];
+    });
+    return base;
+  }
+
+  function applyRemote(res) {
+    if (!res || !res.data) return;
+    lastRev = res.rev || lastRev;
+    var merged = fromRaw(res.data);
+    if (JSON.stringify(merged) !== JSON.stringify(state)) {
+      state = merged;
+      try { global.localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+      if (onRemoteChange) onRemoteChange();
+    }
+  }
+
+  function schedulePush() {
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function () {
+      fetch('/api/state', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: state })
+      }).then(function (r) { return r.json(); })
+        .then(applyRemote)
+        .catch(function () {});
+    }, 400);
+  }
+
+  function startPolling() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(function () {
+      fetch('/api/state')
+        .then(function (r) { if (!r.ok) throw new Error('offline'); return r.json(); })
+        .then(function (res) { if (res.rev !== lastRev) applyRemote(res); })
+        .catch(function () {});
+    }, 15000);
+  }
+
   function load() {
     try {
       var raw = global.localStorage.getItem(KEY);
-      if (raw) {
-        var data = JSON.parse(raw);
-        var base = blank();
-        Object.keys(base).forEach(function (k) {
-          if (Array.isArray(data[k])) base[k] = data[k];
-        });
-        state = base;
-      }
+      if (raw) state = fromRaw(JSON.parse(raw));
     } catch (e) {
       // Corrupt storage — start clean rather than crash, but keep a backup.
       try { global.localStorage.setItem(KEY + '.corrupt', global.localStorage.getItem(KEY)); } catch (e2) {}
@@ -40,7 +84,8 @@
   }
 
   function save() {
-    global.localStorage.setItem(KEY, JSON.stringify(state));
+    try { global.localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    if (remote) schedulePush();
   }
 
   function uid(prefix) {
@@ -64,11 +109,45 @@
     save: save,
     get state() { return state; },
 
+    /**
+     * Try to attach to the SMS engine's shared store (/api/state). Resolves
+     * true when connected; cb fires whenever server-side changes arrive.
+     */
+    connectRemote: function (cb) {
+      onRemoteChange = cb || null;
+      if (typeof fetch !== 'function') return Promise.resolve(false);
+      // Only probe for the SMS engine when served over HTTP (file:// can't
+      // reach /api/state and just spams the console with CORS errors).
+      if (global.location && !/^https?:$/.test(global.location.protocol)) {
+        return Promise.resolve(false);
+      }
+      return fetch('/api/state')
+        .then(function (r) { if (!r.ok) throw new Error('offline'); return r.json(); })
+        .then(function (res) {
+          remote = true;
+          lastRev = res.rev || 1;
+          var server = fromRaw(res.data || {});
+          var serverEmpty = !server.clients.length && !server.programs.length && !server.checkins.length;
+          var localHasData = state.clients.length || state.programs.length;
+          if (serverEmpty && localHasData) {
+            schedulePush(); // first run against a fresh server: seed it from local
+          } else {
+            state = server;
+            try { global.localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+          }
+          startPolling();
+          return true;
+        })
+        .catch(function () { return false; });
+    },
+    isRemote: function () { return remote; },
+
     addClient: function (data) {
       var c = {
         id: uid('cl'),
         name: data.name || 'Unnamed client',
         email: data.email || '',
+        phone: data.phone || '',
         goal: data.goal || '',
         status: data.status || 'active',
         checkinDay: data.checkinDay || 'Sunday',
@@ -170,10 +249,12 @@
         clientId: data.clientId,
         date: data.date || new Date().toISOString().slice(0, 10),
         weight: data.weight != null ? data.weight : null,
+        sessions: data.sessions != null ? data.sessions : null,
         sleep: data.sleep != null ? data.sleep : null,
         stress: data.stress != null ? data.stress : null,
         adherence: data.adherence != null ? data.adherence : null,
-        notes: data.notes || ''
+        notes: data.notes || '',
+        source: data.source || 'manual'
       };
       state.checkins.push(c);
       save();
@@ -188,12 +269,7 @@
     },
     importJSON: function (text) {
       var parsed = JSON.parse(text);
-      var data = parsed && parsed.data ? parsed.data : parsed;
-      var base = blank();
-      Object.keys(base).forEach(function (k) {
-        if (Array.isArray(data[k])) base[k] = data[k];
-      });
-      state = base;
+      state = fromRaw(parsed && parsed.data ? parsed.data : parsed);
       save();
       return state;
     },

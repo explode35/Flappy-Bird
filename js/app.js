@@ -11,6 +11,7 @@
 
   var lastParsed = null;       // result of the most recent Parse
   var currentClientId = null;  // client shown in the detail view
+  var smsConnected = false;    // true when served by sms/server.js
 
   // ---------- helpers ----------
   function $(id) { return document.getElementById(id); }
@@ -93,6 +94,8 @@
       box.appendChild(row);
     });
 
+    renderSmsPanel();
+
     // adherence flags
     var flags = $('dash-adherence');
     flags.innerHTML = '';
@@ -135,6 +138,48 @@
       }
     });
     if (!found) ending.appendChild(el('div', 'empty', 'No blocks ending in the next 7 days.'));
+  }
+
+  function renderSmsPanel() {
+    var box = $('dash-sms');
+    if (!box) return;
+    box.innerHTML = '';
+    var st = S.state;
+    var seqs = st.smsSequences || [];
+    var log = st.smsLog || [];
+    var clientName = function (id) {
+      var c = id ? S.getClient(id) : null;
+      return c ? c.name : 'Unknown number';
+    };
+
+    // open sequences: awaiting reply / missed
+    seqs.filter(function (q) { return !q.repliedAt; }).slice(-8).forEach(function (q) {
+      var hours = (Date.now() - Date.parse(q.requestSentAt)) / 3600000;
+      var row = el('div', 'suggestion');
+      row.appendChild(el('span', 'act ' + (hours > 24 ? 'reduce' : 'hold'), hours > 24 ? 'no reply' : 'awaiting'));
+      row.appendChild(el('span', null, '<strong>' + esc(clientName(q.clientId)) + '</strong> — check-in sent ' +
+        esc(q.date) + (q.reminderSentAt ? ', reminded' : '') +
+        (hours > 24 ? ', still no response. Worth a personal message.' : '.')));
+      box.appendChild(row);
+    });
+
+    log.slice(-6).reverse().forEach(function (m) {
+      var row = el('div', 'suggestion');
+      row.appendChild(el('span', 'act ' + (m.direction === 'in' ? 'increase' : 'add-rep'),
+        m.direction === 'in' ? '← in' : '→ out'));
+      var body = String(m.body || '');
+      if (body.length > 80) body = body.slice(0, 80) + '…';
+      row.appendChild(el('span', null, '<strong>' + esc(clientName(m.clientId)) + '</strong> · ' +
+        esc(m.kind) + ' <span style="color:var(--faint)">(' + esc(m.status) + ')</span><br>' +
+        '<span style="color:var(--muted)">' + esc(body).replace(/\n/g, ' ') + '</span>'));
+      box.appendChild(row);
+    });
+
+    if (!box.children.length) {
+      box.appendChild(el('div', 'empty', smsConnected
+        ? 'No SMS activity yet. Clients with a phone number get their check-in automatically on their check-in day.'
+        : 'SMS engine offline — run “node sms/server.js” and open the app from http://localhost:3000 to automate weekly check-ins.'));
+    }
   }
 
   // ---------- import ----------
@@ -296,10 +341,11 @@
     S.addClient({
       name: name,
       email: $('c-email').value.trim(),
+      phone: $('c-phone').value.trim(),
       goal: $('c-goal').value.trim(),
       checkinDay: $('c-checkin').value
     });
-    $('c-name').value = ''; $('c-email').value = ''; $('c-goal').value = '';
+    $('c-name').value = ''; $('c-email').value = ''; $('c-phone').value = ''; $('c-goal').value = '';
     toast('Client added');
     renderClients();
   });
@@ -362,6 +408,28 @@
     head.appendChild(el('p', 'sub',
       esc(c.goal || 'No goal set') + ' · check-ins ' + esc(c.checkinDay) +
       (c.email ? ' · ' + esc(c.email) : '') + ' · started ' + esc(c.startDate)));
+
+    // phone for the automated SMS sequence
+    var prow = el('div', 'btnrow');
+    var pin = el('input');
+    pin.type = 'text';
+    pin.placeholder = '+1 555 123 4567';
+    pin.value = c.phone || '';
+    pin.style.maxWidth = '200px';
+    var pbtn = el('button', 'btn small', c.phone ? 'Update phone' : 'Enable SMS check-ins');
+    pbtn.addEventListener('click', function () {
+      S.updateClient(c.id, { phone: pin.value.trim() });
+      toast(pin.value.trim() ? 'Phone saved — weekly SMS check-ins on ' + c.checkinDay : 'Phone removed');
+      renderClientDetail();
+    });
+    prow.appendChild(pin);
+    prow.appendChild(pbtn);
+    if (c.phone) {
+      prow.appendChild(el('span', 'badge ' + (smsConnected ? 'good' : 'gray'),
+        smsConnected ? 'SMS sequence active' : 'SMS engine offline'));
+    }
+    head.appendChild(prow);
+
     var hrow = el('div', 'btnrow');
     var toggle = el('button', 'btn small', c.status === 'active' ? 'Pause client' : 'Reactivate');
     toggle.addEventListener('click', function () {
@@ -575,6 +643,7 @@
     var fields = [
       ['ci-date', 'Date', 'date'],
       ['ci-weight', 'Body weight', 'number'],
+      ['ci-sess', 'Sessions', 'number'],
       ['ci-sleep', 'Sleep (hrs)', 'number'],
       ['ci-stress', 'Stress 1–5', 'number'],
       ['ci-adh', 'Nutrition 1–5', 'number']
@@ -602,7 +671,7 @@
       var num = function (k) { return inputs[k].value !== '' ? parseFloat(inputs[k].value) : null; };
       S.logCheckin({
         clientId: client.id, date: inputs['ci-date'].value,
-        weight: num('ci-weight'), sleep: num('ci-sleep'),
+        weight: num('ci-weight'), sessions: num('ci-sess'), sleep: num('ci-sleep'),
         stress: num('ci-stress'), adherence: num('ci-adh'), notes: notes.value.trim()
       });
       toast('Check-in saved');
@@ -614,12 +683,14 @@
     if (history.length) {
       panel.appendChild(el('h2', null, 'Check-in history'));
       var table = el('table', 'list');
-      table.innerHTML = '<thead><tr><th>Date</th><th>Weight</th><th>Sleep</th><th>Stress</th><th>Nutrition</th><th>Notes</th></tr></thead>';
+      table.innerHTML = '<thead><tr><th>Date</th><th>Weight</th><th>Sessions</th><th>Sleep</th><th>Stress</th><th>Nutrition</th><th>Notes</th></tr></thead>';
       var tbody = el('tbody');
       history.forEach(function (ci) {
         var v = function (x) { return x != null ? esc(x) : '—'; };
-        tbody.appendChild(el('tr', null, '<td>' + esc(ci.date) + '</td><td>' + v(ci.weight) +
-          '</td><td>' + v(ci.sleep) + '</td><td>' + v(ci.stress) + '</td><td>' + v(ci.adherence) +
+        var tag = ci.source === 'sms' ? ' <span class="badge gray">SMS</span>' : '';
+        tbody.appendChild(el('tr', null, '<td>' + esc(ci.date) + tag + '</td><td>' + v(ci.weight) +
+          '</td><td>' + v(ci.sessions) + '</td><td>' + v(ci.sleep) + '</td><td>' + v(ci.stress) +
+          '</td><td>' + v(ci.adherence) +
           '</td><td style="color:var(--muted)">' + esc(ci.notes || '') + '</td>'));
       });
       table.appendChild(tbody);
@@ -652,5 +723,41 @@
   });
 
   // ---------- boot ----------
+  function rerenderActive() {
+    var active = document.querySelector('.view.active');
+    if (!active) return;
+    if (active.id === 'view-dashboard') renderDashboard();
+    else if (active.id === 'view-programs') renderPrograms();
+    else if (active.id === 'view-clients') renderClients();
+    else if (active.id === 'view-client') {
+      if (S.getClient(currentClientId)) renderClientDetail();
+      else show('clients');
+    }
+  }
+
+  function updateSmsStatus(connected) {
+    var elStatus = $('sms-status');
+    if (!elStatus) return;
+    if (!connected) {
+      elStatus.textContent = 'SMS engine: offline — run node sms/server.js';
+      elStatus.classList.remove('on');
+      return;
+    }
+    fetch('/api/sms/status')
+      .then(function (r) { return r.json(); })
+      .then(function (st) {
+        elStatus.textContent = st.dryRun
+          ? 'SMS engine: connected (dry-run — add Twilio creds to send)'
+          : 'SMS engine: live via ' + (st.fromNumber || 'Twilio') + ', sends at ' + st.sendHour + ':00';
+        elStatus.classList.add('on');
+      })
+      .catch(function () { elStatus.textContent = 'SMS engine: connected'; });
+  }
+
   renderDashboard();
+  S.connectRemote(rerenderActive).then(function (ok) {
+    smsConnected = ok;
+    updateSmsStatus(ok);
+    rerenderActive();
+  });
 })();

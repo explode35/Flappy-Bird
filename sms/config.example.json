@@ -1,0 +1,10 @@
+{
+  "port": 3000,
+  "accountSid": "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "authToken": "your_twilio_auth_token",
+  "fromNumber": "+15551234567",
+  "sendHour": 8,
+  "reminderAfterHours": 6,
+  "coachName": "Your Coaching",
+  "publicUrl": ""
+}

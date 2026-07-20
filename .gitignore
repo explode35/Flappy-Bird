@@ -1,0 +1,5 @@
+# SMS engine secrets and runtime data — never commit
+sms/config.json
+sms/data/
+
+node_modules/
