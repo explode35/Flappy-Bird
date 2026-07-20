@@ -1,0 +1,8 @@
+# Generated pipeline output — reproducible from a transcript + the pipeline,
+# not source material. Each client engagement produces its own deliverables/
+# folder; these aren't meant to accumulate in version control.
+deliverables/
+
+# Python build artifacts
+__pycache__/
+*.pyc
