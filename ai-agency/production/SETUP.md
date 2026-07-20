@@ -50,13 +50,13 @@ npm start          # local test: npx ngrok http 3000 to expose webhooks
 </Response>
 ```
 
-With this setup the client's phone rings exactly as before; CallCatch only acts when
+With this setup the client's phone rings exactly as before; Triangle Automation only acts when
 nobody answers within 20 seconds.
 
 ## Weekly report (your retention engine)
 
 Every Friday, grep the logs for `BOOKED` per client and text the owner:
-"This week CallCatch caught 4 missed calls and booked 2 jobs (~$5,300). Have a good weekend."
+"This week Triangle Automation caught 4 missed calls and booked 2 jobs (~$5,300). Have a good weekend."
 Automate later; for the first ten clients, doing this by hand keeps you close to the numbers
 that justify your invoice.
 

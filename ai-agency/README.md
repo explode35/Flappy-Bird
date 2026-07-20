@@ -1,4 +1,4 @@
-# CallCatch AI — your done-for-you AI agency in a box
+# Triangle Automation — your done-for-you AI agency in a box
 
 A complete launch kit for selling **missed-call text-back** to home-service businesses
 (HVAC, plumbing, roofing, electrical). One niche, one offer, one clear number: their

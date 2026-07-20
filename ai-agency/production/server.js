@@ -1,5 +1,5 @@
 /**
- * CallCatch AI — missed-call text-back engine.
+ * Triangle Automation — missed-call text-back engine.
  *
  * Flow:
  *   1. Client's Twilio number forwards unanswered calls here (status callback).
@@ -134,11 +134,11 @@ app.post("/sms", verify, async (req, res) => {
     if (visible) await sms(line, caller, visible);
     if (booked) {
       console.log(`[${client.id}] BOOKED ${caller}: ${booked}`);
-      await notifyOwner(client, `✅ CallCatch booked a job: ${booked} — caller ${caller}`);
+      await notifyOwner(client, `✅ Triangle Automation booked a job: ${booked} — caller ${caller}`);
     }
     if (alert) {
       console.log(`[${client.id}] ALERT ${caller}: ${alert}`);
-      await notifyOwner(client, `⚠️ CallCatch needs you: ${alert} — caller ${caller}`);
+      await notifyOwner(client, `⚠️ Triangle Automation needs you: ${alert} — caller ${caller}`);
     }
   } catch (err) {
     console.error(`[${client.id}] reply failed for ${caller}:`, err.message);
@@ -148,4 +148,4 @@ app.post("/sms", verify, async (req, res) => {
 
 app.get("/health", (_req, res) => res.json({ ok: true, clients: clients.size }));
 
-app.listen(PORT, () => console.log(`CallCatch AI listening on :${PORT}`));
+app.listen(PORT, () => console.log(`Triangle Automation listening on :${PORT}`));

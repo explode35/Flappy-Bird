@@ -1,5 +1,5 @@
 {
-  "name": "callcatch-ai",
+  "name": "triangle-automation",
   "version": "1.0.0",
   "description": "Missed-call text-back service: Twilio webhooks + Claude conversation engine",
   "main": "server.js",

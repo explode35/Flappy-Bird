@@ -40,7 +40,7 @@ Tuesday at 2pm" is the whole pitch in one detail — it's proof, not a claim.)*
 >
 > Your numbers from our chat: ~[X] missed calls/week × [Y]% close rate × $[Z] average
 > ticket ≈ **$[loss]/month** currently going to whoever answers next.
-> CallCatch is $297/month. That's the whole decision.
+> Triangle Automation is $297/month. That's the whole decision.
 >
 > I can have it live on your line by [day-after-tomorrow]. Want me to start the paperwork?
 
@@ -53,6 +53,6 @@ Tuesday at 2pm" is the whole pitch in one detail — it's proof, not a claim.)*
 
 ## Referral ask (day 7 after go-live, right after their first "✅ job booked" ping)
 
-> That booking last night was CallCatch, by the way 😄 Quick ask: who else do you know
+> That booking last night was Triangle Automation, by the way 😄 Quick ask: who else do you know
 > that's out on jobs all day — buddy with a roofing or plumbing crew? Intro me and I'll
 > take $100 off your next month for each one that signs.
