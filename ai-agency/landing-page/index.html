@@ -1,0 +1,323 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CallCatch AI — Missed-Call Rescue for Home Service Pros</title>
+<style>
+  :root{
+    --ink:#14181d; --paper:#f7f6f2; --card:#ffffff; --line:#e2dfd8;
+    --steel:#5b6672; --accent:#e85d04; --accent-deep:#c24e03; --good:#2e9e5b;
+    --hero-ink:#f2f0ea; --hero-steel:#9aa3ad; --hero-line:#2a313a; --hero-card:#1b2129;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ink:#e8e6e0; --paper:#12151a; --card:#1a1f26; --line:#2a313a; --steel:#8b95a3;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e8e6e0; --paper:#12151a; --card:#1a1f26; --line:#2a313a; --steel:#8b95a3;
+  }
+  :root[data-theme="light"]{
+    --ink:#14181d; --paper:#f7f6f2; --card:#ffffff; --line:#e2dfd8; --steel:#5b6672;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6;
+  }
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+  section{padding:72px 0}
+  h2{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-.025em;text-wrap:balance;margin-bottom:14px}
+  .eyebrow{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+    margin-bottom:10px;
+  }
+  p.lede{color:var(--steel);font-size:17px;max-width:38em}
+  a.btn, button.btn{
+    display:inline-block;background:var(--accent);color:#fff;text-decoration:none;
+    font-weight:700;font-size:16px;padding:15px 28px;border-radius:10px;border:0;cursor:pointer;
+    font-family:inherit;
+  }
+  a.btn:hover, button.btn:hover{background:var(--accent-deep)}
+  a.btn:focus-visible, button.btn:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+
+  /* ---------- hero (committed dark, both themes) ---------- */
+  header{
+    background:linear-gradient(180deg,#181e26 0%, #10141a 100%);
+    color:var(--hero-ink); padding:26px 0 84px;
+  }
+  .nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:70px}
+  .logo{font-weight:800;font-size:19px;letter-spacing:-.02em}
+  .logo b{color:var(--accent)}
+  .nav .mono{font-size:13px;color:var(--hero-steel)}
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:56px;align-items:center}
+  @media (max-width:820px){.hero{grid-template-columns:1fr}}
+  .hero h1{
+    font-size:clamp(34px,5.5vw,56px);font-weight:800;letter-spacing:-.03em;line-height:1.05;
+    text-wrap:balance;
+  }
+  .hero h1 .dim{color:var(--hero-steel)}
+  .hero h1 .hl{color:var(--accent)}
+  .hero p{color:var(--hero-steel);font-size:18px;margin:20px 0 30px;max-width:32em}
+  .hero .sub-cta{display:block;margin-top:12px;font-size:13px;color:var(--hero-steel)}
+
+  .ticket{
+    background:var(--hero-card);border:1px solid var(--hero-line);border-radius:14px;
+    padding:20px;max-width:360px;justify-self:end;width:100%;
+  }
+  @media (max-width:820px){.ticket{justify-self:start}}
+  .ticket .th{
+    display:flex;justify-content:space-between;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--hero-steel);border-bottom:1px solid var(--hero-line);
+    padding-bottom:10px;margin-bottom:14px;
+  }
+  .ticket .th b{color:#e05252}
+  .msg{max-width:88%;padding:9px 13px;border-radius:14px;font-size:14px;line-height:1.4;margin-bottom:8px}
+  .msg.in{background:#2a313a;color:#e8e6e0;border-bottom-left-radius:4px}
+  .msg.out{background:#0a84ff;color:#fff;margin-left:auto;border-bottom-right-radius:4px}
+  .ticket .result{
+    margin-top:12px;padding-top:12px;border-top:1px dashed var(--hero-line);
+    display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--hero-steel);
+  }
+  .ticket .result b{color:var(--good);font-size:15px}
+
+  /* ---------- math ---------- */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px}
+  @media (max-width:720px){.grid3{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px}
+  .big{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:42px;font-weight:700;letter-spacing:-.02em;color:var(--accent);
+    font-variant-numeric:tabular-nums;line-height:1.1;
+  }
+  .card p{color:var(--steel);font-size:14px;margin-top:8px}
+  .cite{font-size:12px;color:var(--steel);margin-top:16px}
+
+  /* ---------- calculator ---------- */
+  .calc{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:34px;margin-top:36px}
+  .calc-grid{display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center}
+  @media (max-width:720px){.calc-grid{grid-template-columns:1fr}}
+  .field{margin-bottom:22px}
+  .field label{display:flex;justify-content:space-between;font-size:14px;font-weight:600;margin-bottom:8px}
+  .field label output{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--accent);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+  .loss{text-align:center}
+  .loss .amount{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:clamp(40px,6vw,58px);font-weight:700;color:var(--accent);
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+  }
+  .loss .lbl{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);margin-top:4px}
+  .loss .vs{font-size:14px;color:var(--steel);margin-top:14px}
+  .loss .vs b{color:var(--good)}
+
+  /* ---------- steps ---------- */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px}
+  @media (max-width:720px){.steps{grid-template-columns:1fr}}
+  .step .n{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:var(--accent);font-size:13px;letter-spacing:.12em;margin-bottom:10px;display:block;
+  }
+  .step h3{font-size:18px;font-weight:700;margin-bottom:6px}
+  .step p{color:var(--steel);font-size:14px}
+
+  /* ---------- capabilities ---------- */
+  .caps{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;margin-top:30px;max-width:760px}
+  @media (max-width:640px){.caps{grid-template-columns:1fr}}
+  .cap{display:flex;gap:12px;align-items:baseline;font-size:15px}
+  .cap::before{content:"■";color:var(--accent);font-size:10px;flex:0 0 auto;position:relative;top:-2px}
+  .cap span{color:var(--steel)}
+
+  /* ---------- pricing ---------- */
+  .price-card{
+    background:var(--card);border:2px solid var(--accent);border-radius:18px;
+    padding:40px;margin-top:36px;display:grid;grid-template-columns:1fr auto;gap:30px;align-items:center;
+  }
+  @media (max-width:720px){.price-card{grid-template-columns:1fr}}
+  .price-card h3{font-size:22px;font-weight:800;margin-bottom:8px}
+  .price-card ul{list-style:none;margin-top:14px}
+  .price-card li{font-size:15px;color:var(--steel);padding:5px 0 5px 24px;position:relative}
+  .price-card li::before{content:"✓";color:var(--good);font-weight:700;position:absolute;left:0}
+  .price-tag{text-align:center}
+  .price-tag .setup{font-size:14px;color:var(--steel)}
+  .price-tag .amt{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:52px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+  }
+  .price-tag .amt small{font-size:16px;color:var(--steel);font-weight:400}
+  .guarantee{
+    margin-top:18px;background:color-mix(in srgb, var(--good) 12%, transparent);
+    border:1px solid var(--good);color:var(--good);
+    border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;
+  }
+
+  /* ---------- faq ---------- */
+  details{border-bottom:1px solid var(--line);padding:16px 0}
+  summary{font-weight:700;font-size:16px;cursor:pointer}
+  summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  details p{color:var(--steel);font-size:15px;margin-top:8px;max-width:52em}
+
+  /* ---------- footer cta ---------- */
+  .final{background:linear-gradient(180deg,#181e26,#10141a);color:var(--hero-ink);text-align:center}
+  .final p{color:var(--hero-steel);max-width:36em;margin:0 auto 28px}
+  footer{background:#0c0f13;color:#6b7480;font-size:13px;padding:26px 0;text-align:center}
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="nav">
+      <div class="logo">Call<b>Catch</b> AI</div>
+      <div class="mono">HVAC &middot; Plumbing &middot; Roofing &middot; Electrical</div>
+    </div>
+    <div class="hero">
+      <div>
+        <h1>You paid for the ad.<br>The phone rang.<br><span class="dim">Nobody answered.</span><br><span class="hl">We catch that job.</span></h1>
+        <p>When your crew can't pick up, CallCatch texts the caller back in under 10 seconds, answers their questions, and books them on your calendar — 24/7, sounding like your best office manager.</p>
+        <a class="btn" href="#demo">See the live demo</a>
+        <span class="sub-cta">2-minute demo on your own phone &middot; no signup, no card</span>
+      </div>
+      <div class="ticket" aria-label="Example rescued call">
+        <div class="th"><span>Incoming call &middot; 6:47 PM</span><b>&#10005; MISSED</b></div>
+        <div class="msg in">Hi, this is Apex Heating &amp; Air — sorry we missed you! What's going on today?</div>
+        <div class="msg out">AC died and it's 95 out 😩</div>
+        <div class="msg in">Let's fix that fast. I have today 4–6 PM or tomorrow 8–10 AM — which works?</div>
+        <div class="msg out">Today please</div>
+        <div class="result"><span>Booked in 74 seconds</span><b>+$4,800 job</b></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">The math you're living with</div>
+    <h2>Missed calls are the most expensive thing in your business</h2>
+    <div class="grid3">
+      <div class="card"><div class="big">62%</div><p>of calls to home-service businesses go unanswered — after hours, during jobs, over lunch.</p></div>
+      <div class="card"><div class="big">85%</div><p>of callers who reach voicemail never call back. They dial the next result on Google.</p></div>
+      <div class="card"><div class="big">$4,800</div><p>average replacement ticket in HVAC. One rescued call a month pays for CallCatch 16&times; over.</p></div>
+    </div>
+    <p class="cite">Sources: industry call-tracking studies (Invoca, 411Locals); ticket averages vary by trade — plug in your own numbers below.</p>
+
+    <div class="calc">
+      <div class="calc-grid">
+        <div>
+          <div class="field">
+            <label for="r1">Missed calls per week <output id="o1">10</output></label>
+            <input type="range" id="r1" min="1" max="50" value="10">
+          </div>
+          <div class="field">
+            <label for="r2">Your close rate on answered calls <output id="o2">30%</output></label>
+            <input type="range" id="r2" min="10" max="80" value="30">
+          </div>
+          <div class="field">
+            <label for="r3">Average job value <output id="o3">$450</output></label>
+            <input type="range" id="r3" min="100" max="8000" step="50" value="450">
+          </div>
+        </div>
+        <div class="loss" aria-live="polite">
+          <div class="amount" id="lossAmt">$5,850</div>
+          <div class="lbl">walking away every month</div>
+          <div class="vs">CallCatch costs <b>$297/mo</b>. You do the math — that's the whole pitch.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="padding-top:0">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>Live in 48 hours. Nothing for you to learn.</h2>
+    <div class="steps">
+      <div class="step card"><span class="n">STEP 01</span><h3>We wire it up</h3><p>15-minute call. We connect CallCatch to your existing business number and calendar. No new phone, no new software, no app for your crew.</p></div>
+      <div class="step card"><span class="n">STEP 02</span><h3>We train it on your business</h3><p>Your services, prices, service area, hours, and how you talk to customers. It answers like your best office manager — because we script it with you.</p></div>
+      <div class="step card"><span class="n">STEP 03</span><h3>It catches jobs while you work</h3><p>Missed call → instant text → questions answered → job booked on your calendar. You get a weekly report of every call rescued and every dollar recovered.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="eyebrow">What it handles</div>
+    <h2>Everything short of turning the wrench</h2>
+    <div class="caps">
+      <div class="cap">After-hours emergencies <span>— captured and triaged at 2 AM</span></div>
+      <div class="cap">Estimate requests <span>— qualified and booked, not lost</span></div>
+      <div class="cap">"How much do you charge?" <span>— answered with your pricing</span></div>
+      <div class="cap">Appointment booking <span>— synced to your real calendar</span></div>
+      <div class="cap">"Do you service my area?" <span>— knows your zip codes</span></div>
+      <div class="cap">Not ready yet? <span>— saved to a follow-up list, nurtured by text</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing" style="padding-top:0">
+  <div class="wrap">
+    <div class="eyebrow">Pricing</div>
+    <h2>Less than one service call a month</h2>
+    <div class="price-card">
+      <div>
+        <h3>CallCatch Complete</h3>
+        <ul>
+          <li>Missed-call text-back on your existing number, 24/7</li>
+          <li>AI trained on your services, pricing, and service area</li>
+          <li>Calendar booking + instant job alerts to your phone</li>
+          <li>Weekly recovered-revenue report</li>
+          <li>Unlimited tweaks — we manage it so you never touch it</li>
+        </ul>
+        <div class="guarantee">30-day guarantee: if it doesn't book you at least one job in the first month, your setup fee comes back.</div>
+      </div>
+      <div class="price-tag">
+        <div class="setup">$997 one-time setup, then</div>
+        <div class="amt">$297<small>/mo</small></div>
+        <a class="btn" href="#demo" style="margin-top:18px">Book your 15-min setup call</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="eyebrow">Straight answers</div>
+    <h2>What owners ask us</h2>
+    <details open><summary>Will customers know it's AI?</summary><p>It introduces itself as your company's assistant and never pretends to be a human on your crew. Customers don't care who books the appointment — they care that someone answered in 10 seconds instead of never.</p></details>
+    <details><summary>What if it says something wrong?</summary><p>It only works from the script and facts we build with you — your prices, your hours, your service area. Anything outside that, it takes a message and pings your phone. You approve the playbook before it ever texts a customer.</p></details>
+    <details><summary>Do I have to change my phone number?</summary><p>No. It attaches to your existing line. Calls ring exactly like they do today — CallCatch only steps in when nobody picks up.</p></details>
+    <details><summary>What's the contract?</summary><p>Month to month. If it isn't obviously paying for itself, cancel with one text. Our whole business depends on your weekly report showing more money than we cost.</p></details>
+  </div>
+</section>
+
+<section class="final" id="demo">
+  <div class="wrap">
+    <div class="eyebrow">See it catch a job</div>
+    <h2>Watch it rescue a missed call, live</h2>
+    <p>The demo takes two minutes and runs right on your phone. Text or call and we'll send it over — then decide if you can keep affording voicemail.</p>
+    <a class="btn" href="sms:+15555550123">Text "DEMO" to (555) 555-0123</a>
+    <p style="margin-top:16px;font-size:13px">or email <a href="mailto:you@callcatch.ai" style="color:var(--accent)">you@callcatch.ai</a></p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">CallCatch AI &middot; Missed-call rescue for home service pros &middot; (555) 555-0123</div>
+</footer>
+
+<script>
+(function(){
+  var r1=document.getElementById('r1'), r2=document.getElementById('r2'), r3=document.getElementById('r3');
+  var o1=document.getElementById('o1'), o2=document.getElementById('o2'), o3=document.getElementById('o3');
+  var out=document.getElementById('lossAmt');
+  function fmt(n){ return '$' + Math.round(n).toLocaleString(); }
+  function update(){
+    o1.textContent = r1.value;
+    o2.textContent = r2.value + '%';
+    o3.textContent = fmt(+r3.value);
+    var monthly = (+r1.value) * 4.33 * ((+r2.value)/100) * (+r3.value);
+    out.textContent = fmt(monthly);
+  }
+  [r1,r2,r3].forEach(function(r){ r.addEventListener('input', update); });
+  update();
+})();
+</script>
