@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Basketball Form Coach</title>
+<style>
+  :root {
+    --orange: #ff7a1a;
+    --orange-dark: #e0640a;
+    --ink: #17140f;
+    --paper: #fff8f0;
+    --line: #e8ddce;
+    --muted: #7a7168;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  header {
+    padding: 20px 16px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  header h1 {
+    font-size: 1.25rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  header h1 span.dot { color: var(--orange); }
+  button.icon-btn {
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    width: 38px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: var(--muted);
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 8px 16px 60px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .drop {
+    border: 2px dashed var(--line);
+    border-radius: 14px;
+    padding: 36px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag {
+    border-color: var(--orange);
+    background: #fff4ea;
+  }
+  .drop p { margin: 6px 0; color: var(--muted); }
+  .drop strong { color: var(--ink); }
+  input[type=file] { display: none; }
+  video {
+    width: 100%;
+    border-radius: 12px;
+    background: #000;
+    max-height: 420px;
+    display: block;
+  }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  select {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: .9rem;
+    background: #fff;
+  }
+  .btn {
+    background: var(--orange);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+  .btn:disabled { background: #d8c8b3; cursor: not-allowed; }
+  .btn.secondary {
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .muted { color: var(--muted); font-size: .85rem; }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 10px;
+    background: #fff4ea;
+    color: var(--orange-dark);
+    font-size: .9rem;
+    margin-top: 12px;
+  }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid #ffd6ae;
+    border-top-color: var(--orange);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    flex: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error {
+    background: #fdeeee;
+    color: #a33;
+    padding: 14px;
+    border-radius: 10px;
+    font-size: .9rem;
+    margin-top: 12px;
+    white-space: pre-wrap;
+  }
+  .thumbs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    margin-top: 12px;
+    padding-bottom: 4px;
+  }
+  .thumbs img {
+    height: 64px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    flex: none;
+  }
+  #result h2 { font-size: 1.05rem; margin: 22px 0 8px; }
+  #result h2:first-child { margin-top: 0; }
+  #result h3 { font-size: .95rem; margin: 14px 0 6px; color: var(--orange-dark); }
+  #result p { line-height: 1.55; margin: 6px 0; }
+  #result ul { margin: 6px 0; padding-left: 20px; line-height: 1.55; }
+  #result li { margin-bottom: 4px; }
+  #result strong { color: var(--ink); }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 10;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 420px;
+    width: 100%;
+  }
+  .modal h2 { margin-top: 0; font-size: 1.1rem; }
+  .modal input[type=password], .modal input[type=text] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: .9rem;
+    margin: 10px 0;
+  }
+  .modal .row { justify-content: flex-end; margin-top: 6px; }
+  .modal .btn { width: auto; }
+  footer.note {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+    color: var(--muted);
+    font-size: .78rem;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="dot">&#127936;</span> Basketball Form Coach</h1>
+  <button class="icon-btn" id="settingsBtn" title="API key settings">&#9881;</button>
+</header>
+
+<main>
+  <div class="card">
+    <div class="drop" id="drop">
+      <p><strong>Upload a video of yourself playing</strong></p>
+      <p>Tap to choose a file, or drag one here</p>
+      <p class="muted">Shooting, dribbling, footwork &mdash; whatever you want feedback on</p>
+    </div>
+    <input type="file" id="fileInput" accept="video/*">
+
+    <div id="previewWrap" style="display:none; margin-top:14px;">
+      <video id="preview" controls playsinline></video>
+      <div class="row" style="margin-top:14px;">
+        <label class="muted" for="frameCount">Frames to analyze</label>
+        <select id="frameCount">
+          <option value="5">5 (faster)</option>
+          <option value="8" selected>8 (recommended)</option>
+          <option value="12">12 (thorough)</option>
+        </select>
+      </div>
+      <button class="btn" id="analyzeBtn" style="margin-top:14px;">Analyze My Form</button>
+      <div class="thumbs" id="thumbs"></div>
+      <div class="status" id="status" style="display:none;">
+        <div class="spinner"></div>
+        <span id="statusText">Working...</span>
+      </div>
+      <div class="error" id="error" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <div id="result"></div>
+  </div>
+</main>
+
+<footer class="note">
+  Video is processed entirely in your browser. Frames are sent directly from your browser to the
+  Anthropic API using the key you provide &mdash; nothing is uploaded to any server run by this app.
+  Because the key lives in this page's local storage and calls are made client-side, don't use this
+  on a shared or public computer with a key you care about.
+</footer>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h2>Anthropic API key</h2>
+    <p class="muted">Needed to call Claude's vision API for feedback. Get one at
+      <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>.
+      Stored only in this browser (localStorage), never sent anywhere except directly to
+      api.anthropic.com.</p>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+    <div class="row">
+      <button class="btn secondary" id="clearKeyBtn">Clear</button>
+      <button class="btn" id="saveKeyBtn" style="width:auto;">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const MODEL = "claude-opus-4-8";
+  const LS_KEY = "basketball_coach_api_key";
+
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const previewWrap = document.getElementById('previewWrap');
+  const preview = document.getElementById('preview');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const frameCountSel = document.getElementById('frameCount');
+  const thumbsEl = document.getElementById('thumbs');
+  const statusEl = document.getElementById('status');
+  const statusText = document.getElementById('statusText');
+  const errorEl = document.getElementById('error');
+  const resultCard = document.getElementById('resultCard');
+  const resultEl = document.getElementById('result');
+
+  const settingsBtn = document.getElementById('settingsBtn');
+  const modalBackdrop = document.getElementById('modalBackdrop');
+  const apiKeyInput = document.getElementById('apiKeyInput');
+  const saveKeyBtn = document.getElementById('saveKeyBtn');
+  const clearKeyBtn = document.getElementById('clearKeyBtn');
+
+  let currentFile = null;
+
+  // ---------- API key modal ----------
+  function openModal() {
+    apiKeyInput.value = localStorage.getItem(LS_KEY) || "";
+    modalBackdrop.classList.add('open');
+  }
+  function closeModal() { modalBackdrop.classList.remove('open'); }
+
+  settingsBtn.addEventListener('click', openModal);
+  modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) closeModal(); });
+  saveKeyBtn.addEventListener('click', () => {
+    const v = apiKeyInput.value.trim();
+    if (v) localStorage.setItem(LS_KEY, v);
+    closeModal();
+  });
+  clearKeyBtn.addEventListener('click', () => {
+    localStorage.removeItem(LS_KEY);
+    apiKeyInput.value = "";
+  });
+
+  if (!localStorage.getItem(LS_KEY)) {
+    // Prompt for a key on first visit so the user isn't surprised later.
+    setTimeout(openModal, 300);
+  }
+
+  // ---------- File handling ----------
+  drop.addEventListener('click', () => fileInput.click());
+  ['dragenter', 'dragover'].forEach(evt =>
+    drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.add('drag'); })
+  );
+  ['dragleave', 'drop'].forEach(evt =>
+    drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.remove('drag'); })
+  );
+  drop.addEventListener('drop', (e) => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) loadFile(fileInput.files[0]);
+  });
+
+  function loadFile(file) {
+    if (!file.type.startsWith('video/')) {
+      showError('That doesn\'t look like a video file.');
+      return;
+    }
+    currentFile = file;
+    preview.src = URL.createObjectURL(file);
+    previewWrap.style.display = 'block';
+    resultCard.style.display = 'none';
+    thumbsEl.innerHTML = '';
+    hideError();
+  }
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+  function hideError() { errorEl.style.display = 'none'; }
+  function setStatus(msg) {
+    statusText.textContent = msg;
+    statusEl.style.display = 'flex';
+  }
+  function hideStatus() { statusEl.style.display = 'none'; }
+
+  // ---------- Frame extraction ----------
+  function extractFrames(videoEl, count) {
+    return new Promise((resolve, reject) => {
+      const duration = videoEl.duration;
+      if (!isFinite(duration) || duration <= 0) {
+        reject(new Error('Could not read video duration.'));
+        return;
+      }
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const maxDim = 900;
+      const scale = Math.min(1, maxDim / Math.max(videoEl.videoWidth, videoEl.videoHeight));
+      canvas.width = Math.round(videoEl.videoWidth * scale);
+      canvas.height = Math.round(videoEl.videoHeight * scale);
+
+      // Sample from 4%..96% of the clip so we skip likely-blank start/end frames.
+      const start = duration * 0.04;
+      const end = duration * 0.96;
+      const step = count > 1 ? (end - start) / (count - 1) : 0;
+      const timestamps = Array.from({ length: count }, (_, i) => start + step * i);
+
+      const frames = [];
+      let i = 0;
+
+      function seekNext() {
+        if (i >= timestamps.length) {
+          resolve(frames);
+          return;
+        }
+        videoEl.currentTime = timestamps[i];
+      }
+
+      function onSeeked() {
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        frames.push({ t: timestamps[i], dataUrl });
+        i += 1;
+        seekNext();
+      }
+
+      videoEl.addEventListener('seeked', onSeeked);
+      videoEl.addEventListener('error', () => reject(new Error('Video decoding error while extracting frames.')), { once: true });
+      seekNext();
+
+      // Clean up listener once done
+      const origResolve = resolve;
+      resolve = (val) => { videoEl.removeEventListener('seeked', onSeeked); origResolve(val); };
+    });
+  }
+
+  function fmtTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${m}:${sec}`;
+  }
+
+  // ---------- Claude API call ----------
+  async function analyze() {
+    hideError();
+    const apiKey = localStorage.getItem(LS_KEY);
+    if (!apiKey) {
+      showError('Add your Anthropic API key first (gear icon, top right).');
+      openModal();
+      return;
+    }
+    if (!currentFile) return;
+
+    analyzeBtn.disabled = true;
+    resultCard.style.display = 'none';
+    thumbsEl.innerHTML = '';
+
+    try {
+      setStatus('Reading video and grabbing frames...');
+      // Ensure metadata is loaded
+      if (preview.readyState < 1) {
+        await new Promise((res) => preview.addEventListener('loadedmetadata', res, { once: true }));
+      }
+      const count = parseInt(frameCountSel.value, 10);
+      const frames = await extractFrames(preview, count);
+
+      frames.forEach(f => {
+        const img = document.createElement('img');
+        img.src = f.dataUrl;
+        img.title = fmtTime(f.t);
+        thumbsEl.appendChild(img);
+      });
+
+      setStatus('Sending frames to Claude for analysis...');
+
+      const content = [];
+      content.push({
+        type: 'text',
+        text:
+          "You are a skilled basketball coach reviewing frames extracted from a video of an " +
+          "amateur or intermediate player. The frames are in chronological order, timestamped " +
+          "below each image, sampled evenly across one clip (not necessarily one continuous " +
+          "action). Give clear, encouraging, specific feedback on fundamentals visible in the " +
+          "frames: stance and balance, footwork, ball handling / dribbling posture, shooting " +
+          "form (grip, elbow alignment, release, follow-through), defensive positioning, and " +
+          "body mechanics — but only comment on what's actually visible; don't invent detail " +
+          "you can't see. If image quality, angle, or motion blur limits what you can assess, " +
+          "say so plainly rather than guessing.\n\n" +
+          "Structure your answer with these headings, using ## for each:\n" +
+          "## Overall Impression\n" +
+          "## What's Working\n" +
+          "## Areas to Improve\n" +
+          "(for each issue: what you see, which frame(s) show it, why it matters, and one " +
+          "concrete correction)\n" +
+          "## Drills to Try\n" +
+          "(2-4 specific, actionable drills tied to the issues above)\n\n" +
+          "Use plain, direct language a player could act on immediately. Keep it tight — no " +
+          "filler, no restating these instructions."
+      });
+
+      frames.forEach((f, idx) => {
+        const base64 = f.dataUrl.split(',')[1];
+        content.push({ type: 'text', text: `Frame ${idx + 1} (t=${fmtTime(f.t)}):` });
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: base64 }
+        });
+      });
+
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 2048,
+          thinking: { type: 'adaptive' },
+          messages: [{ role: 'user', content }]
+        })
+      });
+
+      if (!resp.ok) {
+        let detail = '';
+        try {
+          const err = await resp.json();
+          detail = err.error && err.error.message ? err.error.message : JSON.stringify(err);
+        } catch (_) {
+          detail = await resp.text();
+        }
+        throw new Error(`API error (${resp.status}): ${detail}`);
+      }
+
+      const data = await resp.json();
+      const textBlock = (data.content || []).find(b => b.type === 'text');
+      const feedback = textBlock ? textBlock.text : '(No text in response.)';
+
+      renderResult(feedback);
+    } catch (err) {
+      console.error(err);
+      showError(err.message || String(err));
+    } finally {
+      hideStatus();
+      analyzeBtn.disabled = false;
+    }
+  }
+
+  // Minimal markdown -> HTML for the response (## headings, **bold**, - bullets, paragraphs)
+  function renderResult(md) {
+    const lines = md.split('\n');
+    let html = '';
+    let inList = false;
+
+    function closeList() {
+      if (inList) { html += '</ul>'; inList = false; }
+    }
+    function inline(s) {
+      return s
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    }
+
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) { closeList(); continue; }
+      if (line.startsWith('## ')) {
+        closeList();
+        html += `<h2>${inline(line.slice(3))}</h2>`;
+      } else if (line.startsWith('### ')) {
+        closeList();
+        html += `<h3>${inline(line.slice(4))}</h3>`;
+      } else if (/^[-*]\s+/.test(line)) {
+        if (!inList) { html += '<ul>'; inList = true; }
+        html += `<li>${inline(line.replace(/^[-*]\s+/, ''))}</li>`;
+      } else {
+        closeList();
+        html += `<p>${inline(line)}</p>`;
+      }
+    }
+    closeList();
+
+    resultEl.innerHTML = html;
+    resultCard.style.display = 'block';
+    resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  analyzeBtn.addEventListener('click', analyze);
+})();
+</script>
+
+</body>
+</html>
