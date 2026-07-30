@@ -24,9 +24,10 @@ python3 -m http.server 8000
 ## How it plays
 
 1. **Five rounds**, one per position: PG → SG → SF → PF → C.
-2. Each round deals **three prospects** — one elite, one mid, usually one dud. Tap one.
+2. Each round deals **three prospects** — one all-time great, one solid starter,
+   usually one famous bust. Tap one.
 3. The pick flies into your lineup strip, **Team Power** climbs, and the arena reacts:
-   *SOLID PICK*, *TWO-WAY BEAST*, or *WHAT IS HE DOING?! WHY NOT KANE 🤦*.
+   *SOLID PICK*, *TWO-WAY BEAST*, or *WHAT IS HE DOING?! WHY NOT JORDAN 🤦*.
 4. After the final pick the season is simulated and you get a **projected record**,
    a grade, and the chemistry that made or broke it.
 
@@ -54,6 +55,13 @@ Single HTML file, ~700 lines. No frameworks, no images, no fonts, no requests.
   from iPhone SE (375×667) up.
 - Share uses the Web Share API with a clipboard fallback.
 
-## Note on players
+## Players
 
-The prospects are original and fictional. Real player names and likenesses are not used.
+The pool is 43 real NBA players — 8–9 per position, listed by career regular-season
+averages (PPG / RPG / APG). Every position pairs all-time greats with famous busts,
+which is where the pick tension comes from: Magic, Curry and Stockton share a pool
+with Markelle Fultz; Kareem, Wilt and Hakeem share one with Greg Oden and Kwame Brown.
+
+Ratings are subjective and tuned for play balance, not a ranking. Names and stats are
+used as factual identifiers, with no team logos, uniforms, or player likenesses — fine
+for a personal project, but commercial release would need NBA/NBPA licensing.
