@@ -674,9 +674,16 @@
     [el.intro, el.draft, el.calc, el.result].forEach(s => s.classList.toggle("on", s === target));
   }
 
+  // storage is unavailable in sandboxed frames and Safari private mode —
+  // the game must still play, it just won't remember your best season
   function bestRecord(){
-    const raw = localStorage.getItem("perfect82.best");
-    return raw ? parseInt(raw, 10) : null;
+    try{
+      const raw = localStorage.getItem("perfect82.best");
+      return raw ? parseInt(raw, 10) : null;
+    }catch(e){ return null; }
+  }
+  function saveBest(w){
+    try{ localStorage.setItem("perfect82.best", String(w)); }catch(e){}
   }
   function paintBest(){
     const b = bestRecord();
@@ -863,7 +870,7 @@
     }, 260);
 
     const best = bestRecord();
-    if(best == null || wins > best) localStorage.setItem("perfect82.best", String(wins));
+    if(best == null || wins > best) saveBest(wins);
     state.lastWins = wins;
     paintBest();
   }
