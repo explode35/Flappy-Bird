@@ -215,6 +215,63 @@ canvas{display:block}
 
 <div id="loading"><div class="spin"></div><p>LOADING ENGINE</p></div>
 
+<!-- Deliberately ES5 and placed before everything else: if the browser can't
+     parse the modern code below, this still runs and can say so. A spinner
+     that hangs forever with no explanation is not an acceptable failure. -->
+<script>
+(function () {
+  var firstError = null;
+  window.addEventListener('error', function (e) {
+    if (!firstError) firstError = (e && e.message) || 'unknown error';
+  });
+
+  function webglReport() {
+    try {
+      var c = document.createElement('canvas');
+      var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+      if (!gl) return { ok: false, why: 'This browser reports no WebGL context at all.' };
+      var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      return { ok: true, gpu: dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : 'unknown' };
+    } catch (err) {
+      return { ok: false, why: 'Creating a WebGL context threw: ' + err.message };
+    }
+  }
+
+  function diagnose() {
+    var box = document.getElementById('loading');
+    if (!box || window.NITRO) return;          // booted fine, nothing to say
+    var wg = webglReport();
+    var lines = [];
+    if (typeof THREE === 'undefined') {
+      lines.push('The 3D library never finished loading, which usually means the ' +
+                 'file was truncated in transit or the browser is too old for it.');
+    } else if (!wg.ok) {
+      lines.push('WebGL is unavailable, so nothing can be drawn.');
+      lines.push(wg.why);
+      lines.push('Try enabling hardware acceleration in your browser settings, or open the file in Chrome, Edge or Firefox.');
+    } else if (firstError) {
+      lines.push('The game hit an error while starting up.');
+    } else {
+      lines.push('Startup stalled for an unknown reason.');
+    }
+    if (firstError) lines.push('Error: ' + firstError);
+    lines.push('Browser: ' + navigator.userAgent);
+    if (wg.ok) lines.push('Renderer: ' + wg.gpu);
+
+    box.innerHTML =
+      '<div style="max-width:640px;text-align:left;padding:26px 30px;border:1px solid rgba(120,190,255,.28);' +
+      'border-radius:16px;background:rgba(8,14,30,.9)">' +
+      '<div style="font-size:15px;font-weight:800;letter-spacing:.18em;color:#ff8a8a;margin-bottom:14px">' +
+      'COULDN\'T START</div>' +
+      '<p style="letter-spacing:.02em;font-size:13px;line-height:1.75;color:#c6d2e6;margin:0">' +
+      lines.join('<br><br>') + '</p></div>';
+  }
+
+  setTimeout(diagnose, 6000);
+  window.__nitroDiagnose = diagnose;
+})();
+</script>
+
 <!-- Three.js r128 is inlined below so this file runs offline with no external
      requests of any kind. Everything after it is the game. -->
 <script>/**
@@ -227,7 +284,7 @@ canvas{display:block}
 <script>
 (function(){
 'use strict';
-if (typeof THREE === 'undefined') return;
+if (typeof THREE === 'undefined') { if (window.__nitroDiagnose) window.__nitroDiagnose(); return; }
 /* ============================================================================
    NITRO CIRCUIT — utilities
    Small math / random / pooling helpers used everywhere. Kept dependency-free.
@@ -6505,7 +6562,15 @@ const _wake = () => { Audio.init(); Audio.resume(); };
 window.addEventListener('pointerdown', _wake, { once: false });
 window.addEventListener('keydown', _wake, { once: false });
 
-const app = new App();
+let app;
+try {
+  app = new App();
+} catch (err) {
+  // The diagnostic panel is far more useful than a spinner that never stops.
+  console.error(err);
+  if (window.__nitroDiagnose) window.__nitroDiagnose();
+  throw err;
+}
 window.NITRO = app;
 // A handle on the internals: handy for tuning from the console
 // (NITRO_LAB.K holds every physics constant in the game).

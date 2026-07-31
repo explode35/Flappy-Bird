@@ -9,7 +9,15 @@ const _wake = () => { Audio.init(); Audio.resume(); };
 window.addEventListener('pointerdown', _wake, { once: false });
 window.addEventListener('keydown', _wake, { once: false });
 
-const app = new App();
+let app;
+try {
+  app = new App();
+} catch (err) {
+  // The diagnostic panel is far more useful than a spinner that never stops.
+  console.error(err);
+  if (window.__nitroDiagnose) window.__nitroDiagnose();
+  throw err;
+}
 window.NITRO = app;
 // A handle on the internals: handy for tuning from the console
 // (NITRO_LAB.K holds every physics constant in the game).
