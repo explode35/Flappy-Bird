@@ -306,6 +306,10 @@ class TrackPath {
       const w = this.width[i];
       // inside of the corner is -sign(curv); magnitude saturates on tight bends
       raw[i] = -sign(k) * Math.min(1, Math.abs(k) * 62) * (w - 3.1);
+      // On steeply banked sections the fast line is *up* the wall, not on the
+      // apex — this is what turns a banked corner into a wall-ride.
+      const steep = smoothstep(deg(26), deg(44), Math.abs(this.bank[i]));
+      if (steep > 0) raw[i] = lerp(raw[i], sign(this.bank[i]) * (w - 2.4), steep);
     }
     // two-pass smoothing widens entry and straightens exits
     let a = new Float32Array(N), b = new Float32Array(N);

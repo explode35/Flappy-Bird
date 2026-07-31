@@ -43,8 +43,7 @@ const K = {
   boostImpulse: [1.8, 3.6, 5.6, 8.2],
   boostAccelMul: 2.4,
   padBoostDur: 1.05, padBoostTop: 1.28,
-  landPenalty: 0.11,                    // speed lost on a badly timed landing
-  landWindow: 0.22,                     // seconds before touchdown to press hop
+  landPenalty: 0.11,                    // speed lost on a landing you didn't absorb
   spinTime: 1.00,
   spinSpeedKeep: 0.50,
   squashTime: 1.15,
@@ -538,11 +537,16 @@ class Kart {
     this.yaw += this.yawVel * dt;
 
     // ---------- lateral grip ----------
+    // How steeply banked we are, and how much speed we're carrying into it.
+    // Together these decide whether the wall holds you or spits you off.
+    const bankSteep = smoothstep(deg(24), deg(44), Math.abs(q.bank));
+    const bankCarry = clamp01(Math.abs(vLong) / (stats.top * .62));
     let grip = stats.grip * sd.grip;
     if (this.drifting) grip *= K.driftGrip;
     if (!this.grounded) grip *= .12;
     const bankAbs = Math.abs(Math.sin(q.bank));
     grip *= 1 + bankAbs * .55;
+    grip *= lerp(1, .38, bankSteep * (1 - bankCarry));   // slow on a wall = losing it
     const newLat = damp(vLat, 0, grip, dt);
     this.slip = damp(this.slip, Math.abs(vLat) / 12, 8, dt);
     // tyre scrub: sliding sideways costs forward speed. This is what stops
@@ -562,8 +566,7 @@ class Kart {
       const rl = Math.hypot(rx, rz) || 1e-4;
       // Gravity pulls you down the banking — but on steep sections speed pins
       // you to the wall. Carry pace and you ride it; lift off and you slide.
-      const steep = smoothstep(deg(24), deg(44), Math.abs(q.bank));
-      const pin = lerp(1, .16, steep * clamp01(Math.abs(vLong) / (stats.top * .62)));
+      const pin = lerp(2.4, .14, bankSteep * bankCarry);
       let latAcc = -K.gravity * Math.sin(q.bank) * pin;
       // ...and cornering throws you up it. Balance = wall riding.
       latAcc += -q.curv * vLong * vLong * (0.22 + 0.78 * bankAbs);

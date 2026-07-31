@@ -628,6 +628,21 @@ class Race {
   /* ------------------------------------------------------------- cameras */
   _cameras(dt) {
     const vs = this.views;
+
+    // results: slow orbit around the winner, framed against the circuit
+    if (this.phase === 'results') {
+      const hero = this.finishOrder[0] || vs[0].kart;
+      for (let i = 0; i < vs.length; i++) {
+        vs[i].cam.orbitAround(hero.pos, dt, 15, 5.5);
+        vs[i].flash = Math.max(0, vs[i].flash - dt * 2.4);
+        vs[i].storm = damp(vs[i].storm, 0, 6, dt);
+      }
+      this.sun.target.position.copy(hero.pos);
+      this.sun.position.copy(hero.pos).add(
+        _v0.set(this.cfg.env.sunDir[0], this.cfg.env.sunDir[1], this.cfg.env.sunDir[2]).multiplyScalar(220));
+      if (this.track.sky) this.track.sky.position.copy(hero.pos);
+      return;
+    }
     // dynamic split: when two players are close the views merge into one
     if (vs.length === 2) {
       const d = vs[0].kart.pos.distanceTo(vs[1].kart.pos);

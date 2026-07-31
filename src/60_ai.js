@@ -16,12 +16,9 @@ class AIDriver {
     this.mistakeSteer = 0;
     this.driftHold = 0;
     this.targetTier = 2 + (this.rng() < skill * .8 ? 1 : 0);
-    this.reaction = lerp(.20, .06, skill);
     this._steerSmooth = 0;
     this.itemCool = this.rng.range(.5, 2.5);
     this.avoid = 0;
-    this.blocked = 0;
-    this.wantDrift = false;
     this.recover = 0;
   }
 

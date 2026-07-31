@@ -147,7 +147,7 @@ canvas{display:block}
   text-shadow:0 1px 3px #000;letter-spacing:.05em;z-index:20}
 .pausebox{border:1px solid var(--edge);border-radius:16px;padding:26px 34px;background:var(--panel);text-align:center}
 .chev{color:var(--accent);font-size:12px;letter-spacing:0}
-.rowpair{display:flex;gap:12px;width:min(430px,86vw)}
+.rowpair{display:flex;flex-direction:row;gap:12px;width:min(520px,90vw)}
 .rowpair .btn{flex:1;justify-content:center}
 .gpbadge{display:inline-block;padding:4px 12px;border-radius:20px;border:1px solid var(--warn);color:var(--warn);
   font-size:10.5px;letter-spacing:.24em;font-weight:800;margin-bottom:14px}
@@ -1233,6 +1233,10 @@ class TrackPath {
       const w = this.width[i];
       // inside of the corner is -sign(curv); magnitude saturates on tight bends
       raw[i] = -sign(k) * Math.min(1, Math.abs(k) * 62) * (w - 3.1);
+      // On steeply banked sections the fast line is *up* the wall, not on the
+      // apex — this is what turns a banked corner into a wall-ride.
+      const steep = smoothstep(deg(26), deg(44), Math.abs(this.bank[i]));
+      if (steep > 0) raw[i] = lerp(raw[i], sign(this.bank[i]) * (w - 2.4), steep);
     }
     // two-pass smoothing widens entry and straightens exits
     let a = new Float32Array(N), b = new Float32Array(N);
@@ -1911,8 +1915,9 @@ function boostPadMaterial(color) {
         float chev = smoothstep(0.5, 0.0, abs(vUv.x - 0.5) * 2.0 - v * 0.9);
         float band = smoothstep(0.0, 0.25, v) * smoothstep(1.0, 0.55, v);
         float edge = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x);
-        float a = (chev * band * 1.5 + band * 0.25) * edge;
-        gl_FragColor = vec4(uColor * (1.2 + band), a * 0.95);
+        float a = (chev * band * 1.2 + band * 0.2) * edge;
+        // kept deliberately tame: this is additive and sits under the bloom pass
+        gl_FragColor = vec4(uColor * (0.5 + band * 0.55), a * 0.8);
       }`
   });
 }
@@ -1946,7 +1951,6 @@ class Track {
     this.root = new THREE.Group();
     this.animMats = [];
     this.chunks = [];
-    this.hazards = [];
     this.rng = makeRng(0xC0FFEE ^ cfg.id.charCodeAt(0) * 7919);
     this.time = 0;
     this.lapPhase = 0;
@@ -2280,30 +2284,37 @@ class Track {
     return false;
   }
 
+  /**
+   * The Shell Barrel'sarchitecture: open ribs rather than a closed tube, so
+   * the banked section still frames the drama instead of hiding it.
+   */
   _buildTunnel(range) {
     const P = this.path;
-    const cols = 16;
-    const geo = buildRibbon(P, 1, cols,
-      (i, k) => {
-        const a = Math.PI * (k / cols);
-        return -Math.cos(a) * (P.width[i] + this.kerbW + 2.5);
-      },
-      (i, k) => {
-        const a = Math.PI * (k / cols);
-        return Math.sin(a) * (P.width[i] + 3) * .78;
-      },
-      [3, 14], null, [range[0] - .012, range[1] + .012]);
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x2f6d7a, roughness: .6, metalness: .2, side: THREE.BackSide,
-      emissive: 0x0d2b33, emissiveIntensity: 1
-    });
-    const m = new THREE.Mesh(geo, mat);
-    this.root.add(m);
-    // light strips inside
+    const ribs = 16;
+    const right = new THREE.Vector3(), up = new THREE.Vector3(), tan = new THREE.Vector3();
+    const basis = new THREE.Matrix4();
+    for (let n = 0; n < ribs; n++) {
+      const s = lerp(range[0], range[1], n / (ribs - 1));
+      const i = P.idxOf(s);
+      const r = P.widthAt(s) + this.kerbW + 2.4;
+      const geo = new THREE.TorusGeometry(r, .55, 6, 22, Math.PI);
+      right.set(P.right[i * 3], P.right[i * 3 + 1], P.right[i * 3 + 2]).normalize();
+      up.set(P.up[i * 3], P.up[i * 3 + 1], P.up[i * 3 + 2]).normalize();
+      tan.set(P.tan[i * 3], P.tan[i * 3 + 1], P.tan[i * 3 + 2]).normalize();
+      basis.makeBasis(right, up, tan);
+      const m = new THREE.Mesh(geo, this._ribMat || (this._ribMat = new THREE.MeshStandardMaterial({
+        color: 0x2f8f9c, roughness: .5, metalness: .35, emissive: 0x0d3a42
+      })));
+      P.surfacePoint(s, 0, m.position);
+      m.quaternion.setFromRotationMatrix(basis);
+      m.castShadow = false;
+      this.root.add(m);
+    }
+    // light strips running the length of the barrel, level with the road
     for (const sgn of [-1, 1]) {
       const g = buildRibbon(P, 1, 1,
-        (i, k) => sgn * (P.width[i] + this.kerbW + 1.4) * (1 - k * .05),
-        (i, k) => (P.width[i] + 3) * .5 + k * .5,
+        (i, k) => sgn * (P.width[i] + this.kerbW + .45 + k * .5),
+        (i, k) => .12 + k * .02,
         [1, 5], null, [range[0] - .01, range[1] + .01]);
       const em = energyMaterial(this.cfg.accent, .8, .9);
       this.animMats.push(em);
@@ -3010,8 +3021,7 @@ const K = {
   boostImpulse: [1.8, 3.6, 5.6, 8.2],
   boostAccelMul: 2.4,
   padBoostDur: 1.05, padBoostTop: 1.28,
-  landPenalty: 0.11,                    // speed lost on a badly timed landing
-  landWindow: 0.22,                     // seconds before touchdown to press hop
+  landPenalty: 0.11,                    // speed lost on a landing you didn't absorb
   spinTime: 1.00,
   spinSpeedKeep: 0.50,
   squashTime: 1.15,
@@ -3505,11 +3515,16 @@ class Kart {
     this.yaw += this.yawVel * dt;
 
     // ---------- lateral grip ----------
+    // How steeply banked we are, and how much speed we're carrying into it.
+    // Together these decide whether the wall holds you or spits you off.
+    const bankSteep = smoothstep(deg(24), deg(44), Math.abs(q.bank));
+    const bankCarry = clamp01(Math.abs(vLong) / (stats.top * .62));
     let grip = stats.grip * sd.grip;
     if (this.drifting) grip *= K.driftGrip;
     if (!this.grounded) grip *= .12;
     const bankAbs = Math.abs(Math.sin(q.bank));
     grip *= 1 + bankAbs * .55;
+    grip *= lerp(1, .38, bankSteep * (1 - bankCarry));   // slow on a wall = losing it
     const newLat = damp(vLat, 0, grip, dt);
     this.slip = damp(this.slip, Math.abs(vLat) / 12, 8, dt);
     // tyre scrub: sliding sideways costs forward speed. This is what stops
@@ -3529,8 +3544,7 @@ class Kart {
       const rl = Math.hypot(rx, rz) || 1e-4;
       // Gravity pulls you down the banking — but on steep sections speed pins
       // you to the wall. Carry pace and you ride it; lift off and you slide.
-      const steep = smoothstep(deg(24), deg(44), Math.abs(q.bank));
-      const pin = lerp(1, .16, steep * clamp01(Math.abs(vLong) / (stats.top * .62)));
+      const pin = lerp(2.4, .14, bankSteep * bankCarry);
       let latAcc = -K.gravity * Math.sin(q.bank) * pin;
       // ...and cornering throws you up it. Balance = wall riding.
       latAcc += -q.curv * vLong * vLong * (0.22 + 0.78 * bankAbs);
@@ -3747,12 +3761,9 @@ class AIDriver {
     this.mistakeSteer = 0;
     this.driftHold = 0;
     this.targetTier = 2 + (this.rng() < skill * .8 ? 1 : 0);
-    this.reaction = lerp(.20, .06, skill);
     this._steerSmooth = 0;
     this.itemCool = this.rng.range(.5, 2.5);
     this.avoid = 0;
-    this.blocked = 0;
-    this.wantDrift = false;
     this.recover = 0;
   }
 
@@ -5791,6 +5802,21 @@ class Race {
   /* ------------------------------------------------------------- cameras */
   _cameras(dt) {
     const vs = this.views;
+
+    // results: slow orbit around the winner, framed against the circuit
+    if (this.phase === 'results') {
+      const hero = this.finishOrder[0] || vs[0].kart;
+      for (let i = 0; i < vs.length; i++) {
+        vs[i].cam.orbitAround(hero.pos, dt, 15, 5.5);
+        vs[i].flash = Math.max(0, vs[i].flash - dt * 2.4);
+        vs[i].storm = damp(vs[i].storm, 0, 6, dt);
+      }
+      this.sun.target.position.copy(hero.pos);
+      this.sun.position.copy(hero.pos).add(
+        _v0.set(this.cfg.env.sunDir[0], this.cfg.env.sunDir[1], this.cfg.env.sunDir[2]).multiplyScalar(220));
+      if (this.track.sky) this.track.sky.position.copy(hero.pos);
+      return;
+    }
     // dynamic split: when two players are close the views merge into one
     if (vs.length === 2) {
       const d = vs[0].kart.pos.distanceTo(vs[1].kart.pos);

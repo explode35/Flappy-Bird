@@ -11,7 +11,6 @@ class Track {
     this.root = new THREE.Group();
     this.animMats = [];
     this.chunks = [];
-    this.hazards = [];
     this.rng = makeRng(0xC0FFEE ^ cfg.id.charCodeAt(0) * 7919);
     this.time = 0;
     this.lapPhase = 0;
@@ -345,30 +344,37 @@ class Track {
     return false;
   }
 
+  /**
+   * The Shell Barrel'sarchitecture: open ribs rather than a closed tube, so
+   * the banked section still frames the drama instead of hiding it.
+   */
   _buildTunnel(range) {
     const P = this.path;
-    const cols = 16;
-    const geo = buildRibbon(P, 1, cols,
-      (i, k) => {
-        const a = Math.PI * (k / cols);
-        return -Math.cos(a) * (P.width[i] + this.kerbW + 2.5);
-      },
-      (i, k) => {
-        const a = Math.PI * (k / cols);
-        return Math.sin(a) * (P.width[i] + 3) * .78;
-      },
-      [3, 14], null, [range[0] - .012, range[1] + .012]);
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x2f6d7a, roughness: .6, metalness: .2, side: THREE.BackSide,
-      emissive: 0x0d2b33, emissiveIntensity: 1
-    });
-    const m = new THREE.Mesh(geo, mat);
-    this.root.add(m);
-    // light strips inside
+    const ribs = 16;
+    const right = new THREE.Vector3(), up = new THREE.Vector3(), tan = new THREE.Vector3();
+    const basis = new THREE.Matrix4();
+    for (let n = 0; n < ribs; n++) {
+      const s = lerp(range[0], range[1], n / (ribs - 1));
+      const i = P.idxOf(s);
+      const r = P.widthAt(s) + this.kerbW + 2.4;
+      const geo = new THREE.TorusGeometry(r, .55, 6, 22, Math.PI);
+      right.set(P.right[i * 3], P.right[i * 3 + 1], P.right[i * 3 + 2]).normalize();
+      up.set(P.up[i * 3], P.up[i * 3 + 1], P.up[i * 3 + 2]).normalize();
+      tan.set(P.tan[i * 3], P.tan[i * 3 + 1], P.tan[i * 3 + 2]).normalize();
+      basis.makeBasis(right, up, tan);
+      const m = new THREE.Mesh(geo, this._ribMat || (this._ribMat = new THREE.MeshStandardMaterial({
+        color: 0x2f8f9c, roughness: .5, metalness: .35, emissive: 0x0d3a42
+      })));
+      P.surfacePoint(s, 0, m.position);
+      m.quaternion.setFromRotationMatrix(basis);
+      m.castShadow = false;
+      this.root.add(m);
+    }
+    // light strips running the length of the barrel, level with the road
     for (const sgn of [-1, 1]) {
       const g = buildRibbon(P, 1, 1,
-        (i, k) => sgn * (P.width[i] + this.kerbW + 1.4) * (1 - k * .05),
-        (i, k) => (P.width[i] + 3) * .5 + k * .5,
+        (i, k) => sgn * (P.width[i] + this.kerbW + .45 + k * .5),
+        (i, k) => .12 + k * .02,
         [1, 5], null, [range[0] - .01, range[1] + .01]);
       const em = energyMaterial(this.cfg.accent, .8, .9);
       this.animMats.push(em);

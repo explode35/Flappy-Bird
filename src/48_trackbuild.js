@@ -432,8 +432,9 @@ function boostPadMaterial(color) {
         float chev = smoothstep(0.5, 0.0, abs(vUv.x - 0.5) * 2.0 - v * 0.9);
         float band = smoothstep(0.0, 0.25, v) * smoothstep(1.0, 0.55, v);
         float edge = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x);
-        float a = (chev * band * 1.5 + band * 0.25) * edge;
-        gl_FragColor = vec4(uColor * (1.2 + band), a * 0.95);
+        float a = (chev * band * 1.2 + band * 0.2) * edge;
+        // kept deliberately tame: this is additive and sits under the bloom pass
+        gl_FragColor = vec4(uColor * (0.5 + band * 0.55), a * 0.8);
       }`
   });
 }
