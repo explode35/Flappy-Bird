@@ -160,7 +160,7 @@ const Input = {
 const Touch = {
   enabled: false,
   steer: 0, brake: false, drift: false, item: false, reset: false, touching: false,
-  _id: null, _ox: 0, _oy: 0, _radius: 0,
+  _id: null, _cx: 0, _cy: 0, _radius: 0,
 
   /** Coarse pointer + no real mouse = treat it as a touch device. */
   detect() {
@@ -176,41 +176,62 @@ const Touch = {
     this.base = document.getElementById('tbase');
     this.knob = document.getElementById('tknob');
 
-    // --- floating steering pad
-    const setKnob = (x, y) => {
-      this.base.style.left = this._ox + 'px'; this.base.style.top = this._oy + 'px';
-      this.knob.style.left = x + 'px'; this.knob.style.top = y + 'px';
+    // --- fixed steering pad.
+    // This used to float: wherever you first touched became centre, and only
+    // movement from there steered. That reads as inverted, because putting a
+    // thumb on the left edge does nothing and the correcting slide toward the
+    // middle is a *rightward* motion. An anchored pad means touching left of
+    // centre is left, immediately, which is what a thumb expects.
+    const centre = () => {
+      const r = this.stick.getBoundingClientRect();
+      const vmin = Math.min(window.innerWidth, window.innerHeight) / 100;
+      // fall back to the window if the element hasn't been laid out yet
+      const left = r.width ? r.left : 0;
+      const bottom = r.height ? r.bottom : window.innerHeight;
+      return { x: left + 24 * vmin, y: bottom - 24 * vmin, rad: Math.max(46, 17 * vmin) };
     };
+    const place = () => {
+      const c = centre();
+      this._cx = c.x; this._cy = c.y; this._radius = c.rad;
+      this.base.style.left = c.x + 'px'; this.base.style.top = c.y + 'px';
+      if (this._id === null) { this.knob.style.left = c.x + 'px'; this.knob.style.top = c.y + 'px'; }
+    };
+    this._place = place;
+    place();
+    window.addEventListener('resize', place);
+
+    const track = (x, y) => {
+      const dx = clamp(x - this._cx, -this._radius, this._radius);
+      const dy = clamp(y - this._cy, -this._radius, this._radius);
+      const dz = 0.10;
+      const n = dx / this._radius;
+      this.steer = Math.abs(n) < dz ? 0 : (n - sign(n) * dz) / (1 - dz);
+      this.knob.style.left = (this._cx + dx) + 'px';
+      this.knob.style.top = (this._cy + dy) + 'px';
+    };
+
     this.stick.addEventListener('pointerdown', e => {
       this._id = e.pointerId;
-      this._ox = e.clientX; this._oy = e.clientY;
-      this._radius = Math.max(54, Math.min(window.innerWidth, window.innerHeight) * .17);
       this.stick.classList.add('held');
       this.touching = true;
-      setKnob(e.clientX, e.clientY);
+      track(e.clientX, e.clientY);          // steers from the first frame
       try { this.stick.setPointerCapture(e.pointerId); } catch (err) { }
       e.preventDefault();
     });
     this.stick.addEventListener('pointermove', e => {
       if (e.pointerId !== this._id) return;
-      let dx = e.clientX - this._ox;
-      // let the origin slide so the thumb never runs out of travel
-      if (dx > this._radius) { this._ox = e.clientX - this._radius; dx = this._radius; }
-      if (dx < -this._radius) { this._ox = e.clientX + this._radius; dx = -this._radius; }
-      const dz = 0.12;
-      const n = dx / this._radius;
-      this.steer = Math.abs(n) < dz ? 0 : (n - sign(n) * dz) / (1 - dz);
-      setKnob(this._ox + dx, e.clientY);
+      track(e.clientX, e.clientY);
       e.preventDefault();
     });
     const end = e => {
       if (this._id !== null && e.pointerId !== this._id) return;
       this._id = null; this.steer = 0; this.touching = false;
       this.stick.classList.remove('held');
+      this.knob.style.left = this._cx + 'px';
+      this.knob.style.top = this._cy + 'px';
     };
     this.stick.addEventListener('pointerup', end);
     this.stick.addEventListener('pointercancel', end);
-    this.stick.addEventListener('pointerleave', end);
 
     // --- buttons
     const hold = (id, on, off) => {
@@ -236,8 +257,11 @@ const Touch = {
 
   show(on) {
     if (!this.layer) return;
+    // unhide first: measuring the pad while display:none gives a zeroed rect
+    // and parks its centre off-screen, where no touch can ever reach it
     this.layer.classList.toggle('hidden', !on);
     this.layer.classList.toggle('on', !!on);
+    if (on && this._place) this._place();
     if (!on) { this.steer = 0; this.drift = false; this.item = false; this.brake = false; this.touching = false; }
   },
 

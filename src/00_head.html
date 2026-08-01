@@ -155,14 +155,15 @@ canvas{display:block}
 /* ---------------- touch controls ---------------- */
 #touch{position:absolute;inset:0;pointer-events:none;touch-action:none;z-index:12}
 #touch.on{pointer-events:auto}
-#tstick{position:absolute;left:0;top:0;width:46%;height:100%;touch-action:none}
-#tknob,#tbase{position:absolute;border-radius:50%;pointer-events:none;opacity:0;
+#tstick{position:absolute;left:0;bottom:0;width:46%;height:82%;touch-action:none}
+#tknob,#tbase{position:absolute;border-radius:50%;pointer-events:none;opacity:.4;
   transition:opacity .16s;transform:translate(-50%,-50%)}
 #tbase{width:34vmin;height:34vmin;border:2px solid rgba(160,210,255,.30);background:rgba(8,16,34,.28)}
 #tknob{width:15vmin;height:15vmin;border:2px solid rgba(255,255,255,.55);
   background:radial-gradient(circle at 38% 34%,rgba(120,220,255,.72),rgba(30,90,150,.5));
   box-shadow:0 4px 22px rgba(0,0,0,.5)}
-#tstick.held #tbase,#tstick.held #tknob{opacity:1}
+#tstick.held #tbase{opacity:.75}
+#tstick.held #tknob{opacity:1}
 .tbtn{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#eaf2ff;
   border:2px solid rgba(160,210,255,.34);background:rgba(10,20,42,.44);
@@ -184,7 +185,9 @@ body.touch .mapwrap{right:auto;left:50%;transform:translateX(-50%);bottom:2%;
 body.touch .speedo{display:none}
 body.touch .itemslot{left:calc(2.2% + env(safe-area-inset-left,0px))}
 body.touch .lap,body.touch .timer{right:calc(2.2% + env(safe-area-inset-right,0px))}
-body.touch .pos{left:calc(2.2% + env(safe-area-inset-left,0px));bottom:calc(3.5% + env(safe-area-inset-bottom,0px))}
+/* the steering pad owns the bottom-left, so position moves under the item slot */
+body.touch .pos{left:calc(2.2% + env(safe-area-inset-left,0px));
+  bottom:auto;top:calc(3.2% + 20vmin)}
 /* top-left, clear of the lap counter and timer on the right */
 #tpause{left:calc(var(--sl) + 23vmin);top:3vmin;width:11vmin;height:11vmin;font-size:3.2vmin;
   background:rgba(6,12,26,.55)}
