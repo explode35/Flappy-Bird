@@ -22,7 +22,9 @@ class App {
     this.showFps = false;
     this._fpsAcc = 0; this._fpsN = 0; this._slow = 0;
 
+    this.touch = Touch.detect();
     this._initRenderer();
+    this._initTouch();
     this._load();
     this._buildMenus();
     this._bindGlobalKeys();
@@ -48,6 +50,45 @@ class App {
     const name = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
     if (/swiftshader|llvmpipe|software/i.test(name)) { this.quality = 'low'; this.dpr = 1; }
     if ((navigator.hardwareConcurrency || 8) <= 4) this.quality = 'low';
+    if (this.touch) {
+      // Phones get a lighter build: no shadow pass, fewer particles, and a
+      // resolution cap. The adaptive scaler can still pull it down further.
+      this.quality = 'low';
+      this.dpr = Math.min(window.devicePixelRatio || 1, 1.3);
+      r.shadowMap.enabled = false;
+    }
+  }
+
+  /** Touch device: swap in thumb controls, drop split-screen, watch orientation. */
+  _initTouch() {
+    if (!this.touch) return;
+    document.body.classList.add('touch');
+    Touch.enabled = true;
+    Touch.init();
+
+    const pause = $('#tpause');
+    if (pause) pause.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (this.race) this.setPaused(!this.paused);
+    });
+
+    // two players sharing one phone isn't a thing worth pretending about
+    const split = document.querySelector('#s-title .btn[data-act="split"]');
+    if (split) split.remove();
+
+    const hint = $('#s-title .hint');
+    if (hint) hint.innerHTML =
+      'Drag anywhere on the <b>left</b> to steer &nbsp;·&nbsp; <b>DRIFT</b> and <b>ITEM</b> on the right<br>' +
+      'The throttle stays on by itself — hold <b>BRAKE</b> to slow down<br>' +
+      'Touch the screen as the lights drop for a launch boost';
+
+    const check = () => {
+      const portrait = window.innerHeight > window.innerWidth;
+      $('#rotate').classList.toggle('hidden', !portrait);
+    };
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', () => setTimeout(check, 260));
+    check();
   }
 
   _load() {
@@ -226,7 +267,7 @@ class App {
   _pauseAct(act) {
     Audio.sfx('ui');
     if (act === 'resume') this.setPaused(false);
-    else if (act === 'restart') { this.setPaused(false); this.race.grid(); $('#hudlayer').classList.remove('hidden'); }
+    else if (act === 'restart') { this.setPaused(false); this.race.grid(); $('#hudlayer').classList.remove('hidden'); Touch.show(this.touch); }
     else if (act === 'quit') { this.setPaused(false); this.quitRace(); }
   }
 
@@ -248,10 +289,12 @@ class App {
     this.race = new Race(this, opts);
     this.resize();
     $('#hudlayer').classList.remove('hidden');
+    Touch.show(this.touch);
     $('#fps').classList.toggle('hidden', !this.showFps);
   }
 
   quitRace() {
+    Touch.show(false);
     if (this.race) { this.race.dispose(); this.race = null; }
     this.gp = null;
     Audio.stopMusic(); Audio.stopAmbience();
@@ -316,11 +359,12 @@ class App {
       mk('Final standings', () => this._showStandings());
       mk('Quit', () => this.quitRace());
     } else {
-      mk('Race again', () => { this.hideScreens(); this.race.grid(); $('#hudlayer').classList.remove('hidden'); });
+      mk('Race again', () => { this.hideScreens(); this.race.grid(); $('#hudlayer').classList.remove('hidden'); Touch.show(this.touch); });
       mk('Menu', () => this.quitRace());
     }
     this.show('results');
     $('#hudlayer').classList.add('hidden');
+    Touch.show(false);
   }
 
   _showStandings() {
@@ -354,6 +398,7 @@ class App {
     this.paused = p;
     $('#s-pause').classList.toggle('hidden', !p);
     $('#hudlayer').classList.toggle('hidden', p);
+    Touch.show(this.touch && !p);
     this.screen = p ? 'pause' : null;
     this.selIdx = 0;
     if (p) this._syncSel();

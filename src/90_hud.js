@@ -56,6 +56,7 @@ class HUD {
     st.setProperty('--timerT', (56 * s) + 'px');
     st.setProperty('--itemW', (86 * s) + 'px');
     st.setProperty('--mapW', (152 * s) + 'px');
+    st.setProperty('--mapWT', (104 * s) + 'px');
     st.setProperty('--spdS', (13 * s) + 'px');
     st.setProperty('--bigS', (78 * s) + 'px');
     st.setProperty('--toastS', (18 * s) + 'px');
@@ -65,7 +66,7 @@ class HUD {
       this.itemCanvas.width = this.itemCanvas.height = ic;
       this._item = undefined;
     }
-    const mc = Math.round(152 * s * (window.devicePixelRatio || 1));
+    const mc = Math.round((Touch.enabled ? 104 : 152) * s * (window.devicePixelRatio || 1));
     if (this.mapCanvas.width !== mc) this.mapCanvas.width = this.mapCanvas.height = mc;
   }
 

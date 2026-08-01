@@ -34,3 +34,26 @@ open(out, 'w', encoding='utf-8').write(html.replace('/*__THREE__*/', three, 1))
 PY
 rm -f "$OUT.tmp"
 echo "built $OUT ($(wc -c < "$OUT") bytes)"
+
+# Second target: the same game as a document *fragment*, for hosts that supply
+# their own <html>/<head>/<body> skeleton. The viewport meta has to be injected
+# at runtime there, and without it phones render at desktop width.
+python3 - "$OUT" nitro-circuit.fragment.html <<'PY2'
+import sys, re
+src, dst = sys.argv[1], sys.argv[2]
+h = open(src, encoding='utf-8').read()
+style = re.search(r'<style>(.*?)</style>', h, re.S).group(1)
+body = h.split('<body>', 1)[1].rsplit('</body>', 1)[0]
+out = (
+  '<script>\n'
+  '(function(){\n'
+  '  var m = document.querySelector(\'meta[name="viewport"]\');\n'
+  '  if (!m) { m = document.createElement("meta"); m.name = "viewport"; document.head.appendChild(m); }\n'
+  '  m.content = "width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover";\n'
+  '})();\n'
+  '</script>\n'
+  '<style>' + style + '</style>\n' + body
+)
+open(dst, 'w', encoding='utf-8').write(out)
+print('built %s (%d bytes)' % (dst, len(out)))
+PY2

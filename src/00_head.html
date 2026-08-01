@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>NITRO CIRCUIT — Arcade Kart Racer</title>
 <style>
 :root{
@@ -151,6 +151,52 @@ canvas{display:block}
 .rowpair .btn{flex:1;justify-content:center}
 .gpbadge{display:inline-block;padding:4px 12px;border-radius:20px;border:1px solid var(--warn);color:var(--warn);
   font-size:10.5px;letter-spacing:.24em;font-weight:800;margin-bottom:14px}
+
+/* ---------------- touch controls ---------------- */
+#touch{position:absolute;inset:0;pointer-events:none;touch-action:none;z-index:12}
+#touch.on{pointer-events:auto}
+#tstick{position:absolute;left:0;top:0;width:46%;height:100%;touch-action:none}
+#tknob,#tbase{position:absolute;border-radius:50%;pointer-events:none;opacity:0;
+  transition:opacity .16s;transform:translate(-50%,-50%)}
+#tbase{width:34vmin;height:34vmin;border:2px solid rgba(160,210,255,.30);background:rgba(8,16,34,.28)}
+#tknob{width:15vmin;height:15vmin;border:2px solid rgba(255,255,255,.55);
+  background:radial-gradient(circle at 38% 34%,rgba(120,220,255,.72),rgba(30,90,150,.5));
+  box-shadow:0 4px 22px rgba(0,0,0,.5)}
+#tstick.held #tbase,#tstick.held #tknob{opacity:1}
+.tbtn{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#eaf2ff;
+  border:2px solid rgba(160,210,255,.34);background:rgba(10,20,42,.44);
+  box-shadow:0 6px 22px rgba(0,0,0,.42);touch-action:none;user-select:none;
+  transition:transform .1s,background .1s,border-color .1s}
+.tbtn.press{transform:scale(.92);background:rgba(40,110,190,.7);border-color:var(--accent)}
+/* Positions respect the notch/home-indicator insets so nothing lands under
+   the system UI on a modern phone. */
+#touch{--sr:calc(4vmin + env(safe-area-inset-right,0px));
+       --sb:calc(4vmin + env(safe-area-inset-bottom,0px));
+       --sl:calc(3vmin + env(safe-area-inset-left,0px))}
+#tdrift{right:var(--sr);bottom:var(--sb);width:26vmin;height:26vmin;font-size:3.4vmin;
+  border-color:rgba(120,220,255,.5);background:rgba(16,54,92,.5)}
+#titem{right:calc(var(--sr) + 3vmin);bottom:calc(var(--sb) + 29vmin);width:17vmin;height:17vmin;font-size:2.6vmin}
+#tbrake{right:calc(var(--sr) + 29vmin);bottom:var(--sb);width:15vmin;height:15vmin;font-size:2.2vmin}
+/* the drift button owns the bottom-right corner, so the map moves out of it */
+body.touch .mapwrap{right:auto;left:50%;transform:translateX(-50%);bottom:2%;
+  width:var(--mapWT,110px);height:var(--mapWT,110px)}
+body.touch .speedo{display:none}
+body.touch .itemslot{left:calc(2.2% + env(safe-area-inset-left,0px))}
+body.touch .lap,body.touch .timer{right:calc(2.2% + env(safe-area-inset-right,0px))}
+body.touch .pos{left:calc(2.2% + env(safe-area-inset-left,0px));bottom:calc(3.5% + env(safe-area-inset-bottom,0px))}
+/* top-left, clear of the lap counter and timer on the right */
+#tpause{left:calc(var(--sl) + 23vmin);top:3vmin;width:11vmin;height:11vmin;font-size:3.2vmin;
+  background:rgba(6,12,26,.55)}
+#treset{left:calc(var(--sl) + 36vmin);top:3vmin;width:11vmin;height:11vmin;font-size:4vmin;
+  background:rgba(6,12,26,.55)}
+#rotate{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:22px;background:#05070f;text-align:center;padding:30px}
+#rotate .ph{width:64px;height:104px;border:3px solid var(--accent);border-radius:12px;
+  animation:rot 1.8s ease-in-out infinite}
+@keyframes rot{0%,40%{transform:rotate(0)}70%,100%{transform:rotate(90deg)}}
+#rotate p{color:var(--dim);letter-spacing:.22em;font-size:12px;font-weight:800;line-height:2}
+body.touch .hint .kb-only{display:none}
 </style>
 </head>
 <body>
@@ -159,6 +205,17 @@ canvas{display:block}
 <div id="ui">
   <div id="fps" class="hidden"></div>
   <div id="hudlayer" class="hidden"></div>
+
+
+  <!-- touch controls: built for thumbs, only shown on touch devices -->
+  <div id="touch" class="hidden">
+    <div id="tstick"><div id="tbase"></div><div id="tknob"></div></div>
+    <div class="tbtn" id="tdrift">Drift</div>
+    <div class="tbtn" id="titem">Item</div>
+    <div class="tbtn" id="tbrake">Brake</div>
+    <div class="tbtn" id="tpause">❚❚</div>
+    <div class="tbtn" id="treset">↺</div>
+  </div>
 
   <!-- TITLE -->
   <div id="s-title" class="screen">
@@ -212,6 +269,8 @@ canvas{display:block}
     </div>
   </div>
 </div>
+
+<div id="rotate" class="hidden"><div class="ph"></div><p>ROTATE YOUR DEVICE<br>NITRO CIRCUIT PLAYS IN LANDSCAPE</p></div>
 
 <div id="loading"><div class="spin"></div><p>LOADING ENGINE</p></div>
 

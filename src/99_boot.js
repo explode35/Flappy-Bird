@@ -23,7 +23,7 @@ window.NITRO = app;
 // (NITRO_LAB.K holds every physics constant in the game).
 window.NITRO_LAB = {
   K, TRACKS, CHARACTERS, ITEMS, ITEM_TABLE, SURF, SURFACES,
-  Audio, Input, Race, Kart, Track, TrackPath, AIDriver, FX
+  Audio, Input, Touch, Race, Kart, Track, TrackPath, AIDriver, FX
 };
 
 const loading = document.getElementById('loading');

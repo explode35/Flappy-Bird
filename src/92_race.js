@@ -243,6 +243,7 @@ class Race {
     else if (this.phase === 'race' || this.phase === 'finishing') this.time += dtc;
 
     // --- controls
+    Input.countdownPhase = (this.phase === 'countdown');
     for (let i = 0; i < this.karts.length; i++) {
       const k = this.karts[i];
       let ctl;

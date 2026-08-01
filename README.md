@@ -18,6 +18,23 @@ Gamepads work too: stick/d-pad steers, A accelerates, B brakes, X or RB drifts,
 LB or Y for items. In split-screen, player one is **WASD + Space + LShift** and
 player two is **arrows + / + .** (`,` to respawn).
 
+## On a phone
+
+Touch devices are detected automatically and get their own control scheme:
+drag anywhere on the left half to steer (the stick appears under your thumb and
+follows it), with DRIFT, ITEM and BRAKE under the right. The throttle stays on by
+itself, and touching the screen as the lights drop feeds the same launch-boost
+timing window the keyboard uses.
+
+Mobile also drops the shadow pass, halves the particle budget and caps the
+render resolution, and the layout respects notch and home-indicator insets.
+Split-screen is hidden — two players on one phone isn't worth pretending about.
+Landscape only; portrait shows a prompt to rotate.
+
+`build.sh` emits a second file, `nitro-circuit.fragment.html`, for hosts that
+supply their own `<html>`/`<head>`/`<body>` skeleton. It injects the viewport
+meta at runtime, without which phones render the page at desktop width.
+
 ## What's in it
 
 **Four circuits**, each a closed Catmull-Rom spline with its own palette, surface

@@ -26,6 +26,7 @@ const Input = {
   pressed: Object.create(null),   // consumed edge-triggers
   released: Object.create(null),
   splitMode: false,
+  countdownPhase: false,
   pads: [null, null],
   anyKeyTime: 0,
 
@@ -84,6 +85,18 @@ const Input = {
       look = this.keyDown(km.look);
     }
 
+    // touch overrides player one's scheme entirely when it's active
+    if (Touch.enabled && playerIdx === 0) {
+      out.driftPrev = out.drift;
+      out.itemPrev = out.item;
+      Touch.apply(out, true, this.countdownPhase);
+      out.driftHit = out.drift && !out.driftPrev;
+      out.itemHit = out.item && !out.itemPrev;
+      out.itemRelease = !out.item && out.itemPrev;
+      out.look = false;
+      return out;
+    }
+
     const gp = this.pad(playerIdx);
     if (gp) {
       const ax = gp.axes[0] || 0;
@@ -133,5 +146,111 @@ const Input = {
       steer: 0, throttle: 0, brake: 0, drift: false, driftPrev: false, driftHit: false,
       item: false, itemPrev: false, itemHit: false, itemRelease: false, reset: false, look: false
     };
+  }
+};
+
+/* ============================================================================
+   TOUCH — an on-screen scheme designed for two thumbs, not a keyboard with
+   pictures of keys on it. Steering is a floating analog pad (the stick appears
+   wherever you put your thumb and follows it), throttle is automatic while
+   racing, and the countdown maps "first touch" onto the same launch-boost
+   timing window the keyboard uses.
+   ========================================================================= */
+
+const Touch = {
+  enabled: false,
+  steer: 0, brake: false, drift: false, item: false, reset: false, touching: false,
+  _id: null, _ox: 0, _oy: 0, _radius: 0,
+
+  /** Coarse pointer + no real mouse = treat it as a touch device. */
+  detect() {
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const hasTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    return !!(hasTouch && (coarse || !window.matchMedia || !window.matchMedia('(pointer: fine)').matches));
+  },
+
+  init() {
+    this.layer = document.getElementById('touch');
+    if (!this.layer) return;
+    this.stick = document.getElementById('tstick');
+    this.base = document.getElementById('tbase');
+    this.knob = document.getElementById('tknob');
+
+    // --- floating steering pad
+    const setKnob = (x, y) => {
+      this.base.style.left = this._ox + 'px'; this.base.style.top = this._oy + 'px';
+      this.knob.style.left = x + 'px'; this.knob.style.top = y + 'px';
+    };
+    this.stick.addEventListener('pointerdown', e => {
+      this._id = e.pointerId;
+      this._ox = e.clientX; this._oy = e.clientY;
+      this._radius = Math.max(54, Math.min(window.innerWidth, window.innerHeight) * .17);
+      this.stick.classList.add('held');
+      this.touching = true;
+      setKnob(e.clientX, e.clientY);
+      try { this.stick.setPointerCapture(e.pointerId); } catch (err) { }
+      e.preventDefault();
+    });
+    this.stick.addEventListener('pointermove', e => {
+      if (e.pointerId !== this._id) return;
+      let dx = e.clientX - this._ox;
+      // let the origin slide so the thumb never runs out of travel
+      if (dx > this._radius) { this._ox = e.clientX - this._radius; dx = this._radius; }
+      if (dx < -this._radius) { this._ox = e.clientX + this._radius; dx = -this._radius; }
+      const dz = 0.12;
+      const n = dx / this._radius;
+      this.steer = Math.abs(n) < dz ? 0 : (n - sign(n) * dz) / (1 - dz);
+      setKnob(this._ox + dx, e.clientY);
+      e.preventDefault();
+    });
+    const end = e => {
+      if (this._id !== null && e.pointerId !== this._id) return;
+      this._id = null; this.steer = 0; this.touching = false;
+      this.stick.classList.remove('held');
+    };
+    this.stick.addEventListener('pointerup', end);
+    this.stick.addEventListener('pointercancel', end);
+    this.stick.addEventListener('pointerleave', end);
+
+    // --- buttons
+    const hold = (id, on, off) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('pointerdown', e => {
+        // set the state first: pointer capture is a nicety and it can throw,
+        // and a drift button that silently does nothing is unforgivable
+        on();
+        el.classList.add('press');
+        try { el.setPointerCapture(e.pointerId); } catch (err) { }
+        e.preventDefault();
+      });
+      const up = e => { el.classList.remove('press'); if (off) off(); };
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    };
+    hold('tdrift', () => { this.drift = true; this.touching = true; }, () => this.drift = false);
+    hold('titem', () => this.item = true, () => this.item = false);
+    hold('tbrake', () => this.brake = true, () => this.brake = false);
+    hold('treset', () => this.reset = true, () => { });
+  },
+
+  show(on) {
+    if (!this.layer) return;
+    this.layer.classList.toggle('hidden', !on);
+    this.layer.classList.toggle('on', !!on);
+    if (!on) { this.steer = 0; this.drift = false; this.item = false; this.brake = false; this.touching = false; }
+  },
+
+  /** Merge touch state into a control struct. `racing` enables auto-throttle. */
+  apply(out, racing, countdown) {
+    out.steer = this.steer;
+    // Countdown: holding the screen is the throttle, so the same launch-boost
+    // window works. During the race the throttle just stays on.
+    out.throttle = countdown ? (this.touching ? 1 : 0) : (this.brake ? 0 : 1);
+    out.brake = this.brake ? 1 : 0;
+    out.drift = this.drift;
+    out.item = this.item;
+    if (this.reset) { out.reset = true; this.reset = false; }
+    return out;
   }
 };

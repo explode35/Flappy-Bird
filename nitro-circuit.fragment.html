@@ -1,9 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>NITRO CIRCUIT — Arcade Kart Racer</title>
+<script>
+(function(){
+  var m = document.querySelector('meta[name="viewport"]');
+  if (!m) { m = document.createElement("meta"); m.name = "viewport"; document.head.appendChild(m); }
+  m.content = "width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover";
+})();
+</script>
 <style>
 :root{
   --ink:#eaf2ff; --dim:#8fa3c4; --accent:#41e0ff; --accent2:#ff5bd0; --warn:#ffce4a;
@@ -198,8 +199,7 @@ body.touch .pos{left:calc(2.2% + env(safe-area-inset-left,0px));bottom:calc(3.5%
 #rotate p{color:var(--dim);letter-spacing:.22em;font-size:12px;font-weight:800;line-height:2}
 body.touch .hint .kb-only{display:none}
 </style>
-</head>
-<body>
+
 <canvas id="gl"></canvas>
 
 <div id="ui">
@@ -6822,5 +6822,3 @@ function loop(now) {
 requestAnimationFrame(loop);
 })();
 </script>
-</body>
-</html>
