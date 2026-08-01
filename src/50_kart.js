@@ -728,8 +728,11 @@ class Kart {
     const o = this.obj, ud = o.userData;
     o.position.copy(this.pos);
 
+    // The model faces local +Z, which makes its local +X the *screen-left* side
+    // (that is just how a Y-rotation works in three.js). Every visual angle
+    // below is therefore negated relative to the world-space turn direction.
     // body yaw includes the drift slip angle so the kart visibly sideslips
-    const slipYaw = this.drifting ? this.driftDir * lerp(.16, .46, clamp01(this.driftCharge / 2.6)) : 0;
+    const slipYaw = this.drifting ? -this.driftDir * lerp(.16, .46, clamp01(this.driftCharge / 2.6)) : 0;
     ud.body.rotation.y = damp(ud.body.rotation.y, slipYaw, 9, dt);
 
     // lean into the turn + squat under acceleration
@@ -740,13 +743,14 @@ class Kart {
 
     // align to the banked surface when grounded
     const targetBank = this.grounded ? q.bank : 0;
-    this._bankLean = damp(this._bankLean || 0, targetBank, 7, dt);
+    this._bankLean = damp(this._bankLean || 0, targetBank, 11, dt);
 
     o.rotation.set(0, 0, 0);
     o.rotation.order = 'YXZ';
     o.rotation.y = this.yaw;
     o.rotation.x = this.visualPitch;
-    o.rotation.z = this.visualRoll + this._bankLean;
+    // minus: rotation.z tilts the roof toward local -X, which is track-right
+    o.rotation.z = this.visualRoll - this._bankLean;
 
     // suspension squash on landing / boost
     const targetSquash = this.squashTime > 0 ? .35 : (this.airTime > 0 ? 1.04 : 1);
@@ -759,10 +763,10 @@ class Kart {
     for (let i = 0; i < 4; i++) {
       const w = ud.wheels[i];
       w.rotation.x = this.wheelSpin;
-      if (i >= 2) w.rotation.y = 0; else w.rotation.y = steerVis;
+      if (i >= 2) w.rotation.y = 0; else w.rotation.y = -steerVis;
     }
-    ud.driver.rotation.z = -steerVis * .18;
-    ud.driver.rotation.y = steerVis * .22;
+    ud.driver.rotation.z = steerVis * .18;
+    ud.driver.rotation.y = -steerVis * .22;
 
     // tail light brightens under braking / boost
     ud.tail.material.color.setHex(this.boostTime > 0 ? 0x9ff2ff : 0xff3a2a);

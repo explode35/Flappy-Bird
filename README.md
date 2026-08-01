@@ -89,6 +89,14 @@ a damping rate that drops to 30% while drifting. Banking is derived from track
 curvature, and gravity along the bank fights the cornering load — on steep sections
 speed pins you to the wall and lifting off drops you down it.
 
+**A convention worth knowing before you edit the models.** The kart faces its own
+local +Z, which means its local +X points *screen-left* — that is simply how a
+Y-rotation works in three.js, where models conventionally face −Z. So every
+visual angle on the kart (body roll, bank lean, drift slip, front-wheel steer)
+is negated relative to the world-space turn direction. Three separate bugs came
+out of getting that backwards; there is a geometric audit in the commit history
+that measures each against the camera's own axes.
+
 **Everything hangs off one spline.** `TrackPath` resamples the circuit to 1400
 equal-arc-length points and precomputes tangents, banked frames, curvature, a
 racing line and a per-point target speed. Road geometry, surface queries, lap
