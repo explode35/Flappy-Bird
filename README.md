@@ -20,11 +20,11 @@ player two is **arrows + / + .** (`,` to respawn).
 
 ## On a phone
 
-Touch devices are detected automatically and get their own control scheme:
-drag anywhere on the left half to steer (the stick appears under your thumb and
-follows it), with DRIFT, ITEM and BRAKE under the right. The throttle stays on by
-itself, and touching the screen as the lights drop feeds the same launch-boost
-timing window the keyboard uses.
+Touch devices are detected automatically and get their own control scheme: an
+anchored steering pad in the lower left (touch left of its centre and you go
+left, immediately), with DRIFT, ITEM and BRAKE under the right thumb. The
+throttle stays on by itself, and touching the screen as the lights drop feeds
+the same launch-boost timing window the keyboard uses.
 
 Mobile also drops the shadow pass, halves the particle budget and caps the
 render resolution, and the layout respects notch and home-indicator insets.
@@ -82,7 +82,8 @@ drifting disabled:
 ## Notes on the systems
 
 **Physics.** Velocity is decomposed into longitudinal and lateral components each
-frame. Acceleration follows a curve toward a top speed that varies with surface,
+frame, on an axis defined as `cross(forward, up)` — the same right-hand side the
+camera sees, and the same one the track's own frame uses. Acceleration follows a curve toward a top speed that varies with surface,
 boost and character; steering authority falls to 44% at top speed; lateral grip is
 a damping rate that drops to 30% while drifting. Banking is derived from track
 curvature, and gravity along the bank fights the cornering load — on steep sections

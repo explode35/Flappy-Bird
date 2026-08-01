@@ -231,6 +231,10 @@ function buildKart(ch) {
   glider.visible = false;
   g.add(glider);
 
+  // The wheels' contact point is local y = 0, but the kart's origin rides
+  // rideHeight above the road — without this offset the whole kart hovers.
+  body.position.y = -K.rideHeight;
+
   g.userData = { body, wheels, driver, shield, glider, tail, exL, exR, chassisMesh };
   return g;
 }
@@ -347,7 +351,13 @@ class Kart {
 
   /* ---- helpers ---- */
   forward(out) { return out.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)); }
-  rightVec(out) { return out.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)); }
+  /**
+   * True right-hand side as the camera sees it: cross(forward, up).
+   * This used to return its mirror, which disagreed with the track's own right
+   * vector and made increasing yaw turn *left* on screen — the reason steering
+   * came out inverted.
+   */
+  rightVec(out) { return out.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw)); }
 
   /** Current top speed including boosts, surface and rubber-banding. */
   topSpeed() {
@@ -524,9 +534,10 @@ class Kart {
     if (this.drifting) {
       // inside steer tightens, outside steer opens the drift out
       const into = ctl.steer * this.driftDir;
-      targetYawVel = this.driftDir * (K.driftYawBase + K.driftYawSteer * clamp(into, K.driftSteerMin, 1)) * lerp(.72, 1.12, speedFrac);
+      targetYawVel = -this.driftDir * (K.driftYawBase + K.driftYawSteer * clamp(into, K.driftSteerMin, 1)) * lerp(.72, 1.12, speedFrac);
     } else {
-      targetYawVel = ctl.steer * stats.steer * authority;
+      // negative because increasing yaw rotates toward screen-left
+      targetYawVel = -ctl.steer * stats.steer * authority;
       if (Math.abs(vLong) < 1.2) targetYawVel *= Math.abs(vLong) / 1.2;
       if (vLong < 0) targetYawVel *= -1;
     }
@@ -718,11 +729,11 @@ class Kart {
     o.position.copy(this.pos);
 
     // body yaw includes the drift slip angle so the kart visibly sideslips
-    const slipYaw = this.drifting ? -this.driftDir * lerp(.16, .46, clamp01(this.driftCharge / 2.6)) : 0;
+    const slipYaw = this.drifting ? this.driftDir * lerp(.16, .46, clamp01(this.driftCharge / 2.6)) : 0;
     ud.body.rotation.y = damp(ud.body.rotation.y, slipYaw, 9, dt);
 
     // lean into the turn + squat under acceleration
-    const targetRoll = clamp(-this.yawVel * .16 - (this.drifting ? this.driftDir * .1 : 0), -.34, .34);
+    const targetRoll = clamp(-this.yawVel * .16 + (this.drifting ? this.driftDir * .1 : 0), -.34, .34);
     this.visualRoll = damp(this.visualRoll, targetRoll, 8, dt);
     const accelPitch = clamp((this.boostTime > 0 ? -.09 : 0) + this.yawVel * 0, -.2, .2);
     this.visualPitch = damp(this.visualPitch, accelPitch + (this.grounded ? 0 : -.06), 6, dt);

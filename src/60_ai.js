@@ -168,13 +168,14 @@ class AIDriver {
     const k = this.kart;
     const spdFrac = clamp01(speed / Math.max(1, k.stats.top));
     if (k.drifting) {
-      // yaw = dir * (base + steerTerm * into) * speedScale  ->  solve for `into`
+      // yaw = -dir * (base + steerTerm * into) * speedScale  ->  solve for `into`
       const scale = lerp(.72, 1.12, spdFrac);
-      const into = ((omega * k.driftDir) / scale - K.driftYawBase) / K.driftYawSteer;
+      const into = ((-omega * k.driftDir) / scale - K.driftYawBase) / K.driftYawSteer;
       return k.driftDir * clamp(into, K.driftSteerMin, 1);
     }
     const authority = lerp(1, K.steerHighSpeed, spdFrac * spdFrac);
-    return clamp(omega / Math.max(.25, k.stats.steer * authority), -1, 1);
+    // negative: +steer turns toward the kart's right, which lowers yaw
+    return clamp(-omega / Math.max(.25, k.stats.steer * authority), -1, 1);
   }
 
   _avoidance(race, dt) {
@@ -189,7 +190,7 @@ class AIDriver {
       if (d2 > 220) continue;
       const ahead = dx * fwd.x + dz * fwd.z;
       if (ahead < 0.5) continue;
-      const side = dx * Math.cos(k.yaw) - dz * Math.sin(k.yaw);
+      const side = -dx * Math.cos(k.yaw) + dz * Math.sin(k.yaw);
       const w = clamp01(1 - Math.sqrt(d2) / 15);
       target += (side > 0 ? -1 : 1) * w * 5.5;
       bias += (side > 0 ? -1 : 1) * w * .34;

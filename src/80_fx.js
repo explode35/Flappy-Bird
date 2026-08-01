@@ -490,7 +490,7 @@ class ChaseCam {
     let yaw = kart.yaw;
     if (opts.look) yaw += Math.PI;
     // trail the drift: the camera hangs behind the kart's rotation a little
-    if (kart.drifting) yaw -= kart.driftDir * .22;
+    if (kart.drifting) yaw += kart.driftDir * .22;
 
     _v0.set(Math.sin(yaw), 0, Math.cos(yaw));
     _v1.copy(kart.pos).addScaledVector(_v0, -dist);
@@ -511,7 +511,7 @@ class ChaseCam {
     // look slightly ahead of the kart, and into the drift
     _v2.copy(kart.pos).addScaledVector(_v0, 8 + speedFrac * 7);
     _v2.y += 1.6;
-    if (kart.drifting) _v2.addScaledVector(_v1.set(Math.cos(kart.yaw), 0, -Math.sin(kart.yaw)), kart.driftDir * 3.2);
+    if (kart.drifting) _v2.addScaledVector(_v1.set(-Math.cos(kart.yaw), 0, Math.sin(kart.yaw)), kart.driftDir * 3.2);
     if (opts.intro > 0.001) _v2.lerp(_v4.copy(kart.pos).setY(kart.pos.y + 1.2), opts.intro);
     this.look.lerp(_v2, this._first ? 1 : 1 - Math.exp(-11 * dt));
 
@@ -531,7 +531,7 @@ class ChaseCam {
     cam.lookAt(this.look);
 
     // roll into drifts and banking
-    const targetRoll = -kart.yawVel * .055 - (kart.drifting ? kart.driftDir * .055 : 0)
+    const targetRoll = -kart.yawVel * .055 + (kart.drifting ? kart.driftDir * .055 : 0)
       + clamp((kart._bankLean || 0) * .5, -.34, .34);
     this.roll = damp(this.roll, targetRoll, 6, dt);
     cam.rotateZ(this.roll + sx * .02);

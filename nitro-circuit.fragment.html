@@ -3471,6 +3471,10 @@ function buildKart(ch) {
   glider.visible = false;
   g.add(glider);
 
+  // The wheels' contact point is local y = 0, but the kart's origin rides
+  // rideHeight above the road — without this offset the whole kart hovers.
+  body.position.y = -K.rideHeight;
+
   g.userData = { body, wheels, driver, shield, glider, tail, exL, exR, chassisMesh };
   return g;
 }
@@ -3587,7 +3591,13 @@ class Kart {
 
   /* ---- helpers ---- */
   forward(out) { return out.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)); }
-  rightVec(out) { return out.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)); }
+  /**
+   * True right-hand side as the camera sees it: cross(forward, up).
+   * This used to return its mirror, which disagreed with the track's own right
+   * vector and made increasing yaw turn *left* on screen — the reason steering
+   * came out inverted.
+   */
+  rightVec(out) { return out.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw)); }
 
   /** Current top speed including boosts, surface and rubber-banding. */
   topSpeed() {
@@ -3764,9 +3774,10 @@ class Kart {
     if (this.drifting) {
       // inside steer tightens, outside steer opens the drift out
       const into = ctl.steer * this.driftDir;
-      targetYawVel = this.driftDir * (K.driftYawBase + K.driftYawSteer * clamp(into, K.driftSteerMin, 1)) * lerp(.72, 1.12, speedFrac);
+      targetYawVel = -this.driftDir * (K.driftYawBase + K.driftYawSteer * clamp(into, K.driftSteerMin, 1)) * lerp(.72, 1.12, speedFrac);
     } else {
-      targetYawVel = ctl.steer * stats.steer * authority;
+      // negative because increasing yaw rotates toward screen-left
+      targetYawVel = -ctl.steer * stats.steer * authority;
       if (Math.abs(vLong) < 1.2) targetYawVel *= Math.abs(vLong) / 1.2;
       if (vLong < 0) targetYawVel *= -1;
     }
@@ -3958,11 +3969,11 @@ class Kart {
     o.position.copy(this.pos);
 
     // body yaw includes the drift slip angle so the kart visibly sideslips
-    const slipYaw = this.drifting ? -this.driftDir * lerp(.16, .46, clamp01(this.driftCharge / 2.6)) : 0;
+    const slipYaw = this.drifting ? this.driftDir * lerp(.16, .46, clamp01(this.driftCharge / 2.6)) : 0;
     ud.body.rotation.y = damp(ud.body.rotation.y, slipYaw, 9, dt);
 
     // lean into the turn + squat under acceleration
-    const targetRoll = clamp(-this.yawVel * .16 - (this.drifting ? this.driftDir * .1 : 0), -.34, .34);
+    const targetRoll = clamp(-this.yawVel * .16 + (this.drifting ? this.driftDir * .1 : 0), -.34, .34);
     this.visualRoll = damp(this.visualRoll, targetRoll, 8, dt);
     const accelPitch = clamp((this.boostTime > 0 ? -.09 : 0) + this.yawVel * 0, -.2, .2);
     this.visualPitch = damp(this.visualPitch, accelPitch + (this.grounded ? 0 : -.06), 6, dt);
@@ -4175,13 +4186,14 @@ class AIDriver {
     const k = this.kart;
     const spdFrac = clamp01(speed / Math.max(1, k.stats.top));
     if (k.drifting) {
-      // yaw = dir * (base + steerTerm * into) * speedScale  ->  solve for `into`
+      // yaw = -dir * (base + steerTerm * into) * speedScale  ->  solve for `into`
       const scale = lerp(.72, 1.12, spdFrac);
-      const into = ((omega * k.driftDir) / scale - K.driftYawBase) / K.driftYawSteer;
+      const into = ((-omega * k.driftDir) / scale - K.driftYawBase) / K.driftYawSteer;
       return k.driftDir * clamp(into, K.driftSteerMin, 1);
     }
     const authority = lerp(1, K.steerHighSpeed, spdFrac * spdFrac);
-    return clamp(omega / Math.max(.25, k.stats.steer * authority), -1, 1);
+    // negative: +steer turns toward the kart's right, which lowers yaw
+    return clamp(-omega / Math.max(.25, k.stats.steer * authority), -1, 1);
   }
 
   _avoidance(race, dt) {
@@ -4196,7 +4208,7 @@ class AIDriver {
       if (d2 > 220) continue;
       const ahead = dx * fwd.x + dz * fwd.z;
       if (ahead < 0.5) continue;
-      const side = dx * Math.cos(k.yaw) - dz * Math.sin(k.yaw);
+      const side = -dx * Math.cos(k.yaw) + dz * Math.sin(k.yaw);
       const w = clamp01(1 - Math.sqrt(d2) / 15);
       target += (side > 0 ? -1 : 1) * w * 5.5;
       bias += (side > 0 ? -1 : 1) * w * .34;
@@ -5181,7 +5193,7 @@ class ChaseCam {
     let yaw = kart.yaw;
     if (opts.look) yaw += Math.PI;
     // trail the drift: the camera hangs behind the kart's rotation a little
-    if (kart.drifting) yaw -= kart.driftDir * .22;
+    if (kart.drifting) yaw += kart.driftDir * .22;
 
     _v0.set(Math.sin(yaw), 0, Math.cos(yaw));
     _v1.copy(kart.pos).addScaledVector(_v0, -dist);
@@ -5202,7 +5214,7 @@ class ChaseCam {
     // look slightly ahead of the kart, and into the drift
     _v2.copy(kart.pos).addScaledVector(_v0, 8 + speedFrac * 7);
     _v2.y += 1.6;
-    if (kart.drifting) _v2.addScaledVector(_v1.set(Math.cos(kart.yaw), 0, -Math.sin(kart.yaw)), kart.driftDir * 3.2);
+    if (kart.drifting) _v2.addScaledVector(_v1.set(-Math.cos(kart.yaw), 0, Math.sin(kart.yaw)), kart.driftDir * 3.2);
     if (opts.intro > 0.001) _v2.lerp(_v4.copy(kart.pos).setY(kart.pos.y + 1.2), opts.intro);
     this.look.lerp(_v2, this._first ? 1 : 1 - Math.exp(-11 * dt));
 
@@ -5222,7 +5234,7 @@ class ChaseCam {
     cam.lookAt(this.look);
 
     // roll into drifts and banking
-    const targetRoll = -kart.yawVel * .055 - (kart.drifting ? kart.driftDir * .055 : 0)
+    const targetRoll = -kart.yawVel * .055 + (kart.drifting ? kart.driftDir * .055 : 0)
       + clamp((kart._bankLean || 0) * .5, -.34, .34);
     this.roll = damp(this.roll, targetRoll, 6, dt);
     cam.rotateZ(this.roll + sx * .02);
