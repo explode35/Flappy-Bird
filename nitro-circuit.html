@@ -22,7 +22,14 @@ canvas{display:block}
 /* ---------------- shared chrome ---------------- */
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:radial-gradient(120% 90% at 50% 8%,rgba(30,60,120,.55),rgba(3,5,12,.94) 62%);
-  backdrop-filter:blur(3px);pointer-events:auto}
+  backdrop-filter:blur(3px);pointer-events:auto;
+  /* an embedded viewport can be far shorter than a phone screen — let the menu
+     scroll rather than clip. `safe center` keeps the top edge reachable when
+     the content is taller than the box; browsers without it fall back to the
+     plain `center` above. */
+  overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+  padding:12px 0 52px}
+.screen{justify-content:safe center}
 .logo{font-size:clamp(38px,8.2vw,104px);font-weight:900;letter-spacing:.1em;line-height:.94;
   background:linear-gradient(180deg,#fff 6%,var(--accent) 46%,var(--accent2) 96%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
@@ -44,7 +51,11 @@ canvas{display:block}
 .kbd{display:inline-block;padding:1px 7px;margin:0 2px;border:1px solid var(--edge);border-radius:5px;
   background:rgba(255,255,255,.06);font-size:11px;font-weight:700;color:var(--ink)}
 .title2{font-size:13px;letter-spacing:.44em;color:var(--dim);text-transform:uppercase;font-weight:800;margin-bottom:16px}
-.backhint{position:absolute;left:24px;bottom:22px;color:var(--dim);font-size:12px;letter-spacing:.1em}
+/* sticks to the viewport, not the scrolled content, so it can't land mid-grid */
+.backhint{position:fixed;left:24px;bottom:16px;color:var(--dim);font-size:12px;letter-spacing:.1em;z-index:3}
+body.touch .backhint{left:calc(14px + env(safe-area-inset-left,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  padding:9px 16px;border:1px solid var(--edge);border-radius:11px;background:rgba(8,14,30,.92);
+  color:var(--ink);font-weight:800;cursor:pointer;pointer-events:auto}
 
 /* ---------------- character select ---------------- */
 .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;width:min(940px,94vw)}
@@ -200,6 +211,71 @@ body.touch .pos{left:calc(2.2% + env(safe-area-inset-left,0px));
 @keyframes rot{0%,40%{transform:rotate(0)}70%,100%{transform:rotate(90deg)}}
 #rotate p{color:var(--dim);letter-spacing:.22em;font-size:12px;font-weight:800;line-height:2}
 body.touch .hint .kb-only{display:none}
+
+/* ---------------- short viewports ----------------
+   Embedded in a page that keeps its own header (or a phone in landscape with
+   browser chrome showing), the game can get well under 400px of height. Shrink
+   the menus to suit rather than letting them run off both edges. */
+@media (max-height:560px){
+  /* The grid spans nearly the full width, so corner overlays always land on a
+     card. Reserve a band across the top instead and put both controls in it. */
+  .screen{padding:50px 0 14px}
+  .backhint{top:11px;bottom:auto;left:14px}
+  body.touch .backhint{top:calc(9px + env(safe-area-inset-top,0px));bottom:auto;padding:7px 13px}
+  #fsbtn{top:11px;padding:7px 12px;font-size:11px}
+  body.touch #fsbtn{top:calc(9px + env(safe-area-inset-top,0px));padding:7px 12px}
+  .logo{font-size:clamp(26px,5.4vw,54px)}
+  .logo small{letter-spacing:.42em;margin-top:.4em}
+  .menu{margin-top:14px;gap:7px;width:min(400px,84vw)}
+  .btn{padding:9px 15px;font-size:14px;border-radius:10px}
+  .btn .sub{font-size:10px}
+  .hint{margin-top:12px;font-size:10.5px;line-height:1.55}
+  .title2{font-size:10.5px;margin-bottom:8px;letter-spacing:.34em}
+  .grid{gap:8px}
+  .card{padding:8px 9px 7px;border-radius:11px}
+  .card .chip{height:32px;margin-bottom:6px}
+  .card h3{font-size:12px}
+  .card .role{font-size:9px;letter-spacing:.1em;margin-bottom:5px}
+  .stat{font-size:8.5px;margin:2px 0;gap:5px}
+  .stat b{width:30px}
+  .bar{height:4px}
+  .tracks{gap:9px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+  .tcard .sky{height:56px}
+  .tcard .meta{padding:8px 10px 10px}
+  .tcard h3{font-size:13px}
+  .tcard p{font-size:10px;line-height:1.45}
+  .gimmick{margin-top:6px;font-size:9px}
+  .backhint{font-size:11px}
+}
+@media (max-height:400px){
+  .card .chip{height:20px;margin-bottom:4px}
+  .card{padding:7px 8px 6px}
+  .card h3{font-size:11.5px;margin-bottom:1px}
+  .card .role{display:none}         /* the stat bars say the same thing in less space */
+  .stat{margin:1px 0;font-size:8px}
+  .hint{display:none}
+  .title2{margin-bottom:6px}
+  .tcard .sky{height:44px}
+  .tcard p{display:none}
+}
+
+/* ---------------- fullscreen toggle ---------------- */
+#fsbtn{position:fixed;top:12px;right:14px;z-index:4;pointer-events:auto;cursor:pointer;
+  padding:8px 13px;border:1px solid var(--edge);border-radius:10px;background:rgba(8,14,30,.9);
+  color:var(--dim);font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
+  display:flex;align-items:center;gap:7px;transition:color .14s,border-color .14s}
+#fsbtn:hover{color:var(--ink);border-color:var(--accent)}
+#fsbtn b{font-size:14px;font-weight:400;line-height:1}
+body.touch #fsbtn{top:calc(10px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));
+  padding:9px 14px;color:var(--ink)}
+/* iOS iPhone has no Fullscreen API for elements — tell people what does work */
+#fstip{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:70;pointer-events:auto;
+  width:min(430px,88vw);padding:22px 24px;border:1px solid var(--edge);border-radius:16px;
+  background:rgba(8,14,30,.97);box-shadow:0 22px 70px rgba(0,0,0,.7)}
+#fstip h4{margin:0 0 12px;font-size:13px;letter-spacing:.26em;text-transform:uppercase;color:var(--accent)}
+#fstip ol{margin:0;padding-left:20px;color:var(--dim);font-size:12.5px;line-height:1.85}
+#fstip ol b{color:var(--ink)}
+#fstip .btn{margin-top:16px;justify-content:center;font-size:13px;padding:10px}
 </style>
 </head>
 <body>
@@ -208,6 +284,13 @@ body.touch .hint .kb-only{display:none}
 <div id="ui">
   <div id="fps" class="hidden"></div>
   <div id="hudlayer" class="hidden"></div>
+
+  <div id="fsbtn" class="hidden"><b>⛶</b><span id="fsLabel">Fullscreen</span></div>
+  <div id="fstip" class="hidden">
+    <h4>Get the full screen</h4>
+    <ol id="fstipSteps"></ol>
+    <div class="btn" id="fstipClose"><span>Got it</span></div>
+  </div>
 
 
   <!-- touch controls: built for thumbs, only shown on touch devices -->
@@ -242,14 +325,14 @@ body.touch .hint .kb-only{display:none}
     <div class="title2" id="charTitle">Choose your racer</div>
     <div class="grid" id="charGrid"></div>
     <div class="hint" id="charHint"></div>
-    <div class="backhint">Esc — back</div>
+    <div class="backhint pointer">Esc — back</div>
   </div>
 
   <!-- TRACK SELECT -->
   <div id="s-track" class="screen hidden">
     <div class="title2">Choose a circuit</div>
     <div class="tracks" id="trackGrid"></div>
-    <div class="backhint">Esc — back</div>
+    <div class="backhint pointer">Esc — back</div>
   </div>
 
   <!-- RESULTS -->
@@ -6356,6 +6439,7 @@ class App {
     this._load();
     this._buildMenus();
     this._bindGlobalKeys();
+    this._initFullscreen();
     this.show('title');
 
     window.addEventListener('resize', () => this.resize());
@@ -6400,6 +6484,17 @@ class App {
       if (this.race) this.setPaused(!this.paused);
     });
 
+    // there is no Esc key on a phone — make the hint an actual button
+    $$('.backhint').forEach(b => {
+      b.textContent = '‹  Back';
+      b.addEventListener('click', () => {
+        if (this.screen === 'char') {
+          if (this.mode === 'split' && this.pickPhase === 1) { this.pickPhase = 0; this._refreshChar(); this._syncSel(); }
+          else this.show('title');
+        } else if (this.screen === 'track') this.show('char');
+      });
+    });
+
     // two players sharing one phone isn't a thing worth pretending about
     const split = document.querySelector('#s-title .btn[data-act="split"]');
     if (split) split.remove();
@@ -6417,6 +6512,71 @@ class App {
     window.addEventListener('resize', check);
     window.addEventListener('orientationchange', () => setTimeout(check, 260));
     check();
+  }
+
+  /**
+   * Fullscreen. Two very different situations to cover:
+   *  - Somewhere the Fullscreen API works (desktop, Android Chrome, iPad):
+   *    the button just toggles it.
+   *  - Somewhere it doesn't — iPhone Safari has no element fullscreen at all,
+   *    and an iframe that wasn't granted the permission reports
+   *    `fullscreenEnabled === false`. Promising a button that silently fails
+   *    is worse than not having one, so there we explain what does work.
+   */
+  _initFullscreen() {
+    const btn = $('#fsbtn'), tip = $('#fstip'), steps = $('#fstipSteps'), label = $('#fsLabel');
+    if (!btn) return;
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const enabledFlag = document.fullscreenEnabled !== undefined ? document.fullscreenEnabled
+      : (document.webkitFullscreenEnabled !== undefined ? document.webkitFullscreenEnabled : true);
+    const supported = !!req && enabledFlag !== false;
+    const embedded = window.top !== window.self;
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    const sync = () => {
+      label.textContent = !supported ? 'Full screen?' : (isFs() ? 'Exit full screen' : 'Fullscreen');
+    };
+    document.addEventListener('fullscreenchange', () => { sync(); this.resize(); });
+    document.addEventListener('webkitfullscreenchange', () => { sync(); this.resize(); });
+
+    const openTip = () => {
+      const rows = [];
+      if (embedded) rows.push('This is running inside another page, which keeps its own header. ' +
+        '<b>Open it in its own tab</b> with the button below for the whole screen.');
+      if (ios) rows.push('On iPhone, Safari has no fullscreen button for web pages. ' +
+        'Tap <b>Share</b>, then <b>Add to Home Screen</b> — launching from that icon ' +
+        'runs the game with no browser bars at all.');
+      else rows.push('Use your browser’s own fullscreen control (<b>F11</b> on desktop, ' +
+        'or the menu on mobile).');
+      rows.push('Landscape, with the phone rotated, gives the most road.');
+      steps.innerHTML = rows.map(r => '<li>' + r + '</li>').join('');
+      const old = tip.querySelector('.fsopen');
+      if (old) old.remove();                       // openTip can run more than once
+      if (embedded) {
+        const a = document.createElement('div');
+        a.className = 'btn fsopen'; a.innerHTML = '<span>Open in a new tab</span>';
+        a.addEventListener('click', () => window.open(location.href, '_blank', 'noopener'));
+        steps.parentNode.insertBefore(a, $('#fstipClose'));
+      }
+      tip.classList.remove('hidden');
+    };
+    $('#fstipClose').addEventListener('click', () => tip.classList.add('hidden'));
+
+    btn.addEventListener('click', () => {
+      if (!supported) { openTip(); return; }
+      if (isFs()) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } else {
+        // may reject if a parent frame withheld the permission — fall back rather than fail silently
+        const p = req.call(el);
+        if (p && p.catch) p.catch(() => openTip());
+      }
+    });
+    this._fsBtn = btn;
+    sync();
   }
 
   _load() {
@@ -6447,8 +6607,17 @@ class App {
     if (name === 'char') this._refreshChar();
     if (name === 'track') this._refreshTrack();
     this._syncSel();
+    this._syncFsBtn();
   }
-  hideScreens() { SCREENS.forEach(s => $('#s-' + s).classList.add('hidden')); this.screen = null; }
+  hideScreens() {
+    SCREENS.forEach(s => $('#s-' + s).classList.add('hidden'));
+    this.screen = null;
+    this._syncFsBtn();
+  }
+  /** The button lives on the menus only — during a race it would sit on the lap counter. */
+  _syncFsBtn() {
+    if (this._fsBtn) this._fsBtn.classList.toggle('hidden', !this.screen || this.screen === 'results');
+  }
 
   _selectables() {
     if (!this.screen) return [];

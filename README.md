@@ -31,6 +31,24 @@ render resolution, and the layout respects notch and home-indicator insets.
 Split-screen is hidden — two players on one phone isn't worth pretending about.
 Landscape only; portrait shows a prompt to rotate.
 
+### Getting the full screen
+
+There's a **Fullscreen** button on the menus. Where the Fullscreen API works
+(desktop, Android, iPad) it just toggles. Where it doesn't it says *Full screen?*
+and explains what does — because two common cases have no API to call:
+
+- **iPhone Safari has no element fullscreen at all.** The route that works is
+  Share → *Add to Home Screen*; launching from that icon runs with no browser bars.
+- **Embedded in a host page** (an iframe that wasn't granted the permission —
+  `document.fullscreenEnabled === false`) the host's own header stays no matter
+  what, so the tip offers to open the game in its own tab instead.
+
+The menus are laid out for this too. An embedded landscape phone can leave under
+300px of height, so below 560px the menus shrink, below 400px they shrink again,
+and the Back / Fullscreen controls move into a reserved band across the top —
+corner overlays otherwise land on top of the character cards, since the grid
+spans the full width.
+
 `build.sh` emits a second file, `nitro-circuit.fragment.html`, for hosts that
 supply their own `<html>`/`<head>`/`<body>` skeleton. It injects the viewport
 meta at runtime, without which phones render the page at desktop width.

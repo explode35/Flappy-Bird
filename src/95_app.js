@@ -28,6 +28,7 @@ class App {
     this._load();
     this._buildMenus();
     this._bindGlobalKeys();
+    this._initFullscreen();
     this.show('title');
 
     window.addEventListener('resize', () => this.resize());
@@ -72,6 +73,17 @@ class App {
       if (this.race) this.setPaused(!this.paused);
     });
 
+    // there is no Esc key on a phone — make the hint an actual button
+    $$('.backhint').forEach(b => {
+      b.textContent = '‹  Back';
+      b.addEventListener('click', () => {
+        if (this.screen === 'char') {
+          if (this.mode === 'split' && this.pickPhase === 1) { this.pickPhase = 0; this._refreshChar(); this._syncSel(); }
+          else this.show('title');
+        } else if (this.screen === 'track') this.show('char');
+      });
+    });
+
     // two players sharing one phone isn't a thing worth pretending about
     const split = document.querySelector('#s-title .btn[data-act="split"]');
     if (split) split.remove();
@@ -89,6 +101,71 @@ class App {
     window.addEventListener('resize', check);
     window.addEventListener('orientationchange', () => setTimeout(check, 260));
     check();
+  }
+
+  /**
+   * Fullscreen. Two very different situations to cover:
+   *  - Somewhere the Fullscreen API works (desktop, Android Chrome, iPad):
+   *    the button just toggles it.
+   *  - Somewhere it doesn't — iPhone Safari has no element fullscreen at all,
+   *    and an iframe that wasn't granted the permission reports
+   *    `fullscreenEnabled === false`. Promising a button that silently fails
+   *    is worse than not having one, so there we explain what does work.
+   */
+  _initFullscreen() {
+    const btn = $('#fsbtn'), tip = $('#fstip'), steps = $('#fstipSteps'), label = $('#fsLabel');
+    if (!btn) return;
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const enabledFlag = document.fullscreenEnabled !== undefined ? document.fullscreenEnabled
+      : (document.webkitFullscreenEnabled !== undefined ? document.webkitFullscreenEnabled : true);
+    const supported = !!req && enabledFlag !== false;
+    const embedded = window.top !== window.self;
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    const sync = () => {
+      label.textContent = !supported ? 'Full screen?' : (isFs() ? 'Exit full screen' : 'Fullscreen');
+    };
+    document.addEventListener('fullscreenchange', () => { sync(); this.resize(); });
+    document.addEventListener('webkitfullscreenchange', () => { sync(); this.resize(); });
+
+    const openTip = () => {
+      const rows = [];
+      if (embedded) rows.push('This is running inside another page, which keeps its own header. ' +
+        '<b>Open it in its own tab</b> with the button below for the whole screen.');
+      if (ios) rows.push('On iPhone, Safari has no fullscreen button for web pages. ' +
+        'Tap <b>Share</b>, then <b>Add to Home Screen</b> — launching from that icon ' +
+        'runs the game with no browser bars at all.');
+      else rows.push('Use your browser’s own fullscreen control (<b>F11</b> on desktop, ' +
+        'or the menu on mobile).');
+      rows.push('Landscape, with the phone rotated, gives the most road.');
+      steps.innerHTML = rows.map(r => '<li>' + r + '</li>').join('');
+      const old = tip.querySelector('.fsopen');
+      if (old) old.remove();                       // openTip can run more than once
+      if (embedded) {
+        const a = document.createElement('div');
+        a.className = 'btn fsopen'; a.innerHTML = '<span>Open in a new tab</span>';
+        a.addEventListener('click', () => window.open(location.href, '_blank', 'noopener'));
+        steps.parentNode.insertBefore(a, $('#fstipClose'));
+      }
+      tip.classList.remove('hidden');
+    };
+    $('#fstipClose').addEventListener('click', () => tip.classList.add('hidden'));
+
+    btn.addEventListener('click', () => {
+      if (!supported) { openTip(); return; }
+      if (isFs()) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } else {
+        // may reject if a parent frame withheld the permission — fall back rather than fail silently
+        const p = req.call(el);
+        if (p && p.catch) p.catch(() => openTip());
+      }
+    });
+    this._fsBtn = btn;
+    sync();
   }
 
   _load() {
@@ -119,8 +196,17 @@ class App {
     if (name === 'char') this._refreshChar();
     if (name === 'track') this._refreshTrack();
     this._syncSel();
+    this._syncFsBtn();
   }
-  hideScreens() { SCREENS.forEach(s => $('#s-' + s).classList.add('hidden')); this.screen = null; }
+  hideScreens() {
+    SCREENS.forEach(s => $('#s-' + s).classList.add('hidden'));
+    this.screen = null;
+    this._syncFsBtn();
+  }
+  /** The button lives on the menus only — during a race it would sit on the lap counter. */
+  _syncFsBtn() {
+    if (this._fsBtn) this._fsBtn.classList.toggle('hidden', !this.screen || this.screen === 'results');
+  }
 
   _selectables() {
     if (!this.screen) return [];
