@@ -74,10 +74,14 @@ drifting disabled:
 
 | Circuit | drifting | no drifting | gain |
 |---|---|---|---|
-| Sunspire Flats | 35.70s | 38.62s | −2.9s |
-| Coral Verge | 30.78s | 33.82s | −3.0s |
-| Ember Foundry | 38.80s | 40.50s | −1.7s |
-| Aurora Loop | 35.33s | 38.92s | −3.6s |
+| Sunspire Flats | 35.73s | 38.42s | −2.7s |
+| Coral Verge | 33.52s | 35.28s | −1.8s |
+| Ember Foundry | 38.40s | 40.75s | −2.4s |
+| Aurora Loop | 35.37s | 37.40s | −2.0s |
+
+Averaged over every lap rather than the best one the gap is wider (−1.8s to −3.3s),
+because a driver who can't drift loses time on *every* corner, not just the one
+they happened to nail.
 
 ## Notes on the systems
 
@@ -111,8 +115,8 @@ and wiggle-charge like a player, and make occasional brief mistakes. Catch-up
 assistance is limited to item luck and a ±5% top-speed band that scales with the gap
 to the leader (`Race._rubberBand`).
 
-**Performance.** 276→~200 draw calls per view and ~65-80k triangles; the simulation
-itself costs about 0.3 ms/frame. Scenery is merged per prop type and drawn as
+**Performance.** 80–175 draw calls per view depending on what the frustum catches,
+and 64–76k triangles; the simulation itself costs 0.25–0.5 ms/frame. Scenery is merged per prop type and drawn as
 instanced meshes per chunk, particles and projectiles are pooled with no runtime
 allocation, and resolution scales adaptively if the frame budget slips.
 
