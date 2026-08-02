@@ -579,14 +579,14 @@ function buildTable() {
   /* --------------------------------------------------- skill shot lanes --
      Five dividers hang under the top wall.  A ball coming over the top skims
      across them and drops into a lane; how far it gets is the skill shot.  */
-  const LANE_X = [326, 288, 250, 212, 174];
+  const LANE_X = [288, 250, 212, 174, 136];
   T.laneDiv = [];
   LANE_X.forEach(x => { const c = seg(x, 86, x, 150, MAT.plastic, { r: 2.5, tag: 'lanediv' }); push(c); T.laneDiv.push(c); });
   T.rollovers = [
-    { x: 193, y: 120, letter: 'D', lit: false, flash: 0 },
-    { x: 231, y: 120, letter: 'I', lit: false, flash: 0 },
-    { x: 269, y: 120, letter: 'V', lit: false, flash: 0 },
-    { x: 307, y: 120, letter: 'E', lit: false, flash: 0 }
+    { x: 155, y: 120, letter: 'D', lit: false, flash: 0 },
+    { x: 193, y: 120, letter: 'I', lit: false, flash: 0 },
+    { x: 231, y: 120, letter: 'V', lit: false, flash: 0 },
+    { x: 269, y: 120, letter: 'E', lit: false, flash: 0 }
   ];
   T.rollovers.forEach((ro, i) => T.sensors.push({
     k: 'seg', ax: ro.x - 18, ay: ro.y, bx: ro.x + 18, by: ro.y, tag: 'rollover', idx: i, cool: 0.35
@@ -626,8 +626,8 @@ function buildTable() {
 
   /* --------------------------------------------------------- lower guides */
   /* left: outlane / inlane divider, then the ramp down to the flipper base */
-  push(chain([[43, 690], [62, 792], [122, 842]], MAT.plastic, { r: 3, tag: 'guideL' }));
-  push(chain([[349, 690], [330, 792], [270, 842]], MAT.plastic, { r: 3, tag: 'guideR' }));
+  push(chain([[43, 690], [58, 800], [123, 831]], MAT.plastic, { r: 3, tag: 'guideL' }));
+  push(chain([[349, 690], [334, 800], [269, 831]], MAT.plastic, { r: 3, tag: 'guideR' }));
   push(cir(43, 690, 4.5, MAT.post, { tag: 'postL' }));
   push(cir(349, 690, 4.5, MAT.post, { tag: 'postR' }));
   push(seg(378, 700, 378, 884, MAT.wall, { tag: 'wallRlow' }));
@@ -647,8 +647,8 @@ function buildTable() {
     return o;
   }
   T.slings = [
-    sling(93, 748, 139, 806, 93, 806, -1),
-    sling(299, 748, 253, 806, 299, 806, 1)
+    sling(96, 730, 144, 786, 96, 786, -1),
+    sling(296, 730, 248, 786, 296, 786, 1)
   ];
 
   /* -------------------------------------------------------------- flippers */
@@ -708,8 +708,8 @@ function buildTable() {
     T.gate.open = o;
     const l = T.gatePanels[0], r = T.gatePanels[1];
     const slide = o * 64;
-    l.ax = 152 - slide; l.ay = 238; l.bx = 216 - slide; l.by = 238; colAABB(l);
-    r.ax = 216 + slide; r.ay = 238; r.bx = 280 + slide; r.by = 238; colAABB(r);
+    l.ax = 152 - slide; l.ay = 243; l.bx = 216 - slide; l.by = 233; colAABB(l);
+    r.ax = 216 + slide; r.ay = 233; r.bx = 280 + slide; r.by = 243; colAABB(r);
   };
   T.setGate(0);
   /* posts that frame the gate mouth */
@@ -756,9 +756,9 @@ function buildTable() {
       /* the habitrail: up the middle corridor, over the top and all the way
          across to feed the upper flipper */
       name: 'HABITRAIL', short: 'RAIL',
-      entry: [136, 510, 180, 488],
+      entry: [128, 520, 188, 484],
       dirx: 0.16, diry: -0.99,
-      minV: 560, climb: 0.52,
+      minV: 500, climb: 0.52,
       path: [[178, 488], [176, 430], [172, 368], [170, 306], [172, 248], [184, 202],
              [212, 176], [248, 172], [278, 190], [292, 232], [296, 300], [294, 372],
              [290, 420]],
@@ -777,8 +777,8 @@ function buildTable() {
 
   /* ---------------------------------------------------- assorted rubber --- */
   push(cir(212, 452, 6, MAT.post, { tag: 'post' }));
-  push(cir(268, 556, 5, MAT.post, { tag: 'post' }));
-  push(cir(176, 556, 5, MAT.post, { tag: 'post' }));
+  push(cir(284, 556, 5, MAT.post, { tag: 'post' }));
+  push(cir(160, 556, 5, MAT.post, { tag: 'post' }));
   push(cir(60, 640, 5, MAT.post, { tag: 'post' }));
   push(cir(334, 640, 5, MAT.post, { tag: 'post' }));
   push(cir(300, 116, 5, MAT.post, { tag: 'post' }));
@@ -821,16 +821,16 @@ const LEVELS = [
     obj: { k: 'drops', n: 1, text: 'DROP THE BANK' }, mods: [] },
   { name: 'KELP CATHEDRAL', depth: 120,
     pal: ['#1c7a5e', '#0e3b2e', '#17324f', '#3fd18b'],
-    obj: { k: 'spins', n: 30, text: 'SPIN THE TURBINE' }, mods: ['drifter'] },
+    obj: { k: 'spins', n: 18, text: 'SPIN THE TURBINE' }, mods: ['drifter'] },
   { name: 'THE THERMOCLINE', depth: 260,
     pal: ['#2a5c8a', '#17324f', '#0b1a2b', '#4fa3d1'],
     obj: { k: 'grid', n: 1, text: 'CLEAR THE GRID' }, mods: ['drifter', 'ballast'] },
   { name: 'TWILIGHT DRIFT', depth: 480,
     pal: ['#3a1030', '#17324f', '#0b1a2b', '#b06fd6'],
-    obj: { k: 'ramps', n: 5, text: 'RIDE THE CURRENT X5' }, mods: ['drifter', 'shortflip'] },
+    obj: { k: 'ramps', n: 3, text: 'RIDE THE CURRENT X3' }, mods: ['drifter', 'shortflip'] },
   { name: 'THE BONEYARD', depth: 760,
     pal: ['#5a4632', '#2b2118', '#0b1a2b', '#d9f26b'],
-    obj: { k: 'pops', n: 35, text: 'SCATTER THE SWARM' }, mods: ['drifter', 'shortflip', 'steep'] },
+    obj: { k: 'pops', n: 25, text: 'SCATTER THE SWARM' }, mods: ['drifter', 'shortflip', 'steep'] },
   { name: 'MIDNIGHT ZONE', depth: 1200,
     pal: ['#17324f', '#0b1a2b', '#000000', '#4fa3d1'],
     obj: { k: 'mode', n: 1, text: 'RUN A SILENT MODE' }, mods: ['gulper', 'steep'] },
@@ -839,10 +839,10 @@ const LEVELS = [
     obj: { k: 'multiball', n: 1, text: 'LIGHT THE TWIN LANTERNS' }, mods: ['gulper', 'lowgrav', 'floater'] },
   { name: 'THE TRENCH WALL', depth: 2800,
     pal: ['#2b2118', '#17324f', '#000000', '#8a8f98' ],
-    obj: { k: 'orbits', n: 6, text: 'ROUND THE TRENCH X6' }, mods: ['drifter', 'lantern', 'reverse'] },
+    obj: { k: 'orbits', n: 3, text: 'ROUND THE TRENCH X3' }, mods: ['drifter', 'lantern', 'reverse'] },
   { name: 'SHELF OF EYES', depth: 4100,
     pal: ['#3a1030', '#0b1a2b', '#000000', '#b06fd6'],
-    obj: { k: 'kills', n: 4, text: 'CULL THE WATCHERS' }, mods: ['drifter', 'gulper', 'lantern', 'weak'] },
+    obj: { k: 'kills', n: 3, text: 'CULL THE WATCHERS' }, mods: ['drifter', 'gulper', 'lantern', 'weak'] },
   { name: 'HADAL THRONE', depth: 6000,
     pal: ['#0b1a2b', '#000000', '#000000', '#c8452f'],
     obj: { k: 'super', n: 1, text: 'TAKE THE THRONE' },
@@ -865,9 +865,9 @@ const MOD_INFO = {
 };
 
 const MODES = [
-  { id: 'current', name: 'CURRENT RUN', text: 'SHOOT THE RAMPS X3', time: 32, need: 3, val: 60000 },
-  { id: 'sonar',   name: 'SONAR SWEEP', text: 'HIT 6 GRID TARGETS',  time: 26, need: 6, val: 40000 },
-  { id: 'salvage', name: 'SALVAGE HAUL', name2: '', text: 'SPINNER AND ORBITS', time: 30, need: 45, val: 50000 }
+  { id: 'current', name: 'CURRENT RUN', text: 'SHOOT THE RAMPS X2', time: 36, need: 2, val: 60000 },
+  { id: 'sonar',   name: 'SONAR SWEEP', text: 'HIT 4 GRID TARGETS',  time: 32, need: 4, val: 40000 },
+  { id: 'salvage', name: 'SALVAGE HAUL', text: 'SPINNER AND ORBITS', time: 34, need: 28, val: 50000 }
 ];
 
 /* ------------------------------------------------------------------ state */
@@ -1088,10 +1088,10 @@ function advanceLevel() {
   p.prog = { drops: 0, spins: 0, grid: 0, ramps: 0, pops: 0, mode: 0, multiball: 0, orbits: 0, kills: 0, super: 0 };
   G.seq = { k: 'levelup', t: 0, dur: 4.4 };
 }
-function resetTableForLevel() {
+function resetTableForLevel(full) {
   const T = G.T;
   T.drops.forEach(d => { d.down = false; d.col.live = true; });
-  T.grid.forEach(g => { g.down = false; g.lit = true; g.col.live = true; });
+  if (full !== false) T.grid.forEach(g => { g.down = false; g.lit = true; g.col.live = true; });
   T.gate.state = 'closed'; T.setGate(0);
   T.sockets.forEach(s => { if (s.ball) { s.ball.state = 'gone'; } s.filled = false; s.ball = null; s.lit = 0; });
   P().locks = 0;
@@ -1460,7 +1460,7 @@ function jackpot() {
   award(60000 + G.jackpots * 15000, 222, 300, PAL.lime);
   say('JACKPOT', 'X' + G.jackpots, 1.8);
   sfx('jackpot'); shake(8); G.flash = 0.3;
-  if (G.jackpots >= 4 && !G.superLit) { G.superLit = true; say('SUPER JACKPOT', 'SHOOT THE GRID', 3); }
+  if (G.jackpots >= 3 && !G.superLit) { G.superLit = true; say('SUPER JACKPOT', 'SHOOT THE GRID', 3); }
 }
 function superJackpot() {
   if (!G.superLit) return;
@@ -1530,7 +1530,7 @@ function drainCheck(dt) {
     const b = G.balls[i];
     if (b.state === 'gone') { G.balls.splice(i, 1); continue; }
     if (b.state !== 'free') continue;
-    if (b.y > DRAIN_Y && b.x < 378) {          /* the plunger lane is not a drain */
+    if (b.y > DRAIN_Y && (b.x < 378 || b.launched)) {   /* the lane only shelters an unlaunched ball */
       if (G.ballSaveT > 0 && !G.tilt.dead) {
         b.x = 396; b.y = 900; b.vx = 0; b.vy = -1500;
         say('BALL SAVED', '', 1.8); sfx('ballsave'); shake(4);
@@ -1587,7 +1587,7 @@ function serveBall() {
   G.skillLane = rndI(0, 3);
   G.T.rollovers.forEach((r, i) => { r.lit = P().dive[i]; });
   G.T.spinner.count = 0;
-  resetTableForLevel();
+  resetTableForLevel(false);
   G.mode = 'play'; G.stateT = 0;
   music('main');
 }
@@ -1847,11 +1847,18 @@ function paintPlayfieldArt(c, L, level) {
   drawTextC(c, 'FATHOM', 221, 901, 5, acc);
   drawTextC(c, 'DESCENT OF THE KRAKENS EYE', 222, 930, 1, PAL.gray);
   /* zone lettering */
-  const label = (s, x, y, px, col) => { drawTextC(c, s, x + 1, y + 1, px, PAL.ink); drawTextC(c, s, x, y, px, col); };
+  /* vertical=true stacks the letters, for labels in the narrow side lanes */
+  const label = (s, x, y, px, col, vertical) => {
+    if (!vertical) { drawTextC(c, s, x + 1, y + 1, px, PAL.ink); drawTextC(c, s, x, y, px, col); return; }
+    for (let i = 0; i < s.length; i++) {
+      drawTextC(c, s[i], x + 1, y + i * 9 + 1, px, PAL.ink);
+      drawTextC(c, s[i], x, y + i * 9, px, col);
+    }
+  };
   label('SKILL LANES', 250, 70, 1, PAL.silver);
   label('MOON POOL', 222, 214, 1, PAL.cyan);
   label('THE EYE', 222, 404, 1, acc);
-  label('TURBINE', 31, 262, 1, PAL.lime);
+  label('TURBINE', 31, 262, 1, PAL.lime, true);
   label('SALVAGE', 82, 580, 1, PAL.lime);
   /* inlane / outlane arrows */
   c.fillStyle = PAL.sand;
@@ -2113,12 +2120,18 @@ function drawGate(c, t) {
   /* the two sliding panels */
   for (let i = 0; i < 2; i++) {
     const g = T.gatePanels[i];
-    const x0 = Math.min(g.ax, g.bx), w = Math.abs(g.bx - g.ax);
-    c.fillStyle = PAL.ink; c.fillRect(x0 - 1, 230, w + 2, 17);
-    c.fillStyle = T.gate.flash > 0 ? PAL.white : PAL.gray; c.fillRect(x0, 231, w, 15);
-    c.fillStyle = PAL.ink;
-    for (let k = 4; k < w - 2; k += 8) c.fillRect(x0 + k, 233, 3, 11);
-    c.fillStyle = PAL.silver; c.fillRect(x0, 231, w, 2);
+    c.lineCap = 'butt';
+    c.strokeStyle = PAL.ink; c.lineWidth = 15;
+    c.beginPath(); c.moveTo(g.ax, g.ay); c.lineTo(g.bx, g.by); c.stroke();
+    c.strokeStyle = T.gate.flash > 0 ? PAL.white : PAL.gray; c.lineWidth = 12;
+    c.beginPath(); c.moveTo(g.ax, g.ay); c.lineTo(g.bx, g.by); c.stroke();
+    c.strokeStyle = PAL.ink; c.lineWidth = 1;
+    for (let k = 0.06; k < 0.95; k += 0.11) {
+      const x = lerp(g.ax, g.bx, k), y = lerp(g.ay, g.by, k);
+      c.beginPath(); c.moveTo(x, y - 5); c.lineTo(x, y + 5); c.stroke();
+    }
+    c.strokeStyle = PAL.silver; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(g.ax, g.ay - 5); c.lineTo(g.bx, g.by - 5); c.stroke();
   }
   if (T.gate.state === 'open' || T.gate.state === 'opening') {
     const o = T.gate.open;
@@ -2501,7 +2514,7 @@ function initAudio() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return;
   AC = new Ctx();
-  master = AC.createGain(); master.gain.value = 0.55; master.connect(AC.destination);
+  master = AC.createGain(); master.gain.value = 0.70; master.connect(AC.destination);
   musicGain = AC.createGain(); musicGain.gain.value = 0.30; musicGain.connect(master);
   sfxGain = AC.createGain(); sfxGain.gain.value = 0.85; sfxGain.connect(master);
   /* one second of white noise, reused for every impact */
@@ -2552,16 +2565,16 @@ function sfx(name, v) {
   if (gate[name] !== undefined) { if (now - (lastSfx[name] || 0) < gate[name]) return; lastSfx[name] = now; }
   switch (name) {
     /* --- surfaces, each with its own voice */
-    case 'wall':    noise(0.05, 0.16 * v, 900, 1.4); tone('triangle', 180, 90, 0.05, 0.06 * v); break;
-    case 'plastic': noise(0.04, 0.16 * v, 2200, 2);  tone('square', 520, 300, 0.03, 0.04 * v); break;
-    case 'metal':   noise(0.09, 0.13 * v, 4200, 6);  tone('triangle', 1500, 900, 0.08, 0.05 * v); break;
-    case 'wire':    noise(0.05, 0.09 * v, 3200, 8); break;
+    case 'wall':    noise(0.06, 0.42 * v, 900, 1.2); tone('triangle', 180, 90, 0.06, 0.10 * v); break;
+    case 'plastic': noise(0.05, 0.42 * v, 2200, 1.6); tone('square', 520, 300, 0.04, 0.07 * v); break;
+    case 'metal':   noise(0.09, 0.36 * v, 4200, 3);  tone('triangle', 1500, 900, 0.09, 0.09 * v); break;
+    case 'wire':    noise(0.06, 0.34 * v, 3200, 3.5); break;
     case 'rubber':  tone('triangle', 300, 120, 0.08, 0.16 * v); noise(0.03, 0.08 * v, 700, 1); break;
     case 'post':    tone('triangle', 420, 150, 0.07, 0.16 * v); noise(0.03, 0.09 * v, 900, 1); break;
     case 'target':  tone('square', 700, 500, 0.05, 0.10 * v); noise(0.04, 0.10 * v, 1800, 3); break;
     case 'flesh':   tone('sine', 150, 60, 0.14, 0.16 * v); noise(0.10, 0.09 * v, 400, 0.7); break;
     case 'fliphit': tone('square', 240, 150, 0.05, 0.09 * v); noise(0.035, 0.10 * v, 1300, 1.5); break;
-    case 'clack':   noise(0.045, 0.16 * v, 3000, 5); tone('triangle', 900, 600, 0.04, 0.06 * v); break;
+    case 'clack':   noise(0.05, 0.42 * v, 3000, 3); tone('triangle', 900, 600, 0.05, 0.10 * v); break;
     /* --- mechanisms */
     case 'flip':    noise(0.05, 0.20, 480, 1.2); tone('square', 110, 70, 0.06, 0.10); break;
     case 'bumper':  tone('square', 880, 220, 0.13, 0.20); noise(0.07, 0.16, 1500, 2); break;
@@ -2572,7 +2585,7 @@ function sfx(name, v) {
     case 'orbit':   for (let i = 0; i < 4; i++) tone('square', 500 + i * 220, 0, 0.05, 0.10, AC.currentTime + i * 0.045); break;
     case 'rollover':tone('square', 1000, 1600, 0.07, 0.14); break;
     case 'rolloverlit': tone('square', 700, 900, 0.05, 0.08); break;
-    case 'ramproll':noise(0.09, 0.05 * v, 700, 0.8); break;
+    case 'ramproll':noise(0.10, 0.24 * v, 700, 0.8); break;
     case 'rampenter': tone('triangle', 300, 900, 0.20, 0.13); break;
     case 'rampdone': for (let i = 0; i < 5; i++) tone('square', 440 * Math.pow(1.26, i), 0, 0.07, 0.12, AC.currentTime + i * 0.05); break;
     case 'rampfail':tone('square', 500, 140, 0.28, 0.13); break;
@@ -2591,7 +2604,7 @@ function sfx(name, v) {
       tone('triangle', 60, 40, 1.0, 0.20);
       break;
     }
-    case 'gateclank': noise(0.06, 0.09 * v, 1800, 4); break;
+    case 'gateclank': noise(0.07, 0.30 * v, 1800, 2.5); break;
     case 'gateopen2': tone('triangle', 900, 300, 0.5, 0.16); noise(0.3, 0.12, 700, 1); break;
     case 'gateshut': noise(0.24, 0.18, 320, 0.8); tone('triangle', 200, 70, 0.26, 0.16); break;
     case 'jackpot': for (let i = 0; i < 8; i++) tone('square', 660 * Math.pow(1.12, i), 0, 0.09, 0.15, AC.currentTime + i * 0.045); break;
@@ -2619,7 +2632,7 @@ function sfx(name, v) {
                     break;
     case 'tiltwarn':tone('square', 200, 200, 0.35, 0.22); tone('square', 203, 203, 0.35, 0.22); break;
     case 'tilt':    for (let i = 0; i < 6; i++) { tone('square', 160, 90, 0.28, 0.22, AC.currentTime + i * 0.22); noise(0.2, 0.14, 300, 0.8, AC.currentTime + i * 0.22); } break;
-    case 'nudge':   noise(0.09, 0.14, 200, 0.7); break;
+    case 'nudge':   noise(0.11, 0.40, 240, 0.6); tone('triangle', 120, 60, 0.10, 0.14); break;
     case 'drain':   tone('triangle', 320, 60, 0.7, 0.22); tone('square', 160, 40, 0.7, 0.10); noise(0.5, 0.08, 300, 0.6); break;
     case 'ballsave':for (let i = 0; i < 4; i++) tone('square', 400 + i * 200, 0, 0.10, 0.15, AC.currentTime + i * 0.06); break;
     case 'bonusstart': tone('triangle', 200, 600, 0.3, 0.16); break;
