@@ -1,0 +1,3107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>FATHOM &mdash; Descent of the Kraken's Eye</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden;
+    font-family:ui-monospace,Menlo,Consolas,monospace;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%,#0b1a2b 0%,#000 80%);}
+  canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block;
+    box-shadow:0 0 0 3px #17324f,0 0 0 6px #0b1a2b,0 0 40px #000;}
+  #hint{position:fixed;left:0;right:0;bottom:2px;text-align:center;color:#2a5c8a;
+    font-size:10px;letter-spacing:1px;pointer-events:none;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv" width="448" height="768"></canvas></div>
+<div id="hint">FATHOM &mdash; click to enable audio</div>
+<script>
+"use strict";
+/* ==========================================================================
+   FATHOM  —  Descent of the Kraken's Eye
+   An original NES-era physics pinball table.  Everything (art, audio,
+   physics) is generated in code.  No assets, no libraries, no build step.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- palette */
+/* 22 colours, hand picked, used for absolutely everything on screen. */
+const PAL = {
+  ink:   '#000000', abyss: '#0b1a2b', navy:  '#17324f', blue:  '#2a5c8a',
+  sky:   '#4fa3d1', cyan:  '#9be0f2', white: '#ffffff', deep:  '#0e3b2e',
+  teal:  '#1c7a5e', green: '#3fd18b', lime:  '#d9f26b', amber: '#f2c14e',
+  ochre: '#e8873a', red:   '#c8452f', maroon:'#7d1f2e', plum:  '#3a1030',
+  purple:'#6b3fa0', lilac: '#b06fd6', gray:  '#8a8f98', silver:'#d7dde5',
+  bark:  '#2b2118', sand:  '#5a4632'
+};
+
+/* ------------------------------------------------------------------ maths */
+const TAU = Math.PI * 2;
+const EPS = 1e-7;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp  = (a, b, t) => a + (b - a) * t;
+const sign  = v => (v < 0 ? -1 : 1);
+const dist2 = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay; return dx * dx + dy * dy; };
+const dist  = (ax, ay, bx, by) => Math.hypot(bx - ax, by - ay);
+const rad   = d => d * Math.PI / 180;
+const deg   = r => r * 180 / Math.PI;
+/* shortest signed difference between two angles */
+function angDiff(a, b) { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; }
+/* is angle a inside the arc that sweeps from a0 forward (increasing) to a1 */
+function angInArc(a, a0, a1) {
+  let s = (a - a0) % TAU; if (s < 0) s += TAU;
+  let e = (a1 - a0) % TAU; if (e < 0) e += TAU;
+  if (e < EPS) e = TAU;
+  return s <= e;
+}
+
+/* deterministic-ish rng so shake/dither can be seeded when testing */
+let _seed = 0x2f6e2b1 >>> 0;
+function rnd()  { _seed ^= _seed << 13; _seed ^= _seed >>> 17; _seed ^= _seed << 5; _seed >>>= 0; return _seed / 4294967296; }
+function rndR(a, b) { return a + (b - a) * rnd(); }
+function rndI(a, b) { return Math.floor(a + (b - a + 1) * rnd()); }
+function seedRnd(s) { _seed = (s >>> 0) || 1; }
+
+/* --------------------------------------------------------- 5x7 pixel font */
+/* Column-major bitmaps, LSB = top row.  Drawn as chunky square pixels. */
+const FONT = {};
+(function () {
+  const D = {
+    ' ': '0000000000', '0': '3E5149453E', '1': '00427F4000',
+    '2': '4261514946', '3': '2141454B31', '4': '1814127F10', '5': '2745454539',
+    '6': '3C4A494930', '7': '0171090503', '8': '3649494936', '9': '064949291E',
+    'A': '7E1111117E', 'B': '7F49494936', 'C': '3E41414122', 'D': '7F4141221C',
+    'E': '7F49494941', 'F': '7F09090901', 'G': '3E4149497A', 'H': '7F0808087F',
+    'I': '00417F4100', 'J': '2040413F01', 'K': '7F08142241', 'L': '7F40404040',
+    'M': '7F020C027F', 'N': '7F0408107F', 'O': '3E4141413E', 'P': '7F09090906',
+    'Q': '3E4151215E', 'R': '7F09192946', 'S': '4649494931', 'T': '01017F0101',
+    'U': '3F4040403F', 'V': '1F2040201F', 'W': '7F2018207F', 'X': '6314081463',
+    'Y': '0708700807', 'Z': '6151494543', '-': '0808080808', '.': '0060600000',
+    ':': '0036360000', '!': '00005F0000', '/': '2010080402', '*': '14083E0814',
+    '+': '08083E0808', '>': '4122140800', '<': '0814224100', '(': '001C224100',
+    ')': '0041221C00', '?': '0201510906', ',': '0050300000', "'": '0007000000',
+    '%': '2313086462', '#': '147F147F14', '=': '1414141414', '$': '2649792412',
+    '"': '0007000700', '[': '007F414100', ']': '0041417F00', '_': '4040404040',
+    '@': '3E7F7F7F3E' /* filled blob */
+  };
+  for (const k in D) {
+    const cols = [];
+    for (let i = 0; i < 5; i++) cols.push(parseInt(D[k].substr(i * 2, 2), 16));
+    FONT[k] = cols;
+  }
+})();
+
+function textWidth(s, px, sp) { sp = sp === undefined ? 1 : sp; return s.length * (5 * px + sp * px) - sp * px; }
+
+/* draw chunky pixel text.  px = pixel size. */
+function drawText(ctx, s, x, y, px, color, spacing) {
+  spacing = spacing === undefined ? 1 : spacing;
+  ctx.fillStyle = color;
+  s = String(s).toUpperCase();
+  let cx = x;
+  for (let i = 0; i < s.length; i++) {
+    const g = FONT[s[i]] || FONT['?'];
+    for (let c = 0; c < 5; c++) {
+      const bits = g[c];
+      for (let r = 0; r < 7; r++) if (bits & (1 << r)) ctx.fillRect(cx + c * px, y + r * px, px, px);
+    }
+    cx += (5 + spacing) * px;
+  }
+  return cx;
+}
+function drawTextC(ctx, s, cx, y, px, color, spacing) {
+  drawText(ctx, s, Math.round(cx - textWidth(String(s), px, spacing) / 2), y, px, color, spacing);
+}
+
+/* comma grouped number */
+function fmt(n) {
+  n = Math.floor(n);
+  let s = String(n), o = '';
+  while (s.length > 3) { o = ',' + s.slice(-3) + o; s = s.slice(0, -3); }
+  return s + o;
+}
+
+/* ---------------------------------------------------- dithered gradients */
+/* 4x4 bayer matrix: the era's only legal gradient. */
+const BAYER = [
+  [0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]
+];
+/* Fills rect with a vertical two-colour dither ramp (no smooth gradients). */
+function ditherRectV(ctx, x, y, w, h, cTop, cBot, t0, t1) {
+  t0 = t0 === undefined ? 0 : t0; t1 = t1 === undefined ? 1 : t1;
+  x |= 0; y |= 0; w |= 0; h |= 0;
+  ctx.fillStyle = cTop; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = cBot;
+  for (let j = 0; j < h; j++) {
+    const t = lerp(t0, t1, h <= 1 ? 1 : j / (h - 1));
+    const lvl = t * 16;
+    for (let i = 0; i < w; i++) {
+      if (BAYER[j & 3][i & 3] < lvl) ctx.fillRect(x + i, y + j, 1, 1);
+    }
+  }
+}
+/* radial dither blob, for lamp glow */
+function ditherGlow(ctx, cx, cy, r, color, strength) {
+  const x0 = Math.floor(cx - r), x1 = Math.ceil(cx + r);
+  const y0 = Math.floor(cy - r), y1 = Math.ceil(cy + r);
+  ctx.fillStyle = color;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+    if (d > r) continue;
+    const t = (1 - d / r) * strength;
+    if (BAYER[y & 3][x & 3] < t * 16) ctx.fillRect(x, y, 1, 1);
+  }
+}
+/* ==========================================================================
+   PHYSICS CORE
+   Continuous collision detection only.  Every moving circle is swept against
+   every collider; the earliest time of impact wins, we advance exactly to it,
+   resolve, and keep spending the remainder of the timestep.  Nothing is ever
+   moved through a wall and pushed back out afterwards, so nothing tunnels.
+   ========================================================================== */
+
+/* --------------------------------------------------------------- materials
+   Each surface gets its own bounce, its own friction, and its own voice. */
+const MAT = {
+  wall:    { e: 0.34, f: 0.030, snd: 'wall'   },  /* painted wood cabinet    */
+  metal:   { e: 0.26, f: 0.020, snd: 'metal'  },  /* ramp rails, dead        */
+  wire:    { e: 0.12, f: 0.040, snd: 'wire'   },  /* wireform habitrail      */
+  plastic: { e: 0.46, f: 0.035, snd: 'plastic'},  /* lane guides, in between */
+  rubber:  { e: 0.70, f: 0.140, snd: 'rubber' },  /* sling & post rubber     */
+  post:    { e: 0.76, f: 0.110, snd: 'post'   },  /* live rubber post        */
+  target:  { e: 0.38, f: 0.070, snd: 'target' },
+  flipper: { e: 0.32, f: 0.240, snd: 'fliphit'},
+  bumper:  { e: 0.55, f: 0.060, snd: 'bumper' },
+  flesh:   { e: 0.50, f: 0.220, snd: 'flesh'  }   /* creatures               */
+};
+
+/* ------------------------------------------------------------ ray helpers */
+/* first t >= 0 where |p + t*d - c| == R, starting strictly outside. -1 = none */
+function rayCircleT(px, py, dx, dy, cx, cy, R) {
+  const mx = px - cx, my = py - cy;
+  const a = dx * dx + dy * dy;
+  if (a < EPS) return -1;
+  const b = 2 * (mx * dx + my * dy);
+  const c = mx * mx + my * my - R * R;
+  if (c < 0) return -1;               /* started inside: caller handles it   */
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return -1;
+  const s = Math.sqrt(disc);
+  const t = (-b - s) / (2 * a);
+  return t >= 0 ? t : -1;
+}
+
+function closestOnSeg(px, py, ax, ay, bx, by) {
+  const ex = bx - ax, ey = by - ay;
+  const l2 = ex * ex + ey * ey;
+  let u = l2 < EPS ? 0 : ((px - ax) * ex + (py - ay) * ey) / l2;
+  u = clamp(u, 0, 1);
+  return [ax + ex * u, ay + ey * u, u];
+}
+
+/* --------------------------------------------------- swept circle vs capsule
+   Circle of radius r at p moving by (dx,dy) against segment a..b thickened by
+   sr.  Returns {t, nx, ny, depth} or null.  depth > 0 means it was already
+   overlapping at t = 0 and must be pushed out.                            */
+function sweepCapsule(px, py, dx, dy, r, ax, ay, bx, by, sr) {
+  const R = r + sr;
+  /* ---- already touching? */
+  const cp = closestOnSeg(px, py, ax, ay, bx, by);
+  let nx = px - cp[0], ny = py - cp[1];
+  let d = Math.hypot(nx, ny);
+  if (d < R - 1e-4) {
+    if (d < 1e-5) {                       /* dead centre: use segment normal */
+      const ex = bx - ax, ey = by - ay, el = Math.hypot(ex, ey) || 1;
+      nx = -ey / el; ny = ex / el;
+    } else { nx /= d; ny /= d; }
+    return { t: 0, nx: nx, ny: ny, depth: R - d };
+  }
+  let best = Infinity, bnx = 0, bny = 0;
+  /* ---- flat face */
+  const ex = bx - ax, ey = by - ay, el = Math.hypot(ex, ey);
+  if (el > EPS) {
+    const ux = ex / el, uy = ey / el;
+    const lnx = -uy, lny = ux;                       /* line normal (either) */
+    const s0 = (px - ax) * lnx + (py - ay) * lny;
+    const sd = dx * lnx + dy * lny;
+    if (Math.abs(sd) > EPS) {
+      const sg = s0 >= 0 ? 1 : -1;
+      const t = (sg * R - s0) / sd;
+      if (t >= 0 && t <= 1) {
+        const hx = px + dx * t, hy = py + dy * t;
+        const u = ((hx - ax) * ux + (hy - ay) * uy) / el;
+        if (u >= 0 && u <= 1) { best = t; bnx = sg * lnx; bny = sg * lny; }
+      }
+    }
+  }
+  /* ---- round caps */
+  for (let i = 0; i < 2; i++) {
+    const qx = i ? bx : ax, qy = i ? by : ay;
+    const t = rayCircleT(px, py, dx, dy, qx, qy, R);
+    if (t >= 0 && t <= 1 && t < best) {
+      let hx = px + dx * t - qx, hy = py + dy * t - qy;
+      const hl = Math.hypot(hx, hy) || 1;
+      best = t; bnx = hx / hl; bny = hy / hl;
+    }
+  }
+  if (best === Infinity) return null;
+  return { t: best, nx: bnx, ny: bny, depth: 0 };
+}
+
+/* ------------------------------------------------------ swept circle vs arc
+   A curved wall, solid from both faces — the same way a segment is.  Which
+   side the ball is on is decided per query, not baked into the collider, so
+   a ball approaching the back of an orbit guide bounces off it instead of
+   being teleported through.                                              */
+function sweepArc(px, py, dx, dy, r, cx, cy, R, a0, a1) {
+  const mx = px - cx, my = py - cy;
+  const d0 = Math.hypot(mx, my);
+  const outside = d0 >= R;
+  const Rt = outside ? R + r : R - r;
+  if (Rt <= 0) return null;
+  const s = outside ? 1 : -1;
+  /* straddling the wall right now */
+  const pen = outside ? (d0 < Rt - 1e-4) : (d0 > Rt + 1e-4);
+  if (pen) {
+    const ang = Math.atan2(my, mx);
+    if (!angInArc(ang, a0, a1)) return null;
+    const ux = mx / (d0 || 1), uy = my / (d0 || 1);
+    return { t: 0, nx: s * ux, ny: s * uy, depth: Math.abs(Rt - d0) };
+  }
+  const a = dx * dx + dy * dy;
+  if (a < EPS) return null;
+  const b = 2 * (mx * dx + my * dy);
+  const c = mx * mx + my * my - Rt * Rt;
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return null;
+  const sq = Math.sqrt(disc);
+  const ts = [(-b - sq) / (2 * a), (-b + sq) / (2 * a)];
+  for (let i = 0; i < 2; i++) {
+    const t = ts[i];
+    if (t < 0 || t > 1) continue;
+    const hx = px + dx * t, hy = py + dy * t;
+    const ang = Math.atan2(hy - cy, hx - cx);
+    if (!angInArc(ang, a0, a1)) continue;
+    const nx = s * (hx - cx) / Rt, ny = s * (hy - cy) / Rt;
+    if (dx * nx + dy * ny > 0) continue;             /* leaving the surface */
+    return { t: t, nx: nx, ny: ny, depth: 0 };
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------- collider ctors
+   Every collider carries a material, an optional trigger callback, and an
+   AABB so the broadphase can skip it cheaply. */
+let _cid = 1;
+function colAABB(c) {
+  if (c.k === 'seg') {
+    const p = c.r + 24;
+    c.x0 = Math.min(c.ax, c.bx) - p; c.x1 = Math.max(c.ax, c.bx) + p;
+    c.y0 = Math.min(c.ay, c.by) - p; c.y1 = Math.max(c.ay, c.by) + p;
+  } else {
+    const p = c.cr + 24;
+    c.x0 = c.cx - p; c.x1 = c.cx + p; c.y0 = c.cy - p; c.y1 = c.cy + p;
+  }
+  return c;
+}
+function seg(ax, ay, bx, by, mat, o) {
+  return colAABB(Object.assign({ id: _cid++, k: 'seg', ax, ay, bx, by, r: 0, mat: mat || MAT.wall, live: true }, o));
+}
+function cir(cx, cy, cr, mat, o) {
+  return colAABB(Object.assign({ id: _cid++, k: 'cir', cx, cy, cr, mat: mat || MAT.post, live: true }, o));
+}
+function arc(cx, cy, cr, a0deg, a1deg, inner, mat, o) {
+  return colAABB(Object.assign({
+    id: _cid++, k: 'arc', cx, cy, cr, a0: rad(a0deg), a1: rad(a1deg),
+    inner: !!inner, mat: mat || MAT.wall, live: true
+  }, o));
+}
+/* chain of segments through a list of [x,y] points */
+function chain(pts, mat, o) {
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++)
+    out.push(seg(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], mat, o));
+  return out;
+}
+
+/* -------------------------------------------------------------------- ball */
+let _ballId = 1;
+function makeBall(x, y, vx, vy) {
+  return {
+    id: _ballId++, x, y, vx: vx || 0, vy: vy || 0,
+    r: BALL_R, mass: 1, bounce: 1, fric: 1, wobble: 0,
+    spin: 0, spinV: 0,
+    state: 'free',        /* free | lane | ramp | held | gone */
+    ramp: null, hold: null, holdT: 0,
+    trail: [], lastHit: 0, stuckT: 0, lastX: x, lastY: y,
+    inPlunger: false, launched: false, glow: 0
+  };
+}
+const BALL_R = 9.6;
+
+/* ------------------------------------------------------------ the response
+   Impulse against a (possibly moving) surface.  contactVel is the surface's
+   own velocity at the contact point — this is what makes a flipper transfer
+   angular momentum instead of behaving like a wall. */
+function respond(ball, nx, ny, mat, cvx, cvy, extraE) {
+  cvx = cvx || 0; cvy = cvy || 0;
+  const rvx = ball.vx - cvx, rvy = ball.vy - cvy;
+  const vn = rvx * nx + rvy * ny;
+  if (vn > 0) return 0;                              /* already separating */
+  let e = mat.e * ball.bounce * (extraE === undefined ? 1 : extraE);
+  const sp = -vn;
+  /* soft landing: kill restitution at low speed so balls settle and cradle */
+  if (sp < 70) e *= sp / 70;
+  if (sp < 12) e = 0;
+  const j = -(1 + e) * vn;
+  ball.vx += j * nx; ball.vy += j * ny;
+  /* coulomb-ish friction along the tangent, also spins the ball */
+  const tx = -ny, ty = nx;
+  const vt = rvx * tx + rvy * ty;
+  const mu = mat.f * ball.fric;
+  const jt = clamp(-vt, -mu * j, mu * j);
+  ball.vx += jt * tx; ball.vy += jt * ty;
+  ball.spinV += -jt * 0.06;
+  return sp;
+}
+
+/* ----------------------------------------------------------- the main sweep
+   `dyn` is a list of dynamic colliders that also expose vel(x,y). */
+function sweepAll(ball, dx, dy, statics, dyn) {
+  let best = null;
+  const r = ball.r;
+  const bx0 = Math.min(ball.x, ball.x + dx) - r, bx1 = Math.max(ball.x, ball.x + dx) + r;
+  const by0 = Math.min(ball.y, ball.y + dy) - r, by1 = Math.max(ball.y, ball.y + dy) + r;
+  for (let pass = 0; pass < 2; pass++) {
+    const list = pass ? dyn : statics;
+    if (!list) continue;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (!c.live) continue;
+      if (c.x1 < bx0 || c.x0 > bx1 || c.y1 < by0 || c.y0 > by1) continue;
+      let h = null;
+      if (c.k === 'seg')      h = sweepCapsule(ball.x, ball.y, dx, dy, r, c.ax, c.ay, c.bx, c.by, c.r);
+      else if (c.k === 'cir') h = sweepCapsule(ball.x, ball.y, dx, dy, r, c.cx, c.cy, c.cx, c.cy, c.cr);
+      else                    h = sweepArc(ball.x, ball.y, dx, dy, r, c.cx, c.cy, c.cr, c.a0, c.a1, c.inner);
+      if (!h) continue;
+      /* one-way gates: only solid when hit from the allowed side */
+      if (c.oneWay && (h.nx * c.oneWay[0] + h.ny * c.oneWay[1]) < 0.15) continue;
+      if (best === null || h.t < best.t - 1e-9 ||
+          (Math.abs(h.t - best.t) < 1e-9 && h.depth > best.depth)) { h.col = c; best = h; }
+    }
+  }
+  return best;
+}
+
+/* ------------------------------------------------------- integrate one ball
+   Called with a small fixed dt.  Velocity-scaled substepping on top of CCD:
+   belt and braces, because the flippers and creatures move too. */
+function stepBall(ball, dt, env, statics, dyn, onHit) {
+  const sp = Math.hypot(ball.vx, ball.vy);
+  let sub = Math.ceil((sp * dt) / (ball.r * 0.45));
+  sub = clamp(sub, 1, 24);
+  const h = dt / sub;
+  for (let s = 0; s < sub; s++) {
+    if (ball.state !== 'free') return;
+    /* table pitch + any level gravity modifier, plus nudge acceleration */
+    ball.vx += (env.gx + env.nudgeAx) * h;
+    ball.vy += (env.gy + env.nudgeAy) * h;
+    /* rolling friction: the long return lanes must visibly bleed speed */
+    const s2 = Math.hypot(ball.vx, ball.vy);
+    if (s2 > 0) {
+      const drag = (env.roll * ball.fric) * h;
+      const k = Math.max(0, 1 - drag / Math.max(s2, 1));
+      ball.vx *= k; ball.vy *= k;
+    }
+    let remain = 1;
+    let dx = ball.vx * h, dy = ball.vy * h;
+    for (let iter = 0; iter < 6 && remain > 1e-5; iter++) {
+      const hit = sweepAll(ball, dx * remain, dy * remain, statics, dyn);
+      if (!hit) { ball.x += dx * remain; ball.y += dy * remain; break; }
+      const t = clamp(hit.t, 0, 1);
+      ball.x += dx * remain * t; ball.y += dy * remain * t;
+      const c = hit.col;
+      /* de-penetrate */
+      if (hit.depth > 0) { ball.x += hit.nx * (hit.depth + 0.05); ball.y += hit.ny * (hit.depth + 0.05); }
+      /* wobbly balls do not present a clean contact normal */
+      let nx = hit.nx, ny = hit.ny;
+      if (ball.wobble > 0) {
+        const j = (rnd() - 0.5) * ball.wobble;
+        const cs = Math.cos(j), sn = Math.sin(j);
+        const tx = nx * cs - ny * sn; ny = nx * sn + ny * cs; nx = tx;
+      }
+      let cvx = 0, cvy = 0;
+      if (c.vel) { const v = c.vel(ball.x, ball.y); cvx = v[0]; cvy = v[1]; }
+      const speed = respond(ball, nx, ny, c.mat, cvx, cvy, c.eMul);
+      /* nudge the ball off the surface so the next sweep starts clean */
+      ball.x += nx * 0.03; ball.y += ny * 0.03;
+      if (onHit && speed > 0) onHit(ball, c, speed, nx, ny);
+      remain *= (1 - t);
+      dx = ball.vx * h; dy = ball.vy * h;
+      if (ball.state !== 'free') return;
+    }
+    /* hard speed cap keeps the CCD honest no matter what stacks up */
+    const sp2 = Math.hypot(ball.vx, ball.vy);
+    if (sp2 > MAX_SPEED) { const k = MAX_SPEED / sp2; ball.vx *= k; ball.vy *= k; }
+    ball.spin += ball.spinV * h;
+    ball.spinV *= (1 - 1.2 * h);
+  }
+}
+const MAX_SPEED = 2900;
+
+/* ==========================================================================
+   FLIPPER — a rotating rigid body, not a wall that teleports.
+   The contact point's distance from the pivot sets the kick, so a ball taken
+   at the tip leaves harder and flatter than one taken at the base.
+   ========================================================================== */
+class Flipper {
+  constructor(o) {
+    this.px = o.px; this.py = o.py;
+    this.baseLen = o.len; this.len = o.len;
+    this.rad = o.rad === undefined ? 6.2 : o.rad;
+    this.restA = rad(o.rest); this.upA = rad(o.up);
+    this.side = o.side;                       /* -1 = left button, 1 = right */
+    this.upper = !!o.upper;
+    this.ang = this.restA; this.omega = 0;
+    this.held = false; this.enabled = true;
+    this.powerMul = 1; this.lenMul = 1;
+    this.flashT = 0;
+    /* collider proxy handed to the sweep, refreshed every substep */
+    const self = this;
+    this.col = {
+      id: _cid++, k: 'seg', r: this.rad, mat: MAT.flipper, live: true, tag: 'flipper',
+      ax: 0, ay: 0, bx: 0, by: 0, x0: 0, x1: 0, y0: 0, y1: 0, owner: this,
+      vel: function (x, y) {
+        const rx = x - self.px, ry = y - self.py;
+        return [-self.omega * ry, self.omega * rx];
+      }
+    };
+    this.sync();
+  }
+  tipX() { return this.px + Math.cos(this.ang) * this.len; }
+  tipY() { return this.py + Math.sin(this.ang) * this.len; }
+  sync() {
+    const c = this.col;
+    c.ax = this.px; c.ay = this.py; c.bx = this.tipX(); c.by = this.tipY();
+    c.r = this.rad; c.live = true;
+    colAABB(c);
+  }
+  update(dt) {
+    this.len = this.baseLen * this.lenMul;
+    const want = (this.held && this.enabled) ? this.upA : this.restA;
+    const d = want - this.ang;
+    /* solenoid drives hard on the way up, spring returns lazily */
+    const goingUp = (want === this.upA);
+    const maxW = (goingUp ? 33 * this.powerMul : 15) * (this.upper ? 1.05 : 1);
+    const accel = goingUp ? 5200 * this.powerMul : 1400;
+    let desired = clamp(d * 90, -maxW, maxW);
+    const dw = clamp(desired - this.omega, -accel * dt, accel * dt);
+    this.omega += dw;
+    let na = this.ang + this.omega * dt;
+    if ((d > 0 && na > want) || (d < 0 && na < want)) { na = want; this.omega = 0; }
+    this.ang = na;
+    if (this.flashT > 0) this.flashT -= dt;
+    this.sync();
+  }
+  /* Push a ball that the swinging flipper has swept over.  The CCD above
+     handles the ball moving into the flipper; this handles the flipper
+     moving into the ball. */
+  resolveSwept(ball) {
+    if (ball.state !== 'free') return 0;
+    const c = this.col;
+    const cp = closestOnSeg(ball.x, ball.y, c.ax, c.ay, c.bx, c.by);
+    let nx = ball.x - cp[0], ny = ball.y - cp[1];
+    let d = Math.hypot(nx, ny);
+    const R = ball.r + this.rad;
+    if (d >= R) return 0;
+    if (d < 1e-5) { nx = 0; ny = -1; d = 1e-5; } else { nx /= d; ny /= d; }
+    ball.x += nx * (R - d + 0.05); ball.y += ny * (R - d + 0.05);
+    const v = c.vel(ball.x, ball.y);
+    return respond(ball, nx, ny, MAT.flipper, v[0], v[1]);
+  }
+}
+/* ==========================================================================
+   THE TABLE — "FATHOM"
+   A tall playfield, 424 x 960 table units, viewed through two panes.
+   All geometry is authored here in table space.
+   ========================================================================== */
+
+const TW = 424, TH = 960;
+const DRAIN_Y = 934;
+
+/* pitch: 6.5 degrees, real gravity scaled into table pixels (0.72 px/mm) */
+const BASE_G = 9810 * 0.72 * Math.sin(rad(6.5));   /* ~800 px/s^2 */
+const BASE_ROLL = 65;
+
+/* ------------------------------------------------------------- sensors ---
+   Triggers are kept out of the collision sweep: a ball either sits inside a
+   circle or crosses a line this tick.  Cheap and impossible to tunnel past. */
+function segCross(x0, y0, x1, y1, ax, ay, bx, by) {
+  const d1x = x1 - x0, d1y = y1 - y0, d2x = bx - ax, d2y = by - ay;
+  const den = d1x * d2y - d1y * d2x;
+  if (Math.abs(den) < 1e-9) return false;
+  const t = ((ax - x0) * d2y - (ay - y0) * d2x) / den;
+  const u = ((ax - x0) * d1y - (ay - y0) * d1x) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+/* --------------------------------------------------------------------------
+   buildTable() constructs every collider and every element record.
+   Called once; per-level changes mutate the returned structure.
+   -------------------------------------------------------------------------- */
+function buildTable() {
+  const S = [];                                  /* static colliders        */
+  const push = (...c) => { c.forEach(x => Array.isArray(x) ? S.push(...x) : S.push(x)); };
+  const T = {
+    S, dyn: [], sensors: [],
+    w: TW, h: TH
+  };
+
+  /* ---------------------------------------------------------- outer shell */
+  push(seg(14, 150, 14, 884, MAT.wall, { tag: 'wallL' }));
+  push(arc(110, 150, 96, 180, 270, true, MAT.wall, { tag: 'arcTL' }));
+  push(seg(110, 54, 301, 54, MAT.wall, { tag: 'wallT' }));
+  push(arc(314, 150, 96, 262, 360, true, MAT.wall, { tag: 'arcTR' }));
+  push(seg(410, 150, 410, 946, MAT.wall, { tag: 'wallR' }));
+  push(seg(380, 946, 410, 946, MAT.wall, { tag: 'laneFloor' }));
+  /* drain funnel */
+  push(seg(14, 884, 64, 946, MAT.wall, { tag: 'drainL' }));
+  push(seg(380, 884, 330, 946, MAT.wall, { tag: 'drainR' }));
+
+  /* ------------------------------------------------- plunger lane divider */
+  push(seg(380, 946, 380, 190, MAT.metal, { r: 2.5, tag: 'divider' }));
+  push(cir(380, 190, 4, MAT.post, { tag: 'divcap' }));
+  /* one-way gate: balls leave the lane, nothing comes back in */
+  push(seg(382, 186, 409, 172, MAT.metal, { r: 2, tag: 'owgate', oneWay: [-0.46, -0.89] }));
+
+  /* --------------------------------------------------- skill shot lanes --
+     Five dividers hang under the top wall.  A ball coming over the top skims
+     across them and drops into a lane; how far it gets is the skill shot.  */
+  const LANE_X = [326, 288, 250, 212, 174];
+  T.laneDiv = [];
+  LANE_X.forEach(x => { const c = seg(x, 86, x, 150, MAT.plastic, { r: 2.5, tag: 'lanediv' }); push(c); T.laneDiv.push(c); });
+  T.rollovers = [
+    { x: 193, y: 120, letter: 'D', lit: false, flash: 0 },
+    { x: 231, y: 120, letter: 'I', lit: false, flash: 0 },
+    { x: 269, y: 120, letter: 'V', lit: false, flash: 0 },
+    { x: 307, y: 120, letter: 'E', lit: false, flash: 0 }
+  ];
+  T.rollovers.forEach((ro, i) => T.sensors.push({
+    k: 'seg', ax: ro.x - 18, ay: ro.y, bx: ro.x + 18, by: ro.y, tag: 'rollover', idx: i, cool: 0.35
+  }));
+
+  /* ----------------------------------------------------------- orbit lanes
+     Both side lanes end in a quarter-turn chute: the outer wall curves too,
+     so a ball coming down an orbit is thrown across the playfield instead of
+     falling free into an outlane.  A weak orbit shot dribbles out of the
+     chute mouth and can still be lost — which is exactly the trade a real
+     orbit shot offers. */
+  push(arc(110, 150, 62, 180, 252, false, MAT.plastic, { tag: 'orbitTop' }));
+  /* left: inner guide, then the turn */
+  /* The turn stops 20 degrees short of horizontal so the exit still runs
+     downhill — a chute that flattens out is a chute balls park in. */
+  push(seg(48, 150, 48, 392, MAT.plastic, { r: 3, tag: 'orbitGuide' }));
+  push(arc(80, 392, 32, 110, 180, false, MAT.plastic, { tag: 'orbitGuide' }));
+  push(arc(80, 392, 66, 110, 180, true, MAT.wall, { tag: 'chuteL' }));
+  /* right: mirrored */
+  push(seg(346, 236, 346, 392, MAT.plastic, { r: 3, tag: 'orbitGuideR' }));
+  push(cir(346, 236, 4.5, MAT.post, { tag: 'orbitCapR' }));
+  push(arc(314, 392, 32, 0, 70, false, MAT.plastic, { tag: 'orbitGuideR' }));
+  push(arc(314, 392, 66, 0, 70, true, MAT.wall, { tag: 'chuteR' }));
+  /* outlane guides: the outlane mouth is the slot under each chute */
+  push(seg(46, 504, 43, 690, MAT.plastic, { r: 3, tag: 'outguideL' }));
+  push(seg(346, 504, 349, 690, MAT.plastic, { r: 3, tag: 'outguideR' }));
+  push(cir(46, 504, 5, MAT.post, { tag: 'post' }));
+  push(cir(346, 504, 5, MAT.post, { tag: 'post' }));
+  push(cir(62, 494, 5, MAT.post, { tag: 'post' }));
+  push(cir(330, 494, 5, MAT.post, { tag: 'post' }));
+  /* spinner sits in the lane */
+  T.spinner = { x: 31, y: 330, ang: 0, vel: 0, count: 0, lit: false, flash: 0 };
+  T.sensors.push({ k: 'seg', ax: 15, ay: 330, bx: 47, by: 330, tag: 'spinner', cool: 0.05 });
+  /* orbit passes: crossing the top of either side lane counts */
+  T.sensors.push({ k: 'seg', ax: 15, ay: 210, bx: 47, by: 210, tag: 'orbit', side: 'L', cool: 0.5 });
+  T.sensors.push({ k: 'seg', ax: 347, ay: 300, bx: 378, by: 300, tag: 'orbit', side: 'R', cool: 0.5 });
+
+  /* --------------------------------------------------------- lower guides */
+  /* left: outlane / inlane divider, then the ramp down to the flipper base */
+  push(chain([[43, 690], [62, 792], [122, 842]], MAT.plastic, { r: 3, tag: 'guideL' }));
+  push(chain([[349, 690], [330, 792], [270, 842]], MAT.plastic, { r: 3, tag: 'guideR' }));
+  push(cir(43, 690, 4.5, MAT.post, { tag: 'postL' }));
+  push(cir(349, 690, 4.5, MAT.post, { tag: 'postR' }));
+  push(seg(378, 700, 378, 884, MAT.wall, { tag: 'wallRlow' }));
+
+  /* ------------------------------------------------------------ slingshots */
+  function sling(ax, ay, bx, by, cx2, cy2, side) {
+    const face = seg(ax, ay, bx, by, MAT.rubber, { r: 3, tag: 'sling', side });
+    push(face);
+    push(seg(ax, ay, cx2, cy2, MAT.plastic, { r: 2, tag: 'slingback' }));
+    push(seg(cx2, cy2, bx, by, MAT.plastic, { r: 2, tag: 'slingback' }));
+    /* outward normal of the face, pointing away from the third vertex */
+    let nx = -(by - ay), ny = (bx - ax);
+    const L = Math.hypot(nx, ny); nx /= L; ny /= L;
+    if ((cx2 - ax) * nx + (cy2 - ay) * ny > 0) { nx = -nx; ny = -ny; }
+    const o = { face, nx, ny, flash: 0, side, cx: (ax + bx) / 2, cy: (ay + by) / 2, ax, ay, bx, by, tx: cx2, ty: cy2 };
+    face.slingRef = o;
+    return o;
+  }
+  T.slings = [
+    sling(93, 748, 139, 806, 93, 806, -1),
+    sling(299, 748, 253, 806, 299, 806, 1)
+  ];
+
+  /* -------------------------------------------------------------- flippers */
+  T.flipL = new Flipper({ px: 128, py: 846, len: 55, rad: 6.2, rest: 32, up: -32, side: -1 });
+  T.flipR = new Flipper({ px: 264, py: 846, len: 55, rad: 6.2, rest: 148, up: 212, side: 1 });
+  T.flipU = new Flipper({ px: 300, py: 452, len: 42, rad: 5.6, rest: 156, up: 206, side: 1, upper: true });
+  T.flippers = [T.flipL, T.flipR, T.flipU];
+  T.flippers.forEach(f => T.dyn.push(f.col));
+
+  /* ---------------------------------------------------------- pop bumpers */
+  T.bumpers = [
+    { x: 92, y: 300, r: 16, flash: 0, lit: true },
+    { x: 140, y: 266, r: 16, flash: 0, lit: true },
+    { x: 112, y: 358, r: 16, flash: 0, lit: true }
+  ];
+  T.bumpers.forEach((b, i) => {
+    const c = cir(b.x, b.y, b.r, MAT.bumper, { tag: 'bumper', idx: i });
+    b.col = c; push(c);
+  });
+
+  /* --------------------------------------------------------- drop targets */
+  T.drops = [];
+  {
+    const a = Math.atan2(668 - 600, 96 - 66);      /* bank runs up to the right */
+    const hx = Math.cos(a) * 9, hy = Math.sin(a) * 9;
+    for (let i = 0; i < 4; i++) {
+      const t = i / 3;
+      const x = lerp(68, 96, t), y = lerp(602, 666, t);
+      const c = seg(x - hx, y - hy, x + hx, y + hy, MAT.target, { r: 3, tag: 'drop', idx: i });
+      T.drops.push({ x, y, a, down: false, col: c, flash: 0 });
+      push(c);
+    }
+  }
+  push(cir(60, 590, 4, MAT.post, { tag: 'post' }));
+  push(cir(104, 678, 4, MAT.post, { tag: 'post' }));
+
+  /* ------------------------------------------------------- centre grid ---
+     Nine lit targets.  Knock them all out and the gate opens.             */
+  T.grid = [];
+  const GX = [186, 222, 258], GY = [298, 336, 374];
+  for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < 3; c2++) {
+    const x = GX[c2], y = GY[r];
+    const col = cir(x, y, 6.5, MAT.target, { tag: 'grid', idx: T.grid.length });
+    T.grid.push({ x, y, down: false, lit: true, flash: 0, col });
+    push(col);
+  }
+
+  /* --------------------------------------------------------------- gate ---
+     Two panels that slide apart, revealing the lock sockets behind.       */
+  T.gate = { open: 0, state: 'closed', t: 0, flash: 0 };
+  T.gatePanels = [];
+  for (let i = 0; i < 2; i++) {
+    const c = seg(0, 238, 0, 238, MAT.metal, { r: 4, tag: 'gate', idx: i });
+    T.gatePanels.push(c); push(c);
+  }
+  T.setGate = function (o) {
+    T.gate.open = o;
+    const l = T.gatePanels[0], r = T.gatePanels[1];
+    const slide = o * 64;
+    l.ax = 152 - slide; l.ay = 238; l.bx = 216 - slide; l.by = 238; colAABB(l);
+    r.ax = 216 + slide; r.ay = 238; r.bx = 280 + slide; r.by = 238; colAABB(r);
+  };
+  T.setGate(0);
+  /* posts that frame the gate mouth */
+  push(cir(146, 238, 5, MAT.post, { tag: 'post' }));
+  push(cir(286, 238, 5, MAT.post, { tag: 'post' }));
+
+  /* ------------------------------------------------------- lock sockets --- */
+  T.sockets = [
+    { x: 180, y: 190, r: 13, filled: false, ball: null, lit: 0, flash: 0 },
+    { x: 238, y: 190, r: 13, filled: false, ball: null, lit: 0, flash: 0 }
+  ];
+
+  /* ------------------------------------------------------------- saucer --- */
+  T.saucer = { x: 222, y: 566, r: 13, ball: null, timer: 0, lit: true, flash: 0, cool: 0, kickA: 108 };
+  push(arc(222, 566, 20, 110, 70, true, MAT.plastic, { tag: 'saucerLip' }));
+
+  /* ------------------------------------------------------------- kickback */
+  T.kickback = { x: 26, y: 876, charged: false, flash: 0, cool: 0 };
+  T.sensors.push({ k: 'cir', x: 26, y: 876, r: 15, tag: 'kickback', cool: 0.6 });
+  /* the standup that charges it */
+  {
+    const c = seg(52, 546, 68, 556, MAT.target, { r: 3, tag: 'kbtarget' });
+    T.kbTarget = { col: c, flash: 0, x: 60, y: 551 };
+    push(c);
+  }
+
+  /* --------------------------------------------------------------- ramps ---
+     A ramp is a scripted path.  Speed still matters: gravity fights you on
+     the climb and a weak shot rolls back out of the entrance.            */
+  T.ramps = [
+    {
+      /* up the right wall, round the turn at the top, then down the outer
+         wireform and into the right inlane */
+      name: 'CURRENT RAMP', short: 'RAMP',
+      entry: [264, 590, 330, 554],           /* crossing line               */
+      dirx: 0.34, diry: -0.94,               /* required travel direction   */
+      minV: 520, climb: 0.46,
+      path: [[300, 568], [310, 512], [320, 452], [328, 392], [332, 330], [334, 268],
+             [340, 224], [356, 204], [370, 222], [374, 300], [372, 400], [366, 500],
+             [358, 600], [350, 690]],
+      flash: 0, lit: false
+    },
+    {
+      /* the habitrail: up the middle corridor, over the top and all the way
+         across to feed the upper flipper */
+      name: 'HABITRAIL', short: 'RAIL',
+      entry: [136, 510, 180, 488],
+      dirx: 0.16, diry: -0.99,
+      minV: 560, climb: 0.52,
+      path: [[178, 488], [176, 430], [172, 368], [170, 306], [172, 248], [184, 202],
+             [212, 176], [248, 172], [278, 190], [292, 232], [296, 300], [294, 372],
+             [290, 420]],
+      flash: 0, lit: false
+    }
+  ];
+  T.ramps.forEach(r => {
+    let L = 0; r.seg = [];
+    for (let i = 0; i < r.path.length - 1; i++) {
+      const d = dist(r.path[i][0], r.path[i][1], r.path[i + 1][0], r.path[i + 1][1]);
+      r.seg.push({ d, at: L }); L += d;
+    }
+    r.len = L;
+    T.sensors.push({ k: 'seg', ax: r.entry[0], ay: r.entry[1], bx: r.entry[2], by: r.entry[3], tag: 'ramp', ref: r, cool: 0.25 });
+  });
+
+  /* ---------------------------------------------------- assorted rubber --- */
+  push(cir(212, 452, 6, MAT.post, { tag: 'post' }));
+  push(cir(268, 556, 5, MAT.post, { tag: 'post' }));
+  push(cir(176, 556, 5, MAT.post, { tag: 'post' }));
+  push(cir(60, 640, 5, MAT.post, { tag: 'post' }));
+  push(cir(334, 640, 5, MAT.post, { tag: 'post' }));
+  push(cir(300, 116, 5, MAT.post, { tag: 'post' }));
+
+  /* short guide walls that keep the upper flipper's feed honest */
+  push(seg(322, 470, 322, 540, MAT.plastic, { r: 2.5, tag: 'guideU' }));
+
+  /* --------------------------------------------------------------- misc --- */
+  T.plunger = { y: 0, power: 0, charging: false, released: 0, x: 396 };
+  T.lamps = [];
+  return T;
+}
+
+/* --------------------------------------------------- ramp path evaluation */
+function rampPoint(r, s) {
+  s = clamp(s, 0, r.len);
+  for (let i = 0; i < r.seg.length; i++) {
+    const sg = r.seg[i];
+    if (s <= sg.at + sg.d || i === r.seg.length - 1) {
+      const u = sg.d < EPS ? 0 : (s - sg.at) / sg.d;
+      const a = r.path[i], b = r.path[i + 1];
+      const x = lerp(a[0], b[0], u), y = lerp(a[1], b[1], u);
+      const dx = b[0] - a[0], dy = b[1] - a[1], dl = Math.hypot(dx, dy) || 1;
+      return [x, y, dx / dl, dy / dl];
+    }
+  }
+  return [r.path[0][0], r.path[0][1], 0, -1];
+}
+/* ==========================================================================
+   THE DESCENT — progression, scoring, modes, creatures, tilt.
+   ========================================================================== */
+
+/* ------------------------------------------------------------- the journey
+   Ten stations down the trench.  Each has its own palette, its own objective
+   and its own set of rule changes.  One new modifier per level early on,
+   combinations later. */
+const LEVELS = [
+  { name: 'SUNLIT SHALLOWS', depth: 40, sub: 'FATHOMS',
+    pal: ['#4fa3d1', '#2a5c8a', '#17324f', '#9be0f2'],
+    obj: { k: 'drops', n: 1, text: 'DROP THE BANK' }, mods: [] },
+  { name: 'KELP CATHEDRAL', depth: 120,
+    pal: ['#1c7a5e', '#0e3b2e', '#17324f', '#3fd18b'],
+    obj: { k: 'spins', n: 30, text: 'SPIN THE TURBINE' }, mods: ['drifter'] },
+  { name: 'THE THERMOCLINE', depth: 260,
+    pal: ['#2a5c8a', '#17324f', '#0b1a2b', '#4fa3d1'],
+    obj: { k: 'grid', n: 1, text: 'CLEAR THE GRID' }, mods: ['drifter', 'ballast'] },
+  { name: 'TWILIGHT DRIFT', depth: 480,
+    pal: ['#3a1030', '#17324f', '#0b1a2b', '#b06fd6'],
+    obj: { k: 'ramps', n: 5, text: 'RIDE THE CURRENT X5' }, mods: ['drifter', 'shortflip'] },
+  { name: 'THE BONEYARD', depth: 760,
+    pal: ['#5a4632', '#2b2118', '#0b1a2b', '#d9f26b'],
+    obj: { k: 'pops', n: 35, text: 'SCATTER THE SWARM' }, mods: ['drifter', 'shortflip', 'steep'] },
+  { name: 'MIDNIGHT ZONE', depth: 1200,
+    pal: ['#17324f', '#0b1a2b', '#000000', '#4fa3d1'],
+    obj: { k: 'mode', n: 1, text: 'RUN A SILENT MODE' }, mods: ['gulper', 'steep'] },
+  { name: 'BLACK SMOKERS', depth: 1900,
+    pal: ['#7d1f2e', '#3a1030', '#0b1a2b', '#e8873a'],
+    obj: { k: 'multiball', n: 1, text: 'LIGHT THE TWIN LANTERNS' }, mods: ['gulper', 'lowgrav', 'floater'] },
+  { name: 'THE TRENCH WALL', depth: 2800,
+    pal: ['#2b2118', '#17324f', '#000000', '#8a8f98' ],
+    obj: { k: 'orbits', n: 6, text: 'ROUND THE TRENCH X6' }, mods: ['drifter', 'lantern', 'reverse'] },
+  { name: 'SHELF OF EYES', depth: 4100,
+    pal: ['#3a1030', '#0b1a2b', '#000000', '#b06fd6'],
+    obj: { k: 'kills', n: 4, text: 'CULL THE WATCHERS' }, mods: ['drifter', 'gulper', 'lantern', 'weak'] },
+  { name: 'HADAL THRONE', depth: 6000,
+    pal: ['#0b1a2b', '#000000', '#000000', '#c8452f'],
+    obj: { k: 'super', n: 1, text: 'TAKE THE THRONE' },
+    mods: ['drifter', 'gulper', 'lantern', 'steep', 'wobble', 'cutout'] }
+];
+
+const MOD_INFO = {
+  drifter:   ['DRIFTERS', 'JELLY SWARM DEFLECTS THE BALL'],
+  gulper:    ['GULPER', 'IT SWALLOWS BALLS. SHOOT IT.'],
+  lantern:   ['LANTERN', 'A BLOCKER GUARDS THE LANES'],
+  ballast:   ['BALLAST CORE', 'HEAVY DEAD BALL'],
+  floater:   ['FLOAT CELL', 'LIGHT LIVELY BALL'],
+  wobble:    ['BARNACLED', 'THE BALL WONT ROLL TRUE'],
+  shortflip: ['CUT FLIPPERS', 'SHORTER FLIPPERS'],
+  weak:      ['LOW VOLTAGE', 'WEAK SOLENOIDS'],
+  reverse:   ['CROSSED WIRES', 'FLIPPER CONTROLS REVERSED'],
+  cutout:    ['BROWNOUT', 'A FLIPPER WILL CUT OUT'],
+  steep:     ['STEEP PITCH', 'THE TABLE DRAINS FAST'],
+  lowgrav:   ['SLACK WATER', 'LOW GRAVITY. LONG ARCS.']
+};
+
+const MODES = [
+  { id: 'current', name: 'CURRENT RUN', text: 'SHOOT THE RAMPS X3', time: 32, need: 3, val: 60000 },
+  { id: 'sonar',   name: 'SONAR SWEEP', text: 'HIT 6 GRID TARGETS',  time: 26, need: 6, val: 40000 },
+  { id: 'salvage', name: 'SALVAGE HAUL', name2: '', text: 'SPINNER AND ORBITS', time: 30, need: 45, val: 50000 }
+];
+
+/* ------------------------------------------------------------------ state */
+const G = {
+  mode: 'boot',            /* boot|attract|select|handoff|play|drained|bonus|levelup|gameover|hiscore */
+  t: 0, stateT: 0,
+  players: [], cur: 0, nPlayers: 1,
+  balls: [], T: null,
+  env: { gx: 0, gy: BASE_G, roll: BASE_ROLL, nudgeAx: 0, nudgeAy: 0 },
+  tilt: { bob: 0, warns: 0, dead: false, flash: 0 },
+  shake: { x: 0, y: 0, mag: 0 },
+  flash: 0, msgs: [], pops: [],
+  creatures: [], nextCreature: 0,
+  ballSaveT: 0, mbActive: false, jackpots: 0, jackpotLit: false, superLit: false,
+  mode2: null,             /* running timed mode */
+  hiscores: [
+    { n: 'VANCE', s: 4200000 }, { n: 'OKONKWO', s: 3100000 }, { n: 'REYES', s: 2400000 },
+    { n: 'LIN', s: 1600000 }, { n: 'ASH', s: 900000 }
+  ],
+  hiEntry: null, hiName: [0, 0, 0], hiPos: 0,
+  cutoutT: 0, cutoutWhich: 0, cutoutWarn: 0,
+  attractT: 0, seq: null
+};
+
+function newPlayer(i) {
+  return {
+    idx: i, score: 0, ball: 1, level: 0, done: false,
+    prog: { drops: 0, spins: 0, grid: 0, ramps: 0, pops: 0, mode: 0, multiball: 0, orbits: 0, kills: 0, super: 0 },
+    dive: [false, false, false, false], bonusX: 1, bonusBase: 0,
+    extraBalls: 0, gotExtra: false, locks: 0, deepest: 0
+  };
+}
+function P() { return G.players[G.cur]; }
+function LV() { return LEVELS[Math.min(P().level, LEVELS.length - 1)]; }
+
+/* --------------------------------------------------------------- messages */
+function say(text, sub, time) {
+  G.msgs.unshift({ text: text, sub: sub || '', t: time || 2.2, max: time || 2.2 });
+  if (G.msgs.length > 4) G.msgs.length = 4;
+}
+/* tiny in-game scheduler so delays pause with the game */
+const TIMERS = [];
+function later(t, fn) { TIMERS.push({ t, fn }); }
+function updateTimers(dt) {
+  for (let i = TIMERS.length - 1; i >= 0; i--) {
+    TIMERS[i].t -= dt;
+    if (TIMERS[i].t <= 0) { const f = TIMERS[i].fn; TIMERS.splice(i, 1); f(); }
+  }
+}
+function popup(x, y, text, col) {
+  G.pops.push({ x, y, text: String(text), t: 1.0, col: col || PAL.white });
+  if (G.pops.length > 26) G.pops.shift();
+}
+
+/* ----------------------------------------------------------------- scoring */
+function award(pts, x, y, label) {
+  const p = P();
+  if (!p) return;
+  const mult = 1 + p.level * 0.25;
+  const v = Math.round(pts * mult);
+  p.score += v;
+  p.bonusBase += Math.round(pts * 0.10);
+  if (x !== undefined) popup(x, y, fmt(v), label || PAL.amber);
+  if (p.score > 0 && !p.gotExtra && p.score >= 2500000) {
+    p.gotExtra = true; p.extraBalls++; say('EXTRA BALL', 'SCORE AWARD', 3); sfx('extra');
+  }
+}
+
+/* ================================================================ creatures
+   Real collision bodies on the upper playfield.  They obey exactly the same
+   sweep the walls do — the ball never passes through one. */
+function spawnCreature(type) {
+  const c = { type, hp: 3, t: rnd() * 6, dead: 0, flash: 0, state: 'idle', hold: 0, ball: null };
+  if (type === 'drifter') {
+    c.x = rndR(90, 300); c.y = rndR(180, 420); c.r = 13; c.hp = 3;
+    c.ox = c.x; c.oy = c.y; c.ax = rndR(50, 90); c.ay = rndR(24, 46);
+    c.sx = rndR(0.5, 0.9); c.sy = rndR(0.7, 1.3);
+  } else if (type === 'gulper') {
+    c.x = 240; c.y = 430; c.r = 17; c.hp = 5;
+    c.ox = 236; c.oy = 420; c.ax = 74; c.ay = 66; c.sx = 0.42; c.sy = 0.63;
+    c.mouth = 0;
+  } else { /* lantern: a bar that parks across a lane */
+    c.x = 222; c.y = 268; c.r = 6; c.hp = 6; c.half = 22;
+    c.ox = 222; c.oy = 268; c.ax = 70; c.ay = 10; c.sx = 0.33; c.sy = 0.9;
+  }
+  c.px = c.x; c.py = c.y; c.vx = 0; c.vy = 0;
+  const self = c;
+  if (type === 'lantern') {
+    c.col = seg(c.x - c.half, c.y, c.x + c.half, c.y, MAT.flesh, { r: 6, tag: 'creature', ref: c });
+  } else {
+    c.col = cir(c.x, c.y, c.r, MAT.flesh, { tag: 'creature', ref: c });
+  }
+  c.col.vel = function () { return [self.vx, self.vy]; };
+  G.creatures.push(c);
+  G.T.dyn.push(c.col);
+  return c;
+}
+function clearCreatures() {
+  G.creatures.forEach(c => { const i = G.T.dyn.indexOf(c.col); if (i >= 0) G.T.dyn.splice(i, 1); });
+  G.creatures.length = 0;
+}
+function updateCreatures(dt) {
+  for (let i = G.creatures.length - 1; i >= 0; i--) {
+    const c = G.creatures[i];
+    if (c.flash > 0) c.flash -= dt;
+    if (c.dead > 0) {
+      c.dead -= dt;
+      if (c.dead <= 0) {
+        const k = G.T.dyn.indexOf(c.col); if (k >= 0) G.T.dyn.splice(k, 1);
+        G.creatures.splice(i, 1);
+      }
+      continue;
+    }
+    c.t += dt;
+    c.px = c.x; c.py = c.y;
+    c.x = c.ox + Math.sin(c.t * c.sx) * c.ax;
+    c.y = c.oy + Math.sin(c.t * c.sy + 1.3) * c.ay;
+    c.vx = (c.x - c.px) / Math.max(dt, 1e-6);
+    c.vy = (c.y - c.py) / Math.max(dt, 1e-6);
+    if (c.type === 'gulper') {
+      c.mouth = (Math.sin(c.t * 1.7) + 1) * 0.5;
+      if (c.state === 'full') {
+        c.hold -= dt;
+        c.col.live = false;
+        if (c.hold <= 0) {
+          const b = c.ball; c.ball = null; c.state = 'idle'; c.col.live = true;
+          if (b) {
+            const doom = P().level >= 8 && rnd() < 0.30;
+            b.state = 'free';
+            b.x = c.x; b.y = c.y + (doom ? 26 : -24);
+            const a = doom ? rad(90) : rad(rndR(-140, -40));
+            const sp = doom ? 320 : rndR(420, 700);
+            b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+            sfx(doom ? 'gulpbad' : 'spit');
+            say(doom ? 'SWALLOWED' : 'SPAT OUT', '', 1.4);
+          }
+        }
+      }
+    }
+    if (c.type === 'lantern') {
+      c.col.ax = c.x - c.half; c.col.ay = c.y; c.col.bx = c.x + c.half; c.col.by = c.y;
+    } else { c.col.cx = c.x; c.col.cy = c.y; }
+    colAABB(c.col);
+  }
+}
+function hitCreature(c, b, speed) {
+  if (c.dead > 0) return;
+  if (c.type === 'gulper' && c.state === 'idle' && c.mouth > 0.55 && speed < 1400) {
+    c.state = 'full'; c.hold = 1.6; c.ball = b;
+    b.state = 'held'; b.hold = { k: 'gulper', ref: c };
+    sfx('gulp'); say('GULPER HAS IT', '', 1.4); shake(5);
+    return;
+  }
+  if (speed < 140) return;
+  c.hp--; c.flash = 0.22;
+  award(1500, c.x, c.y);
+  sfx('flesh');
+  if (c.hp <= 0) {
+    c.dead = 0.5; c.col.live = false;
+    P().prog.kills++;
+    award(12000, c.x, c.y, PAL.lime);
+    say('WATCHER DOWN', '', 1.5); shake(6); G.flash = Math.max(G.flash, 0.12);
+    sfx('kill'); checkObjective();
+  }
+}
+
+/* ============================================================ level set-up */
+function applyLevel() {
+  const p = P(), L = LV();
+  const m = L.mods;
+  const has = k => m.indexOf(k) >= 0;
+  /* gravity / pitch */
+  G.env.gy = BASE_G * (has('steep') ? 1.36 : has('lowgrav') ? 0.55 : 1);
+  G.env.roll = BASE_ROLL * (has('lowgrav') ? 0.7 : 1);
+  /* flippers */
+  const T = G.T;
+  const lenMul = has('shortflip') ? 0.74 : 1;
+  const powMul = has('weak') ? 0.62 : 1;
+  T.flipL.lenMul = T.flipR.lenMul = lenMul;
+  T.flipL.powerMul = T.flipR.powerMul = T.flipU.powerMul = powMul;
+  G.reverse = has('reverse');
+  G.cutoutOn = has('cutout');
+  /* ball properties */
+  G.ballKind = has('ballast') ? 'ballast' : has('floater') ? 'floater' : has('wobble') ? 'wobble' : 'std';
+  /* creatures */
+  clearCreatures();
+  if (has('drifter')) { spawnCreature('drifter'); if (p.level >= 7) spawnCreature('drifter'); }
+  if (has('gulper')) spawnCreature('gulper');
+  if (has('lantern')) spawnCreature('lantern');
+  G.modList = m.slice();
+}
+function styleBall(b) {
+  const k = G.ballKind;
+  b.mass = 1; b.bounce = 1; b.fric = 1; b.wobble = 0; b.r = BALL_R; b.kind = k;
+  if (k === 'ballast') { b.mass = 1.9; b.bounce = 0.74; b.fric = 1.45; b.r = BALL_R * 1.08; }
+  else if (k === 'floater') { b.mass = 0.58; b.bounce = 1.22; b.fric = 0.72; b.r = BALL_R * 0.9; }
+  else if (k === 'wobble') { b.mass = 1.15; b.bounce = 1.0; b.fric = 1.15; b.wobble = 0.42; b.r = BALL_R * 1.03; }
+  return b;
+}
+
+/* ------------------------------------------------------------- objectives */
+function checkObjective() {
+  if (G.seq) return;                    /* already descending */
+  const p = P(), L = LV();
+  const o = L.obj;
+  if (p.prog[o.k] >= o.n) advanceLevel();
+}
+/* The descent plays out in slow motion over the live table: the new station
+   and its hazards are shown first, and only take effect when the sequence
+   ends.  Every rule change is telegraphed before it bites. */
+function advanceLevel() {
+  const p = P();
+  p.deepest = Math.max(p.deepest, p.level);
+  award(50000 + p.level * 25000);
+  sfx('levelup'); shake(8); G.flash = 0.3;
+  p.level++;
+  if (p.level >= LEVELS.length) { p.level = LEVELS.length - 1; p.done = true; }
+  p.prog = { drops: 0, spins: 0, grid: 0, ramps: 0, pops: 0, mode: 0, multiball: 0, orbits: 0, kills: 0, super: 0 };
+  G.seq = { k: 'levelup', t: 0, dur: 4.4 };
+}
+function resetTableForLevel() {
+  const T = G.T;
+  T.drops.forEach(d => { d.down = false; d.col.live = true; });
+  T.grid.forEach(g => { g.down = false; g.lit = true; g.col.live = true; });
+  T.gate.state = 'closed'; T.setGate(0);
+  T.sockets.forEach(s => { if (s.ball) { s.ball.state = 'gone'; } s.filled = false; s.ball = null; s.lit = 0; });
+  P().locks = 0;
+  applyLevel();
+  G.balls.forEach(styleBall);
+}
+
+/* ================================================================ the loop */
+function physTick(dt) {
+  const T = G.T;
+  /* nudge acceleration decays fast */
+  G.env.nudgeAx *= Math.pow(0.0005, dt); G.env.nudgeAy *= Math.pow(0.0005, dt);
+
+  /* flipper solenoids */
+  const rev = G.reverse;
+  let wantL = rev ? key.right : key.left;
+  let wantR = rev ? key.left : key.right;
+  if (G.tilt.dead) { wantL = wantR = false; }
+  if (G.cutoutT > 0) { if (G.cutoutWhich === 0) wantL = false; else wantR = false; }
+  T.flipL.held = wantL; T.flipR.held = wantR; T.flipU.held = wantR;
+  T.flippers.forEach(f => f.update(dt));
+
+  updateCreatures(dt);
+  updateGate(dt);
+
+  for (let i = 0; i < G.balls.length; i++) {
+    const b = G.balls[i];
+    if (b.state === 'free') stepBall(b, dt, G.env, T.S, T.dyn, onHit);
+    else if (b.state === 'ramp') stepRamp(b, dt);
+  }
+  /* the flipper swinging into a resting ball */
+  for (const f of T.flippers) for (const b of G.balls) if (b.state === 'free') {
+    const sp = f.resolveSwept(b);
+    if (sp > 220) { sfx('fliphit', clamp(sp / 1600, 0.2, 1)); f.flashT = 0.09; }
+  }
+  ballVsBall();
+  checkSensors(dt);
+  drainCheck(dt);
+}
+
+function ballVsBall() {
+  for (let i = 0; i < G.balls.length; i++) for (let j = i + 1; j < G.balls.length; j++) {
+    const a = G.balls[i], b = G.balls[j];
+    if (a.state !== 'free' || b.state !== 'free') continue;
+    let dx = b.x - a.x, dy = b.y - a.y;
+    let d = Math.hypot(dx, dy);
+    const R = a.r + b.r;
+    if (d >= R || d < 1e-6) continue;
+    dx /= d; dy /= d;
+    const pen = R - d;
+    const ma = a.mass, mb = b.mass, mt = ma + mb;
+    a.x -= dx * pen * (mb / mt); a.y -= dy * pen * (mb / mt);
+    b.x += dx * pen * (ma / mt); b.y += dy * pen * (ma / mt);
+    const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+    const vn = rvx * dx + rvy * dy;
+    if (vn > 0) continue;
+    const e = 0.86;
+    const j2 = -(1 + e) * vn / (1 / ma + 1 / mb);
+    a.vx -= j2 * dx / ma; a.vy -= j2 * dy / ma;
+    b.vx += j2 * dx / mb; b.vy += j2 * dy / mb;
+    if (-vn > 120) sfx('clack', clamp(-vn / 900, 0.15, 0.8));
+  }
+}
+
+/* ---------------------------------------------------------- ramp travel ---
+   The ball leaves the collision world and rides a path.  Gravity still
+   fights the climb, so an under-powered shot rolls back out. */
+function enterRamp(b, r) {
+  const sp = Math.hypot(b.vx, b.vy);
+  b.state = 'ramp';
+  b.ramp = { r, s: 0, v: sp * 0.94 };
+  sfx('rampenter');
+  r.flash = 0.4;
+}
+function stepRamp(b, dt) {
+  const rp = b.ramp, r = rp.r;
+  const up = rp.s < r.len * r.climb;
+  rp.v += (up ? -820 : 520) * dt;
+  rp.v -= 40 * dt * Math.sign(rp.v || 1);
+  rp.s += rp.v * dt;
+  if (rp.s <= 0) {                                   /* rolled back out */
+    const p0 = rampPoint(r, 0);
+    b.state = 'free'; b.x = p0[0]; b.y = p0[1] + 12;
+    b.vx = -p0[2] * 120; b.vy = Math.abs(rp.v) * 0.6 + 90;
+    b.ramp = null; sfx('rampfail'); say('ROLLED BACK', '', 1.0);
+    return;
+  }
+  if (rp.s >= r.len) {
+    const pe = rampPoint(r, r.len);
+    b.state = 'free'; b.x = pe[0]; b.y = pe[1];
+    const v = clamp(rp.v, 260, 1000);
+    b.vx = pe[2] * v; b.vy = pe[3] * v;
+    b.ramp = null;
+    rampComplete(r);
+    return;
+  }
+  const p = rampPoint(r, rp.s);
+  b.x = p[0]; b.y = p[1];
+  b.vx = p[2] * rp.v; b.vy = p[3] * rp.v;
+  if (rnd() < dt * 26) sfx('ramproll', 0.25);
+}
+function rampComplete(r) {
+  const p = P();
+  p.prog.ramps++;
+  r.flash = 0.5;
+  award(8000, r.path[r.path.length - 1][0], r.path[r.path.length - 1][1], PAL.cyan);
+  say(r.name, 'COMPLETE', 1.2);
+  sfx('rampdone');
+  if (G.mbActive && G.jackpotLit) jackpot();
+  if (G.mode2 && G.mode2.id === 'current') { G.mode2.got++; modeProgress(); }
+  checkObjective();
+}
+
+/* ------------------------------------------------------------------ gate */
+function updateGate(dt) {
+  const T = G.T, g = T.gate;
+  if (g.flash > 0) g.flash -= dt;
+  if (g.state === 'opening') {
+    g.t += dt / 1.5;
+    T.setGate(clamp(easeOut(g.t), 0, 1));
+    if (g.t >= 1) { g.state = 'open'; sfx('gateopen2'); }
+    if (rnd() < dt * 22) sfx('gateclank', 0.5);
+  } else if (g.state === 'closing') {
+    g.t -= dt / 1.1;
+    T.setGate(clamp(easeOut(Math.max(g.t, 0)), 0, 1));
+    if (g.t <= 0) { g.state = 'closed'; T.setGate(0); sfx('gateshut'); }
+  }
+}
+const easeOut = t => 1 - Math.pow(1 - clamp(t, 0, 1), 2.2);
+function openGate() {
+  const T = G.T;
+  if (T.gate.state === 'open' || T.gate.state === 'opening') return;
+  T.gate.state = 'opening'; T.gate.t = 0; T.gate.flash = 1.2;
+  say('THE MOON POOL OPENS', 'LOCK IS LIT', 3);
+  sfx('gateopen'); shake(9); G.flash = 0.25;
+  T.sockets.forEach(s => s.lit = 1);
+}
+function closeGate() {
+  const T = G.T;
+  if (T.gate.state === 'closed' || T.gate.state === 'closing') return;
+  T.gate.state = 'closing'; T.gate.t = 1;
+  T.sockets.forEach(s => s.lit = 0);
+}
+
+/* ============================================================== collisions */
+function onHit(b, c, speed, nx, ny) {
+  const T = G.T, p = P();
+  const loud = clamp(speed / 1500, 0.05, 1);
+  switch (c.tag) {
+    case 'bumper': {
+      const bm = T.bumpers[c.idx];
+      bm.flash = 0.2;
+      const kick = 560 / b.mass;
+      const d = Math.hypot(b.x - bm.x, b.y - bm.y) || 1;
+      b.vx += ((b.x - bm.x) / d) * kick; b.vy += ((b.y - bm.y) / d) * kick;
+      p.prog.pops++;
+      award(500 + p.level * 60, bm.x, bm.y);
+      sfx('bumper'); shake(2.2); checkObjective();
+      break;
+    }
+    case 'sling': {
+      const s = c.slingRef;
+      s.flash = 0.18;
+      const kick = 620 / b.mass;
+      const jx = s.nx * kick + (rnd() - 0.5) * 90;
+      const jy = s.ny * kick + (rnd() - 0.5) * 60;
+      b.vx += jx; b.vy += jy;
+      award(250, s.cx, s.cy);
+      sfx('sling'); shake(2.6);
+      break;
+    }
+    case 'drop': {
+      const d = T.drops[c.idx];
+      if (d.down) break;
+      d.down = true; d.col.live = false; d.flash = 0.4;
+      award(1200, d.x, d.y, PAL.lime);
+      sfx('drop');
+      if (T.drops.every(x => x.down)) {
+        award(18000, 132, 524, PAL.lime);
+        say('BANK CLEARED', 'HATCH SEALED', 2);
+        sfx('bankdone'); shake(5); G.flash = 0.15;
+        p.prog.drops++;
+        later(0.9, () => { T.drops.forEach(x => { x.down = false; x.col.live = true; }); });
+        checkObjective();
+      }
+      break;
+    }
+    case 'grid': {
+      const g = T.grid[c.idx];
+      if (g.down) break;
+      g.down = true; g.lit = false; g.col.live = false; g.flash = 0.4;
+      award(2000 + (T.sockets[0].filled ? 3000 : 0), g.x, g.y, PAL.cyan);
+      sfx('grid');
+      if (G.superLit) superJackpot();
+      if (G.mode2 && G.mode2.id === 'sonar') { G.mode2.got++; modeProgress(); }
+      if (T.grid.every(x => x.down)) {
+        award(30000, 222, 336, PAL.lime);
+        p.prog.grid++;
+        openGate();
+        checkObjective();
+      }
+      break;
+    }
+    case 'kbtarget': {
+      T.kbTarget.flash = 0.4;
+      if (!T.kickback.charged) { T.kickback.charged = true; say('KICKBACK ARMED', '', 1.6); sfx('charge'); }
+      award(1500, T.kbTarget.x, T.kbTarget.y);
+      break;
+    }
+    case 'creature': hitCreature(c.ref, b, speed); break;
+    case 'gate': if (speed > 300) { G.T.gate.flash = 0.2; sfx('metal', loud); } break;
+    default:
+      if (speed > 220) sfx(c.mat.snd, loud);
+      break;
+  }
+  if (speed > 900) shake(clamp(speed / 700, 0, 5));
+  b.glow = Math.max(b.glow, clamp(speed / 1600, 0, 1));
+}
+
+/* ================================================================= sensors */
+function checkSensors(dt) {
+  const T = G.T;
+  for (const s of T.sensors) if (s.cd > 0) s.cd -= dt;
+  for (const b of G.balls) {
+    if (b.state !== 'free') { b.lastX = b.x; b.lastY = b.y; continue; }
+    for (const s of T.sensors) {
+      if (s.cd > 0) continue;
+      let hit = false;
+      if (s.k === 'cir') hit = dist2(b.x, b.y, s.x, s.y) < s.r * s.r;
+      else hit = segCross(b.lastX, b.lastY, b.x, b.y, s.ax, s.ay, s.bx, s.by);
+      if (!hit) continue;
+      s.cd = s.cool;
+      fireSensor(s, b);
+      if (b.state !== 'free') break;
+    }
+    /* holes are checked directly */
+    checkHoles(b);
+    b.lastX = b.x; b.lastY = b.y;
+  }
+}
+function fireSensor(s, b) {
+  const T = G.T, p = P();
+  if (s.tag === 'rollover') {
+    const ro = T.rollovers[s.idx];
+    ro.flash = 0.5;
+    if (!ro.lit) { ro.lit = true; p.dive[s.idx] = true; sfx('rollover'); }
+    else sfx('rolloverlit');
+    award(1500, ro.x, ro.y);
+    if (!b.launched) skillShot(s.idx, b);
+    if (T.rollovers.every(r => r.lit)) {
+      T.rollovers.forEach(r => { r.lit = false; r.flash = 0.8; });
+      p.dive = [false, false, false, false];
+      p.bonusX = Math.min(p.bonusX + 1, 10);
+      say('D-I-V-E COMPLETE', 'BONUS X' + p.bonusX, 2.4);
+      award(12000); sfx('divedone'); G.flash = 0.14;
+      if (p.bonusX >= 4 && !p.gotExtra) { p.gotExtra = true; p.extraBalls++; say('EXTRA BALL', 'LIT', 2.5); sfx('extra'); }
+    }
+  } else if (s.tag === 'spinner') {
+    const sp = Math.hypot(b.vx, b.vy);
+    const n = clamp(Math.round(sp / 90), 1, 26);
+    T.spinner.vel = Math.max(T.spinner.vel, sp * 0.05);
+    T.spinner.count += n;
+    p.prog.spins += n;
+    award(280 * n, 31, 330, PAL.lime);
+    if (G.mode2 && G.mode2.id === 'salvage') { G.mode2.got += n; modeProgress(); }
+    sfx('spin');
+    checkObjective();
+  } else if (s.tag === 'ramp') {
+    const v = Math.hypot(b.vx, b.vy);
+    const dot = (b.vx * s.ref.dirx + b.vy * s.ref.diry) / (v || 1);
+    if (v > s.ref.minV && dot > 0.45) enterRamp(b, s.ref);
+  } else if (s.tag === 'orbit') {
+    if (b.vy < -180) {
+      p.prog.orbits++;
+      award(6000, s.ax + 16, s.ay, PAL.cyan);
+      say('ORBIT', s.side === 'L' ? 'PORT LOOP' : 'STARBOARD LOOP', 1.2);
+      sfx('orbit');
+      checkObjective();
+    }
+  } else if (s.tag === 'kickback') {
+    if (T.kickback.charged && !G.tilt.dead) {
+      T.kickback.charged = false; T.kickback.flash = 0.5;
+      b.vy = -1380 / b.mass; b.vx = rndR(-40, 60);
+      b.y = 866;
+      say('KICKBACK', 'SAVED', 1.6); sfx('kickback'); shake(6);
+      award(5000, 26, 860, PAL.lime);
+    }
+  }
+}
+
+/* --------------------------------------------------- captive holes (saucer,
+   lock sockets) — these physically hold the ball. */
+function checkHoles(b) {
+  const T = G.T, p = P();
+  /* saucer */
+  const sa = T.saucer;
+  if (sa.cool > 0) sa.cool -= 1 / 480;
+  if (!sa.ball && sa.cool <= 0 && dist2(b.x, b.y, sa.x, sa.y) < sa.r * sa.r) {
+    sa.ball = b; b.state = 'held'; b.hold = { k: 'saucer' };
+    b.x = sa.x; b.y = sa.y; b.vx = b.vy = 0;
+    sa.timer = 1.3; sa.flash = 0.6;
+    sfx('saucer');
+    award(9000, sa.x, sa.y, PAL.lilac);
+    startMode();
+    return;
+  }
+  /* lock sockets: only live once the gate is open */
+  if (T.gate.state === 'open' || T.gate.state === 'opening') {
+    for (const s of T.sockets) {
+      if (s.filled) continue;
+      if (dist2(b.x, b.y, s.x, s.y) < s.r * s.r) {
+        s.filled = true; s.ball = b; b.state = 'held'; b.hold = { k: 'socket', ref: s };
+        b.x = s.x; b.y = s.y; b.vx = b.vy = 0;
+        s.flash = 1.0;
+        p.locks++;
+        award(25000, s.x, s.y, PAL.lime);
+        sfx('lock'); shake(6); G.flash = 0.18;
+        const other = T.sockets.find(o => o !== s);
+        if (!other.filled) { other.lit = 2; say('BALL LOCKED', 'SECOND SOCKET HOT', 2.4); }
+        else { say('BOTH LANTERNS LIT', '', 1.6); }
+        if (T.sockets.every(o => o.filled)) later(1.2, startMultiball);
+        return;
+      }
+    }
+  }
+}
+
+/* ------------------------------------------------------------- skill shot */
+function skillShot(idx, b) {
+  b.launched = true;
+  const want = G.skillLane;
+  if (idx === want) {
+    award(40000, 205, 118, PAL.lime);
+    say('SKILL SHOT', 'PERFECT', 2.2); sfx('skill'); G.flash = 0.2;
+  } else {
+    award(6000, 205, 118);
+    say('LANE ' + G.T.rollovers[idx].letter, '', 1.2);
+  }
+}
+
+/* --------------------------------------------------------------- multiball */
+function startMultiball() {
+  const T = G.T, p = P();
+  if (G.mbActive) return;
+  G.mbActive = true; G.jackpots = 0; G.jackpotLit = true; G.superLit = false;
+  G.ballSaveT = 7;
+  say('MULTIBALL', 'JACKPOTS LIT', 3.2);
+  sfx('multiball'); shake(12); G.flash = 0.4;
+  music('multiball');
+  p.prog.multiball++;
+  T.sockets.forEach((s, i) => {
+    const b = s.ball;
+    s.filled = false; s.ball = null; s.lit = 0;
+    if (b) {
+      b.state = 'free'; b.x = s.x + (i ? 10 : -10); b.y = s.y + 16;
+      b.vx = rndR(-180, 180); b.vy = 240;
+    }
+  });
+  closeGate();
+  G.T.grid.forEach(g => { g.down = false; g.lit = true; g.col.live = true; });
+  checkObjective();
+}
+function jackpot() {
+  if (!G.jackpotLit) return;
+  G.jackpots++;
+  award(60000 + G.jackpots * 15000, 222, 300, PAL.lime);
+  say('JACKPOT', 'X' + G.jackpots, 1.8);
+  sfx('jackpot'); shake(8); G.flash = 0.3;
+  if (G.jackpots >= 4 && !G.superLit) { G.superLit = true; say('SUPER JACKPOT', 'SHOOT THE GRID', 3); }
+}
+function superJackpot() {
+  if (!G.superLit) return;
+  G.superLit = false; G.jackpots = 0;
+  award(300000, 222, 300, PAL.white);
+  say('SUPER JACKPOT', '', 3);
+  sfx('super'); shake(16); G.flash = 0.6;
+  P().prog.super++;
+  checkObjective();
+}
+function endMultiball() {
+  if (!G.mbActive) return;
+  G.mbActive = false; G.jackpotLit = false; G.superLit = false;
+  music('main');
+}
+
+/* ------------------------------------------------------------ timed modes */
+function startMode() {
+  if (G.mode2) return;
+  const p = P();
+  const m = MODES[(p.level + p.ball) % MODES.length];
+  G.mode2 = { id: m.id, name: m.name, text: m.text, t: m.time, max: m.time, got: 0, need: m.need, val: m.val };
+  say(m.name, m.text, 3);
+  sfx('modestart'); G.flash = 0.2;
+}
+function modeProgress() {
+  const m = G.mode2;
+  if (!m) return;
+  award(m.val * 0.2, 222, 420, PAL.amber);
+  sfx('modehit');
+  if (m.got >= m.need) {
+    award(m.val, 222, 420, PAL.lime);
+    say(m.name, 'COMPLETE', 2.6); sfx('modedone'); shake(8); G.flash = 0.25;
+    P().prog.mode++;
+    G.mode2 = null;
+    checkObjective();
+  }
+}
+function updateMode(dt) {
+  if (!G.mode2) return;
+  G.mode2.t -= dt;
+  if (G.mode2.t <= 0) { say(G.mode2.name, 'TIMED OUT', 2); sfx('modefail'); G.mode2 = null; }
+}
+
+/* -------------------------------------------------------------- saucer kick */
+function updateHolds(dt) {
+  const T = G.T;
+  const sa = T.saucer;
+  if (sa.ball) {
+    sa.timer -= dt;
+    if (sa.timer <= 0) {
+      const b = sa.ball; sa.ball = null;
+      b.state = 'free';
+      const a = rad(sa.kickA);
+      b.x = sa.x + Math.cos(a) * 26; b.y = sa.y + Math.sin(a) * 26;
+      const sp = 620 / Math.sqrt(b.mass);
+      b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+      sa.cool = 0.7;
+      sfx('kickout'); shake(4);
+    }
+  }
+}
+
+/* ==================================================================== drain */
+function drainCheck(dt) {
+  for (let i = G.balls.length - 1; i >= 0; i--) {
+    const b = G.balls[i];
+    if (b.state === 'gone') { G.balls.splice(i, 1); continue; }
+    if (b.state !== 'free') continue;
+    if (b.y > DRAIN_Y && b.x < 378) {          /* the plunger lane is not a drain */
+      if (G.ballSaveT > 0 && !G.tilt.dead) {
+        b.x = 396; b.y = 900; b.vx = 0; b.vy = -1500;
+        say('BALL SAVED', '', 1.8); sfx('ballsave'); shake(4);
+        continue;
+      }
+      b.state = 'gone';
+      sfx('drain');
+      G.balls.splice(i, 1);
+      if (G.balls.length === 1 && G.mbActive) endMultiball();
+      if (G.balls.length === 0) ballDrained();
+    }
+    /* stuck-ball search: never let a ball die in a corner */
+    if (Math.hypot(b.vx, b.vy) < 48 && !onAnyFlipper(b)) {
+      b.stuckT += dt;
+      if (b.stuckT > 3.5) {
+        b.vx += rndR(-420, 420); b.vy -= rndR(220, 460);
+        b.stuckT = 0; sfx('search'); shake(3);
+        say('BALL SEARCH', '', 1.2);
+      }
+    } else b.stuckT = 0;
+  }
+}
+function onAnyFlipper(b) {
+  for (const f of G.T.flippers) {
+    const cp = closestOnSeg(b.x, b.y, f.col.ax, f.col.ay, f.col.bx, f.col.by);
+    if (dist2(b.x, b.y, cp[0], cp[1]) < Math.pow(b.r + f.rad + 3.5, 2)) return true;
+  }
+  return false;
+}
+
+function ballDrained() {
+  const p = P();
+  endMultiball();
+  G.mode2 = null;
+  closeGate();
+  G.T.sockets.forEach(s => { s.filled = false; s.ball = null; s.lit = 0; });
+  p.locks = 0;
+  G.mode = 'bonus'; G.stateT = 0;
+  G.bonusAnim = { step: 0, t: 0, base: p.bonusBase, x: p.bonusX, shown: 0, done: false };
+  music('off');
+  sfx('bonusstart');
+}
+
+/* ------------------------------------------------------------ ball / turn */
+function serveBall() {
+  G.balls.length = 0;
+  G.seq = null;
+  const b = styleBall(makeBall(396, 918, 0, 0));
+  b.inPlunger = true;
+  G.balls.push(b);
+  G.T.kickback.charged = false;
+  G.tilt.bob = 0; G.tilt.warns = 0; G.tilt.dead = false;
+  G.ballSaveT = 3.0;
+  G.skillLane = rndI(0, 3);
+  G.T.rollovers.forEach((r, i) => { r.lit = P().dive[i]; });
+  G.T.spinner.count = 0;
+  resetTableForLevel();
+  G.mode = 'play'; G.stateT = 0;
+  music('main');
+}
+function endBall() {
+  const p = P();
+  if (p.extraBalls > 0) {
+    p.extraBalls--;
+    say('SHOOT AGAIN', 'EXTRA BALL', 2.6);
+    serveBall();
+    return;
+  }
+  p.ball++;
+  p.bonusBase = 0; p.bonusX = 1;
+  /* find the next player still in the game */
+  let n = G.cur, guard = 0;
+  do { n = (n + 1) % G.nPlayers; guard++; } while (G.players[n].ball > 3 && guard <= G.nPlayers);
+  if (G.players.every(pl => pl.ball > 3)) { gameOver(); return; }
+  G.cur = n;
+  G.mode = 'handoff'; G.stateT = 0;
+  sfx('handoff');
+}
+function gameOver() {
+  G.mode = 'gameover'; G.stateT = 0;
+  music('off'); sfx('gameover');
+  const best = G.players.slice().sort((a, b) => b.score - a.score)[0];
+  const pos = G.hiscores.findIndex(h => best.score > h.s);
+  if (pos >= 0) { G.hiEntry = best; G.hiPos = pos; G.hiName = [0, 0, 0]; G.hiIdx = 0; }
+}
+
+/* ==================================================================== tilt */
+function nudge(dx, dy, power) {
+  if (G.mode !== 'play' || G.tilt.dead) return;
+  const p = power === undefined ? 1 : power;
+  for (const b of G.balls) {
+    if (b.state !== 'free') continue;
+    b.vx += dx * 168 * p; b.vy += dy * 168 * p;
+  }
+  G.env.nudgeAx += dx * 900 * p; G.env.nudgeAy += dy * 900 * p;
+  shake(5 * p, dx, dy);
+  G.tilt.bob += 0.36 * p;
+  sfx('nudge');
+  if (G.tilt.bob > 1) {
+    G.tilt.bob = 0.55;
+    G.tilt.warns++;
+    if (G.tilt.warns >= 3) {
+      G.tilt.dead = true; G.tilt.flash = 1.6;
+      say('T I L T', 'NO FLIPPERS', 3.5);
+      sfx('tilt'); shake(14);
+      music('off');
+    } else {
+      G.tilt.flash = 1.0;
+      say('TILT WARNING', G.tilt.warns + ' OF 3', 1.8);
+      sfx('tiltwarn');
+    }
+  }
+}
+function shake(m, dx, dy) {
+  G.shake.mag = Math.min(12, G.shake.mag + m);
+  if (dx !== undefined) { G.shake.x += dx * m * 0.6; G.shake.y += dy * m * 0.6; }
+}
+
+/* ------------------------------------------------------------- plunger --- */
+function updatePlunger(dt) {
+  const T = G.T, pl = T.plunger;
+  const b = G.balls[0];
+  const inLane = b && b.state === 'free' && b.x > 382 && b.y > 700 && !b.launched;
+  if (pl.charging) { pl.power = clamp(pl.power + dt / 1.15, 0, 1); }
+  if (pl.released > 0) {
+    pl.released -= dt;
+    if (pl.released <= 0) pl.power = 0;
+  }
+  if (inLane) { b.vx *= 0.9; }
+}
+function releasePlunger() {
+  const T = G.T, pl = T.plunger;
+  if (!pl.charging) return;
+  const b = G.balls.find(x => x.state === 'free' && x.x > 382 && !x.launched);
+  pl.charging = false;
+  pl.released = 0.28;
+  if (!b) { pl.power = 0; return; }
+  const v = (620 + 1980 * pl.power) / Math.sqrt(b.mass);
+  b.vy = -v; b.vx = rndR(-6, 6);
+  sfx('plunger', clamp(pl.power, 0.2, 1));
+  shake(2 + pl.power * 3);
+}
+/* ==========================================================================
+   RENDERING — split view, chunky pixels, dithered everything.
+   Backglass 0..96 | top pane 96..440 (scrolls) | divider | bottom pane 448..768
+   The bottom pane is welded to table rows 640..960 and never moves, so the
+   player can always see what they are defending.
+   ========================================================================== */
+const CW = 448, CH = 768;
+const BG_H = 96;
+const TOP_Y = 96, TOP_H = 344;
+const DIV_Y = TOP_Y + TOP_H, DIV_H = 8;
+const BOT_Y = DIV_Y + DIV_H, BOT_H = 320;
+const BOT_TABLE_Y = TH - BOT_H;                 /* 640 */
+const SCROLL_MAX = BOT_TABLE_Y - TOP_H;         /* 296 -> panes join seamlessly */
+const TX = 12;                                   /* table x -> canvas x offset */
+
+const view = { scroll: 0, target: 0 };
+
+/* ---------------------------------------------------------- glow sprites */
+const _glowCache = {};
+function glowSprite(r, color, strength) {
+  const key = r + '|' + color + '|' + (strength || 1);
+  if (_glowCache[key]) return _glowCache[key];
+  const s = document.createElement('canvas');
+  s.width = s.height = Math.ceil(r * 2) + 2;
+  const c = s.getContext('2d');
+  ditherGlow(c, s.width / 2, s.height / 2, r, color, strength || 1);
+  _glowCache[key] = s;
+  return s;
+}
+function glow(ctx, x, y, r, color, strength) {
+  const s = glowSprite(Math.round(r), color, strength);
+  ctx.drawImage(s, Math.round(x - s.width / 2), Math.round(y - s.height / 2));
+}
+
+/* ============================================================== backdrop ==
+   Painted once per level into an offscreen table-sized canvas. */
+let bgCanvas = null, bgLevel = -1;
+function paintBackdrop(level) {
+  const L = LEVELS[clamp(level, 0, LEVELS.length - 1)];
+  if (!bgCanvas) { bgCanvas = document.createElement('canvas'); bgCanvas.width = TW; bgCanvas.height = TH; }
+  const c = bgCanvas.getContext('2d');
+  c.fillStyle = PAL.ink; c.fillRect(0, 0, TW, TH);
+  seedRnd(1337 + level * 77);
+
+  /* --- water column: dithered bands, palette shifts with depth.  Kept dark
+     so the lit plastics and inserts on top of it have somewhere to shine. */
+  const a = L.pal[0], b = L.pal[1], d = L.pal[2];
+  ditherRectV(c, 0, 0, TW, 320, a, b, 0.30, 1);
+  ditherRectV(c, 0, 320, TW, 340, b, d, 0.10, 1);
+  c.fillStyle = d; c.fillRect(0, 660, TW, TH - 660);
+  ditherRectV(c, 0, 660, TW, 200, d, PAL.ink, 0.15, 0.95);
+  /* vignette the edges so the cabinet reads as a box, not a flat sheet */
+  c.fillStyle = PAL.ink;
+  for (let y = 0; y < TH; y++) for (let x = 0; x < TW; x++) {
+    const e = Math.min(x, TW - 1 - x, y * 3);
+    if (e > 26) { x = TW - 28; continue; }
+    if (BAYER[y & 3][x & 3] < (1 - e / 26) * 15) c.fillRect(x, y, 1, 1);
+  }
+
+  /* --- god rays near the surface for the shallow levels */
+  if (level <= 2) {
+    for (let i = 0; i < 7; i++) {
+      const x = rndR(20, TW - 20), w = rndR(8, 22);
+      c.fillStyle = L.pal[3];
+      for (let y = 0; y < 300; y++) {
+        const t = 1 - y / 300;
+        for (let k = 0; k < w; k++) {
+          const px = Math.round(x + k + y * 0.16);
+          if (px < 0 || px >= TW) continue;
+          if (BAYER[y & 3][px & 3] < t * 2.6) c.fillRect(px, y, 1, 1);
+        }
+      }
+    }
+  }
+  /* --- level decoration ------------------------------------------------- */
+  const dec = L.pal[3];
+  if (level === 1) {                                   /* kelp cathedral */
+    for (let i = 0; i < 16; i++) {
+      const x = rndR(10, TW - 10); let y = TH - 20;
+      const h = rndR(180, 460), sw = rndR(1.2, 2.4);
+      c.fillStyle = i % 3 ? PAL.deep : PAL.teal;
+      for (let k = 0; k < h; k++) {
+        const px = Math.round(x + Math.sin(k * 0.035 + i) * 14);
+        c.fillRect(px, y - k, Math.round(sw) + 1, 1);
+      }
+    }
+  } else if (level === 4) {                            /* the boneyard */
+    for (let i = 0; i < 5; i++) {
+      const x = rndR(30, TW - 30), y = rndR(120, 700), len = rndR(60, 150), ang = rndR(-0.6, 0.6);
+      c.fillStyle = PAL.sand;
+      for (let k = 0; k < len; k++) {
+        c.fillRect(Math.round(x + Math.cos(ang) * k), Math.round(y + Math.sin(ang) * k), 3, 3);
+        if (k % 14 === 0) c.fillRect(Math.round(x + Math.cos(ang) * k - Math.sin(ang) * 9),
+                                     Math.round(y + Math.sin(ang) * k + Math.cos(ang) * 9), 3, 12);
+      }
+    }
+  } else if (level === 6) {                            /* black smokers */
+    for (let i = 0; i < 6; i++) {
+      const x = rndR(20, TW - 20), y = rndR(200, 760);
+      c.fillStyle = PAL.maroon;
+      for (let k = 0; k < 60; k++) c.fillRect(Math.round(x - k * 0.12), y + k, Math.round(6 + k * 0.25), 1);
+      c.fillStyle = PAL.ochre;
+      for (let k = 0; k < 40; k++) if ((k & 1) === 0) c.fillRect(Math.round(x + rndR(-6, 6)), y - k, 2, 2);
+    }
+  } else if (level === 7) {                            /* trench wall */
+    c.fillStyle = PAL.bark;
+    for (let y = 0; y < TH; y += 4) {
+      const w = 30 + Math.sin(y * 0.02) * 16 + rndR(0, 10);
+      c.fillRect(0, y, w, 4);
+      c.fillRect(TW - w, y, w, 4);
+    }
+  } else if (level === 8) {                            /* shelf of eyes */
+    for (let i = 0; i < 26; i++) {
+      const x = rndR(20, TW - 20), y = rndR(80, 800), r = rndR(3, 7);
+      c.fillStyle = PAL.plum; c.beginPath(); c.arc(x, y, r + 2, 0, TAU); c.fill();
+      c.fillStyle = PAL.lilac; c.fillRect(Math.round(x - r / 2), Math.round(y - r / 2), Math.round(r), Math.round(r));
+    }
+  } else if (level === 9) {                            /* hadal throne */
+    c.fillStyle = PAL.maroon;
+    for (let i = 0; i < 40; i++) {
+      const x = rndR(0, TW), y = rndR(60, 900);
+      c.fillRect(Math.round(x), Math.round(y), 2, rndR(6, 20));
+    }
+  }
+  /* drifting motes everywhere */
+  for (let i = 0; i < 150; i++) {
+    const x = rndR(0, TW), y = rndR(40, TH - 20);
+    c.fillStyle = i % 5 ? L.pal[3] : PAL.white;
+    c.globalAlpha = 0.35; c.fillRect(Math.round(x), Math.round(y), 1, 1); c.globalAlpha = 1;
+  }
+
+  paintPlayfieldArt(c, L, level);
+  paintStaticGeometry(c);
+  bgLevel = level;
+}
+
+/* ------------ the artwork silkscreened onto the playfield itself --------- */
+function paintPlayfieldArt(c, L, level) {
+  const acc = L.pal[3];
+  /* the Kraken's Eye, staring up out of the middle of the table.  Painted
+     dark: it is under the plastics, and the lit targets must win. */
+  const ex = 222, ey = 336;
+  c.fillStyle = PAL.ink;
+  c.beginPath(); c.arc(ex, ey, 90, 0, TAU); c.fill();
+  ditherGlow(c, ex, ey, 88, acc, 0.22);
+  c.strokeStyle = acc; c.lineWidth = 2; c.globalAlpha = 0.55;
+  c.beginPath(); c.arc(ex, ey, 74, 0, TAU); c.stroke();
+  c.beginPath(); c.arc(ex, ey, 52, 0, TAU); c.stroke();
+  c.globalAlpha = 1;
+  c.fillStyle = PAL.ink;
+  c.beginPath(); c.ellipse(ex, ey, 17, 50, 0, 0, TAU); c.fill();   /* slit pupil */
+  c.strokeStyle = acc; c.globalAlpha = 0.7; c.lineWidth = 2;
+  c.beginPath(); c.ellipse(ex, ey, 17, 50, 0, 0, TAU); c.stroke();
+  c.globalAlpha = 1;
+  /* tentacles reaching down the lower playfield */
+  c.globalAlpha = 0.26;
+  for (let i = 0; i < 4; i++) {
+    const spread = (i - 2) * 0.42;
+    c.fillStyle = acc;
+    for (let k = 0; k < 300; k++) {
+      const t = k / 300;
+      const x = ex + Math.sin(t * 3.2 + i * 1.7) * (26 + i * 14) + spread * 150 * t;
+      const y = ey + 92 + k;
+      if (y > 862) break;
+      const w = Math.max(1, Math.round(4 - t * 3));
+      if ((k >> 4) % 3 !== 0) c.fillRect(Math.round(x), Math.round(y), w + 1, 2);
+    }
+  }
+  c.globalAlpha = 1;
+  /* the table's name, silkscreened across the apron */
+  drawTextC(c, 'FATHOM', 222, 902, 5, PAL.ink);
+  drawTextC(c, 'FATHOM', 221, 901, 5, acc);
+  drawTextC(c, 'DESCENT OF THE KRAKENS EYE', 222, 930, 1, PAL.gray);
+  /* zone lettering */
+  const label = (s, x, y, px, col) => { drawTextC(c, s, x + 1, y + 1, px, PAL.ink); drawTextC(c, s, x, y, px, col); };
+  label('SKILL LANES', 250, 70, 1, PAL.silver);
+  label('MOON POOL', 222, 214, 1, PAL.cyan);
+  label('THE EYE', 222, 404, 1, acc);
+  label('TURBINE', 31, 262, 1, PAL.lime);
+  label('SALVAGE', 82, 580, 1, PAL.lime);
+  /* inlane / outlane arrows */
+  c.fillStyle = PAL.sand;
+  for (const [x, y, s] of [[28, 740, 1], [70, 740, 1], [362, 740, 1], [320, 740, 1]]) {
+    for (let i = 0; i < 4; i++) {
+      const w = 9 - i * 2;
+      c.fillRect(Math.round(x - w / 2), y + i * 6, Math.round(w), 3);
+    }
+  }
+}
+
+/* -------------------------------- the fixed furniture: walls, lanes, rails */
+function paintStaticGeometry(c) {
+  const T = G.T;
+  /* lane floors: a slightly lighter wood tone so lanes read as lanes */
+  c.fillStyle = PAL.navy;
+  c.globalAlpha = 0.45;
+  c.fillRect(15, 150, 33, 410);            /* left orbit                */
+  c.fillRect(382, 190, 28, 750);           /* plunger lane              */
+  c.globalAlpha = 1;
+
+  /* every static collider gets a body and a 1px black outline */
+  for (const s of T.S) {
+    if (s.tag === 'gate' || s.tag === 'drop' || s.tag === 'grid' || s.tag === 'bumper') continue;
+    strokeCollider(c, s, colourFor(s), 1);
+  }
+  /* inlane / outlane arrows */
+  c.fillStyle = PAL.sand;
+  for (const [x, y] of [[26, 760], [366, 760]]) {
+    for (let i = 0; i < 3; i++) c.fillRect(x - 3, y + i * 12, 6, 3);
+  }
+}
+function colourFor(s) {
+  switch (s.mat) {
+    case MAT.rubber: case MAT.post: return PAL.red;
+    case MAT.metal: return PAL.gray;
+    case MAT.plastic: return PAL.sky;
+    case MAT.wire: return PAL.silver;
+    default: return PAL.blue;
+  }
+}
+/* every playfield edge: a fat black outline, the body, then a lit top edge */
+function strokeCollider(c, s, col, outline) {
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  if (s.k === 'seg') {
+    const w = Math.max(2, (s.r || 1) * 2);
+    if (outline) {
+      c.strokeStyle = PAL.ink; c.lineWidth = w + 3;
+      c.beginPath(); c.moveTo(s.ax, s.ay); c.lineTo(s.bx, s.by); c.stroke();
+    }
+    c.strokeStyle = col; c.lineWidth = w;
+    c.beginPath(); c.moveTo(s.ax, s.ay); c.lineTo(s.bx, s.by); c.stroke();
+    c.strokeStyle = PAL.white; c.lineWidth = 1; c.globalAlpha = 0.4;
+    c.beginPath(); c.moveTo(s.ax, s.ay - w / 2 + 0.5); c.lineTo(s.bx, s.by - w / 2 + 0.5); c.stroke();
+    c.globalAlpha = 1;
+  } else if (s.k === 'cir') {
+    if (outline) { c.fillStyle = PAL.ink; c.beginPath(); c.arc(s.cx, s.cy, s.cr + 1.5, 0, TAU); c.fill(); }
+    c.fillStyle = col; c.beginPath(); c.arc(s.cx, s.cy, s.cr, 0, TAU); c.fill();
+    c.fillStyle = PAL.maroon; c.beginPath(); c.arc(s.cx, s.cy, Math.max(1, s.cr - 2), 0, TAU); c.fill();
+    c.fillStyle = PAL.white; c.fillRect(Math.round(s.cx - s.cr * 0.5), Math.round(s.cy - s.cr * 0.7), 2, 2);
+  } else {
+    if (outline) {
+      c.strokeStyle = PAL.ink; c.lineWidth = 7;
+      c.beginPath(); c.arc(s.cx, s.cy, s.cr, s.a0, s.a1); c.stroke();
+    }
+    c.strokeStyle = col; c.lineWidth = 4;
+    c.beginPath(); c.arc(s.cx, s.cy, s.cr, s.a0, s.a1); c.stroke();
+    c.strokeStyle = PAL.white; c.lineWidth = 1; c.globalAlpha = 0.35;
+    c.beginPath(); c.arc(s.cx, s.cy, s.cr - 1.5, s.a0, s.a1); c.stroke();
+    c.globalAlpha = 1;
+  }
+}
+
+/* ======================================================= dynamic playfield
+   Drawn per pane, already translated into table space. */
+function drawPlayfield(c, t) {
+  const T = G.T, p = P();
+  const lit = (v) => v ? 1 : 0.25;
+
+  /* ---------- insert lamps under the plastics */
+  drawLamps(c, t);
+
+  /* ---------- ramps: wireform rails over the playfield */
+  for (const r of T.ramps) drawRamp(c, r, t);
+
+  /* ---------- drop target bank */
+  for (const d of T.drops) {
+    c.save(); c.translate(d.x, d.y); c.rotate(d.a);
+    if (d.down) {
+      c.fillStyle = PAL.ink; c.fillRect(-9, -2, 18, 4);
+      c.fillStyle = PAL.navy; c.fillRect(-9, -1, 18, 2);
+    } else {
+      c.fillStyle = PAL.ink; c.fillRect(-10, -6, 20, 12);
+      c.fillStyle = d.flash > 0 ? PAL.white : PAL.lime; c.fillRect(-9, -5, 18, 10);
+      c.fillStyle = PAL.ink; c.fillRect(-6, -2, 12, 4);
+      c.fillStyle = d.flash > 0 ? PAL.white : PAL.deep; c.fillRect(-5, -1, 10, 2);
+    }
+    c.restore();
+  }
+  /* charge target */
+  {
+    const k = T.kbTarget;
+    c.fillStyle = PAL.ink; c.fillRect(k.x - 9, k.y - 9, 18, 18);
+    c.fillStyle = T.kickback.charged ? PAL.lime : (k.flash > 0 ? PAL.white : PAL.ochre);
+    c.fillRect(k.x - 7, k.y - 7, 14, 14);
+    c.fillStyle = PAL.ink; c.fillRect(k.x - 3, k.y - 3, 6, 6);
+  }
+
+  /* ---------- centre grid */
+  for (const g of T.grid) {
+    if (g.down) {
+      c.fillStyle = PAL.ink; c.beginPath(); c.arc(g.x, g.y, 4, 0, TAU); c.fill();
+      c.fillStyle = PAL.navy; c.beginPath(); c.arc(g.x, g.y, 2.5, 0, TAU); c.fill();
+    } else {
+      const on = g.flash > 0;
+      glow(c, g.x, g.y, 11, on ? PAL.white : PAL.cyan, on ? 1 : 0.55);
+      c.fillStyle = PAL.ink; c.beginPath(); c.arc(g.x, g.y, 7.5, 0, TAU); c.fill();
+      c.fillStyle = on ? PAL.white : PAL.sky; c.beginPath(); c.arc(g.x, g.y, 6, 0, TAU); c.fill();
+      c.fillStyle = on ? PAL.white : PAL.cyan;
+      c.fillRect(g.x - 2, g.y - 5, 4, 10); c.fillRect(g.x - 5, g.y - 2, 10, 4);
+    }
+  }
+
+  /* ---------- gate */
+  drawGate(c, t);
+
+  /* ---------- lock sockets */
+  for (const s of T.sockets) {
+    const open = T.gate.state === 'open' || T.gate.state === 'opening';
+    c.fillStyle = PAL.ink; c.beginPath(); c.arc(s.x, s.y, s.r + 2, 0, TAU); c.fill();
+    c.fillStyle = open ? (s.lit >= 2 ? PAL.lime : PAL.teal) : PAL.navy;
+    c.beginPath(); c.arc(s.x, s.y, s.r, 0, TAU); c.fill();
+    c.fillStyle = PAL.ink; c.beginPath(); c.arc(s.x, s.y, s.r - 3.5, 0, TAU); c.fill();
+    if (open) {
+      const pulse = 0.55 + 0.45 * Math.sin(t * 7 + s.x);
+      glow(c, s.x, s.y, s.lit >= 2 ? 20 : 15, s.lit >= 2 ? PAL.lime : PAL.cyan, pulse);
+    }
+    if (s.filled) {
+      drawBallSprite(c, s.x, s.y, BALL_R, 0, 0);
+      glow(c, s.x, s.y, 18, PAL.lime, 0.8);
+    }
+  }
+
+  /* ---------- saucer */
+  {
+    const s = T.saucer;
+    c.fillStyle = PAL.ink; c.beginPath(); c.arc(s.x, s.y, s.r + 4, 0, TAU); c.fill();
+    c.fillStyle = PAL.purple; c.beginPath(); c.arc(s.x, s.y, s.r + 2, 0, TAU); c.fill();
+    c.fillStyle = PAL.plum; c.beginPath(); c.arc(s.x, s.y, s.r - 1, 0, TAU); c.fill();
+    const pulse = 0.5 + 0.5 * Math.sin(t * 5);
+    glow(c, s.x, s.y, 18, PAL.lilac, G.mode2 ? 0.3 : pulse);
+    drawTextC(c, 'DIVE', s.x, s.y + 20, 1, PAL.lilac);
+  }
+
+  /* ---------- pop bumpers */
+  for (const b of T.bumpers) {
+    const f = b.flash > 0;
+    glow(c, b.x, b.y, b.r + 12, f ? PAL.white : PAL.amber, f ? 1 : 0.35);
+    c.fillStyle = PAL.ink; c.beginPath(); c.arc(b.x, b.y, b.r + 1, 0, TAU); c.fill();
+    c.fillStyle = f ? PAL.white : PAL.ochre; c.beginPath(); c.arc(b.x, b.y, b.r, 0, TAU); c.fill();
+    c.fillStyle = PAL.ink; c.beginPath(); c.arc(b.x, b.y, b.r - 3, 0, TAU); c.fill();
+    c.fillStyle = f ? PAL.white : PAL.amber; c.beginPath(); c.arc(b.x, b.y, b.r - 5, 0, TAU); c.fill();
+    c.fillStyle = PAL.ink; c.beginPath(); c.arc(b.x, b.y, 3, 0, TAU); c.fill();
+    /* skirt spokes */
+    c.strokeStyle = PAL.ink; c.lineWidth = 1;
+    for (let i = 0; i < 6; i++) {
+      const a = i * TAU / 6 + t * 0.6;
+      c.beginPath(); c.moveTo(b.x + Math.cos(a) * 4, b.y + Math.sin(a) * 4);
+      c.lineTo(b.x + Math.cos(a) * (b.r - 4), b.y + Math.sin(a) * (b.r - 4)); c.stroke();
+    }
+  }
+
+  /* ---------- slingshots */
+  for (const s of T.slings) {
+    c.beginPath(); c.moveTo(s.ax, s.ay); c.lineTo(s.bx, s.by); c.lineTo(s.tx, s.ty); c.closePath();
+    c.fillStyle = PAL.ink; c.fill();
+    c.fillStyle = s.flash > 0 ? PAL.white : PAL.navy;
+    c.beginPath(); c.moveTo(s.ax + s.nx * -1, s.ay + s.ny * -1); c.lineTo(s.bx + s.nx * -1, s.by + s.ny * -1);
+    c.lineTo(s.tx, s.ty); c.closePath(); c.fill();
+    c.strokeStyle = PAL.ink; c.lineWidth = 8; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(s.ax, s.ay); c.lineTo(s.bx, s.by); c.stroke();
+    c.strokeStyle = s.flash > 0 ? PAL.white : PAL.red; c.lineWidth = 6;
+    c.beginPath(); c.moveTo(s.ax, s.ay); c.lineTo(s.bx, s.by); c.stroke();
+    if (s.flash > 0) glow(c, s.cx, s.cy, 18, PAL.white, 1);
+  }
+
+  /* ---------- spinner */
+  {
+    const sp = T.spinner;
+    c.fillStyle = PAL.ink; c.fillRect(16, sp.y - 15, 30, 30);
+    const w = Math.abs(Math.cos(sp.ang)) * 12 + 1;
+    c.fillStyle = PAL.silver; c.fillRect(31 - w, sp.y - 13, w * 2, 26);
+    c.fillStyle = PAL.ink; c.fillRect(30, sp.y - 13, 2, 26);
+    if (Math.abs(sp.vel) > 0.4) glow(c, 31, sp.y, 16, PAL.lime, clamp(Math.abs(sp.vel) / 8, 0, 1));
+    c.save(); c.translate(31, sp.y - 26); c.rotate(-Math.PI / 2);
+    drawTextC(c, 'SPIN', 0, -3, 1, PAL.lime); c.restore();
+  }
+
+  /* ---------- rollover lanes */
+  for (const ro of T.rollovers) {
+    const on = ro.lit || ro.flash > 0;
+    glow(c, ro.x, ro.y, 12, on ? PAL.lime : PAL.navy, on ? 0.9 : 0.3);
+    c.fillStyle = PAL.ink; c.fillRect(ro.x - 7, ro.y - 8, 14, 16);
+    c.fillStyle = on ? PAL.lime : PAL.blue; c.fillRect(ro.x - 6, ro.y - 7, 12, 14);
+    drawTextC(c, ro.letter, ro.x, ro.y - 4, 1.6, PAL.ink);
+  }
+
+  /* ---------- creatures */
+  for (const cr of G.creatures) drawCreature(c, cr, t);
+
+  /* ---------- flippers */
+  for (const f of T.flippers) drawFlipper(c, f);
+
+  /* ---------- plunger */
+  drawPlunger(c);
+
+  /* ---------- balls */
+  for (const b of G.balls) {
+    if (b.state === 'gone' || b.state === 'held' && b.hold && b.hold.k === 'gulper') continue;
+    drawBall(c, b);
+  }
+
+  /* ---------- score popups */
+  for (const q of G.pops) {
+    c.globalAlpha = clamp(q.t, 0, 1);
+    drawTextC(c, q.text, q.x, q.y - (1 - q.t) * 18, 1, q.col);
+    c.globalAlpha = 1;
+  }
+}
+
+/* ------------------------------------------------------------------ lamps */
+function drawLamps(c, t) {
+  const T = G.T, p = P();
+  const blink = (hz, ph) => (Math.sin(t * hz + (ph || 0)) > 0);
+  const L = [];
+  /* lane guide lamps that pulse with progress */
+  for (let i = 0; i < 4; i++) L.push([70 + i * 8, 690, p.dive[i] ? PAL.lime : PAL.navy, p.dive[i] ? 0.8 : 0.2]);
+  L.push([26, 820, T.kickback.charged ? PAL.lime : PAL.maroon, T.kickback.charged ? (blink(9) ? 1 : 0.3) : 0.25]);
+  L.push([366, 820, G.ballSaveT > 0 ? PAL.cyan : PAL.navy, G.ballSaveT > 0 ? (blink(7) ? 1 : 0.2) : 0.2]);
+  /* ramp lamps */
+  L.push([300, 588, T.ramps[0].lit || G.jackpotLit ? PAL.lime : PAL.navy, (T.ramps[0].lit || G.jackpotLit) ? (blink(6) ? 1 : 0.3) : 0.2]);
+  L.push([150, 494, T.ramps[1].lit || G.jackpotLit ? PAL.lime : PAL.navy, (T.ramps[1].lit || G.jackpotLit) ? (blink(6, 1) ? 1 : 0.3) : 0.2]);
+  /* gate lamp cluster */
+  const gateReady = T.grid.every(g => g.down);
+  for (let i = 0; i < 5; i++)
+    L.push([160 + i * 30, 258, gateReady ? PAL.lime : PAL.blue, gateReady ? (blink(10, i) ? 1 : 0.15) : 0.22]);
+  /* mode lamp */
+  L.push([340, 292, G.mode2 ? PAL.lilac : PAL.navy, G.mode2 ? (blink(8) ? 1 : 0.3) : 0.2]);
+  for (const l of L) glow(c, l[0], l[1], 7, l[2], l[3]);
+}
+
+/* ------------------------------------------------------------------- gate */
+function drawGate(c, t) {
+  const T = G.T;
+  /* housing */
+  c.fillStyle = PAL.ink; c.fillRect(140, 228, 152, 20);
+  c.fillStyle = PAL.bark; c.fillRect(142, 230, 148, 16);
+  ditherRectV(c, 142, 230, 148, 16, PAL.bark, PAL.sand, 0, 0.8);
+  /* the two sliding panels */
+  for (let i = 0; i < 2; i++) {
+    const g = T.gatePanels[i];
+    const x0 = Math.min(g.ax, g.bx), w = Math.abs(g.bx - g.ax);
+    c.fillStyle = PAL.ink; c.fillRect(x0 - 1, 230, w + 2, 17);
+    c.fillStyle = T.gate.flash > 0 ? PAL.white : PAL.gray; c.fillRect(x0, 231, w, 15);
+    c.fillStyle = PAL.ink;
+    for (let k = 4; k < w - 2; k += 8) c.fillRect(x0 + k, 233, 3, 11);
+    c.fillStyle = PAL.silver; c.fillRect(x0, 231, w, 2);
+  }
+  if (T.gate.state === 'open' || T.gate.state === 'opening') {
+    const o = T.gate.open;
+    c.fillStyle = PAL.ink; c.fillRect(152 + (1 - o) * 0, 232, 0, 0);
+    glow(c, 222, 238, 30 * o + 6, PAL.cyan, 0.5 + 0.3 * Math.sin(t * 6));
+  }
+}
+
+/* ------------------------------------------------------------------ ramps */
+function drawRamp(c, r, t) {
+  const lit = r.flash > 0 || G.jackpotLit;
+  c.lineCap = 'round';
+  /* rails */
+  for (const off of [-7, 7]) {
+    c.beginPath();
+    for (let i = 0; i < r.path.length; i++) {
+      const a = r.path[i], b = r.path[Math.min(i + 1, r.path.length - 1)];
+      let dx = b[0] - a[0], dy = b[1] - a[1]; const l = Math.hypot(dx, dy) || 1;
+      const nx = -dy / l * off, ny = dx / l * off;
+      if (i === 0) c.moveTo(a[0] + nx, a[1] + ny); else c.lineTo(a[0] + nx, a[1] + ny);
+    }
+    c.strokeStyle = PAL.ink; c.lineWidth = 4; c.stroke();
+    c.strokeStyle = lit ? PAL.white : PAL.silver; c.lineWidth = 2; c.stroke();
+  }
+  /* rungs */
+  c.strokeStyle = lit ? PAL.cyan : PAL.gray; c.lineWidth = 1;
+  for (let s = 0; s < r.len; s += 16) {
+    const p = rampPoint(r, s);
+    const nx = -p[3] * 7, ny = p[2] * 7;
+    c.beginPath(); c.moveTo(p[0] + nx, p[1] + ny); c.lineTo(p[0] - nx, p[1] - ny); c.stroke();
+  }
+  /* entrance mouth */
+  const e = r.entry;
+  c.strokeStyle = r.flash > 0 ? PAL.white : (G.jackpotLit ? PAL.lime : PAL.amber);
+  c.lineWidth = 3; c.beginPath(); c.moveTo(e[0], e[1]); c.lineTo(e[2], e[3]); c.stroke();
+  const mx = (e[0] + e[2]) / 2, my = (e[1] + e[3]) / 2;
+  if (G.jackpotLit) glow(c, mx, my, 16, PAL.lime, 0.6 + 0.4 * Math.sin(t * 9));
+  drawTextC(c, r.short, mx, my + 8, 1, PAL.amber);
+}
+
+/* --------------------------------------------------------------- creature */
+function drawCreature(c, cr, t) {
+  const f = cr.flash > 0;
+  const dying = cr.dead > 0;
+  c.save();
+  if (dying) c.globalAlpha = clamp(cr.dead * 2, 0, 1);
+  if (cr.type === 'drifter') {
+    glow(c, cr.x, cr.y, cr.r + 10, PAL.lilac, 0.45);
+    c.fillStyle = PAL.ink; c.beginPath(); c.arc(cr.x, cr.y, cr.r + 1, Math.PI, TAU); c.fill();
+    c.fillStyle = f ? PAL.white : PAL.purple;
+    c.beginPath(); c.arc(cr.x, cr.y, cr.r, Math.PI, TAU); c.fill();
+    c.fillRect(cr.x - cr.r, cr.y, cr.r * 2, 3);
+    c.fillStyle = f ? PAL.white : PAL.lilac;
+    for (let i = 0; i < 5; i++) {
+      const x = cr.x - cr.r + 3 + i * 5.5;
+      const w = Math.sin(t * 4 + i) * 3;
+      c.fillRect(Math.round(x), cr.y + 3, 2, 8 + Math.round(w) + 4);
+    }
+    c.fillStyle = PAL.cyan;
+    c.fillRect(cr.x - 5, cr.y - 7, 2, 2); c.fillRect(cr.x + 3, cr.y - 7, 2, 2);
+  } else if (cr.type === 'gulper') {
+    const m = cr.state === 'full' ? 0 : cr.mouth;
+    glow(c, cr.x, cr.y, cr.r + 14, PAL.ochre, 0.4 + m * 0.4);
+    c.fillStyle = PAL.ink; c.beginPath(); c.arc(cr.x, cr.y, cr.r + 1, 0, TAU); c.fill();
+    c.fillStyle = f ? PAL.white : PAL.bark; c.beginPath(); c.arc(cr.x, cr.y, cr.r, 0, TAU); c.fill();
+    /* jaw */
+    c.fillStyle = PAL.maroon;
+    c.beginPath(); c.moveTo(cr.x - cr.r, cr.y - 2);
+    c.lineTo(cr.x + cr.r * 0.4, cr.y - 2 - m * 9);
+    c.lineTo(cr.x + cr.r * 0.4, cr.y + 2 + m * 9); c.closePath(); c.fill();
+    c.fillStyle = PAL.white;
+    for (let i = 0; i < 4; i++) {
+      c.fillRect(Math.round(cr.x - cr.r + 3 + i * 6), Math.round(cr.y - 3 - m * 6), 2, 3);
+      c.fillRect(Math.round(cr.x - cr.r + 3 + i * 6), Math.round(cr.y + m * 6), 2, 3);
+    }
+    /* lure */
+    const lx = cr.x + Math.sin(t * 2) * 6, ly = cr.y - cr.r - 10;
+    c.strokeStyle = PAL.bark; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(cr.x, cr.y - cr.r); c.lineTo(lx, ly); c.stroke();
+    glow(c, lx, ly, 8, PAL.lime, 0.9);
+    c.fillStyle = PAL.lime; c.fillRect(Math.round(lx) - 1, Math.round(ly) - 1, 3, 3);
+    if (cr.state === 'full') { c.fillStyle = PAL.silver; c.beginPath(); c.arc(cr.x + 4, cr.y, 5, 0, TAU); c.fill(); }
+  } else {
+    glow(c, cr.x, cr.y, 26, PAL.sky, 0.4);
+    c.fillStyle = PAL.ink; c.fillRect(cr.x - cr.half - 2, cr.y - 8, cr.half * 2 + 4, 16);
+    c.fillStyle = f ? PAL.white : PAL.blue; c.fillRect(cr.x - cr.half, cr.y - 6, cr.half * 2, 12);
+    c.fillStyle = PAL.cyan;
+    for (let i = -1; i <= 1; i++) c.fillRect(cr.x + i * 12 - 2, cr.y - 3, 4, 6);
+    c.fillStyle = PAL.ink;
+    for (let i = -1; i <= 1; i++) c.fillRect(cr.x + i * 12 - 1, cr.y - 1, 2, 2);
+  }
+  /* health pips */
+  if (!dying) {
+    for (let i = 0; i < cr.hp; i++) {
+      c.fillStyle = PAL.red;
+      c.fillRect(Math.round(cr.x - cr.hp * 2 + i * 4), Math.round(cr.y - (cr.type === 'lantern' ? 14 : cr.r + 8)), 3, 2);
+    }
+  }
+  c.restore();
+}
+
+/* ---------------------------------------------------------------- flipper */
+function drawFlipper(c, f) {
+  const bx = f.px, by = f.py, tx = f.tipX(), ty = f.tipY();
+  const hot = f.flashT > 0;
+  c.lineCap = 'round';
+  c.strokeStyle = PAL.ink; c.lineWidth = f.rad * 2 + 3;
+  c.beginPath(); c.moveTo(bx, by); c.lineTo(tx, ty); c.stroke();
+  /* tapered body: two strokes */
+  c.strokeStyle = hot ? PAL.white : PAL.red; c.lineWidth = f.rad * 2;
+  c.beginPath(); c.moveTo(bx, by); c.lineTo(lerp(bx, tx, 0.55), lerp(by, ty, 0.55)); c.stroke();
+  c.lineWidth = f.rad * 1.55;
+  c.beginPath(); c.moveTo(lerp(bx, tx, 0.5), lerp(by, ty, 0.5)); c.lineTo(tx, ty); c.stroke();
+  /* rubber highlight */
+  c.strokeStyle = hot ? PAL.white : PAL.maroon; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(lerp(bx, tx, 0.15), lerp(by, ty, 0.15) - 2); c.lineTo(lerp(bx, tx, 0.9), lerp(by, ty, 0.9) - 1); c.stroke();
+  /* pivot */
+  c.fillStyle = PAL.ink; c.beginPath(); c.arc(bx, by, 5, 0, TAU); c.fill();
+  c.fillStyle = PAL.silver; c.beginPath(); c.arc(bx, by, 3, 0, TAU); c.fill();
+  if (!f.enabled || (G.cutoutT > 0 && ((G.cutoutWhich === 0 && f === G.T.flipL) || (G.cutoutWhich === 1 && f !== G.T.flipL)))) {
+    glow(c, (bx + tx) / 2, (by + ty) / 2, 16, PAL.red, 0.8);
+  }
+}
+
+/* ------------------------------------------------------------------- ball */
+function drawBallSprite(c, x, y, r, spin, glowAmt) {
+  c.fillStyle = PAL.ink; c.beginPath(); c.arc(x, y, r + 1, 0, TAU); c.fill();
+  c.fillStyle = PAL.gray; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+  /* dithered shading, light from the upper left */
+  c.fillStyle = PAL.silver;
+  for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) {
+    if (i * i + j * j > r * r) continue;
+    const t = clamp(1 - (i + r * 0.4 + (j + r * 0.4)) / (r * 2.2), 0, 1);
+    if (BAYER[(Math.round(y) + j) & 3][(Math.round(x) + i) & 3] < t * 16)
+      c.fillRect(Math.round(x + i), Math.round(y + j), 1, 1);
+  }
+  c.fillStyle = PAL.white;
+  c.fillRect(Math.round(x - r * 0.45), Math.round(y - r * 0.55), 2, 2);
+  /* spin mark so rolling reads */
+  const sx = x + Math.cos(spin) * r * 0.5, sy = y + Math.sin(spin) * r * 0.5;
+  c.fillStyle = PAL.navy; c.fillRect(Math.round(sx), Math.round(sy), 2, 2);
+}
+function drawBall(c, b) {
+  const sp = Math.hypot(b.vx, b.vy);
+  /* trail at speed */
+  if (sp > 700) {
+    for (let i = 0; i < b.trail.length; i++) {
+      const p = b.trail[i];
+      const a = (i / b.trail.length) * clamp((sp - 700) / 900, 0, 0.7);
+      c.globalAlpha = a;
+      c.fillStyle = b.kind === 'floater' ? PAL.cyan : PAL.sky;
+      c.beginPath(); c.arc(p[0], p[1], b.r * (0.35 + 0.5 * i / b.trail.length), 0, TAU); c.fill();
+    }
+    c.globalAlpha = 1;
+  }
+  drawBallSprite(c, b.x, b.y, b.r, b.spin, b.glow);
+  if (b.kind === 'ballast') {
+    c.fillStyle = PAL.bark;
+    c.fillRect(Math.round(b.x - 3), Math.round(b.y - 1), 6, 2);
+  } else if (b.kind === 'wobble') {
+    c.fillStyle = PAL.sand;
+    for (let i = 0; i < 5; i++) {
+      const a = b.spin + i * 1.257;
+      c.fillRect(Math.round(b.x + Math.cos(a) * b.r * 0.8) - 1, Math.round(b.y + Math.sin(a) * b.r * 0.8) - 1, 3, 3);
+    }
+  } else if (b.kind === 'floater') {
+    c.strokeStyle = PAL.cyan; c.lineWidth = 1;
+    c.beginPath(); c.arc(b.x, b.y, b.r + 2, 0, TAU); c.stroke();
+  }
+  if (b.glow > 0.15) glow(c, b.x, b.y, b.r + 8, PAL.white, b.glow * 0.7);
+}
+
+/* ---------------------------------------------------------------- plunger */
+function drawPlunger(c) {
+  const T = G.T, pl = T.plunger;
+  const pull = pl.power * 26;
+  const x = 396, y0 = 946;
+  c.fillStyle = PAL.ink; c.fillRect(x - 7, y0 - 4 + pull, 14, 18);
+  c.fillStyle = PAL.ochre; c.fillRect(x - 6, y0 - 3 + pull, 12, 16);
+  c.fillStyle = PAL.silver; c.fillRect(x - 2, y0 - 16 + pull, 4, 14);
+  /* power meter up the lane */
+  if (pl.power > 0.01) {
+    const h = 90 * pl.power;
+    c.fillStyle = PAL.ink; c.fillRect(384, 900 - 92, 6, 94);
+    for (let i = 0; i < h; i += 3) {
+      const t = i / 90;
+      c.fillStyle = t > 0.8 ? PAL.red : t > 0.5 ? PAL.amber : PAL.lime;
+      c.fillRect(385, 899 - i, 4, 2);
+    }
+  }
+}
+
+/* ============================================================== the frame */
+function render(ctx, t) {
+  const T = G.T, p = G.players[G.cur];
+  if (bgLevel !== (p ? p.level : 0)) paintBackdrop(p ? p.level : 0);
+
+  ctx.save();
+  const sx = Math.round(G.shake.x), sy = Math.round(G.shake.y);
+  ctx.translate(sx, sy);
+  ctx.fillStyle = PAL.ink; ctx.fillRect(-20, -20, CW + 40, CH + 40);
+
+  /* ---- panes */
+  drawPane(ctx, TOP_Y, TOP_H, view.scroll, t);
+  drawPane(ctx, BOT_Y, BOT_H, BOT_TABLE_Y, t);
+  drawDivider(ctx);
+  drawCabinet(ctx);
+  ctx.restore();
+
+  drawBackglass(ctx, t);
+  drawOverlays(ctx, t);
+
+  /* ---- global flash + scanlines */
+  if (G.flash > 0) {
+    ctx.globalAlpha = clamp(G.flash, 0, 0.85);
+    ctx.fillStyle = PAL.white; ctx.fillRect(0, 0, CW, CH);
+    ctx.globalAlpha = 1;
+  }
+  ctx.globalAlpha = 0.10; ctx.fillStyle = PAL.ink;
+  for (let y = 0; y < CH; y += 3) ctx.fillRect(0, y, CW, 1);
+  ctx.globalAlpha = 1;
+}
+
+function drawPane(ctx, py, ph, scroll, t) {
+  ctx.save();
+  ctx.beginPath(); ctx.rect(TX, py, TW, ph); ctx.clip();
+  ctx.drawImage(bgCanvas, 0, scroll, TW, ph, TX, py, TW, ph);
+  ctx.translate(TX, py - scroll);
+  drawPlayfield(ctx, t);
+  ctx.restore();
+  /* pane frame */
+  ctx.strokeStyle = PAL.ink; ctx.lineWidth = 2;
+  ctx.strokeRect(TX - 1, py - 1, TW + 2, ph + 2);
+}
+
+function drawDivider(ctx) {
+  ctx.fillStyle = PAL.ink; ctx.fillRect(0, DIV_Y, CW, DIV_H);
+  ctx.fillStyle = PAL.navy; ctx.fillRect(0, DIV_Y + 1, CW, DIV_H - 2);
+  ctx.fillStyle = PAL.blue; ctx.fillRect(0, DIV_Y + 1, CW, 1);
+  ctx.fillStyle = PAL.abyss; ctx.fillRect(0, DIV_Y + DIV_H - 2, CW, 1);
+  /* rivets */
+  ctx.fillStyle = PAL.gray;
+  for (let x = 8; x < CW; x += 24) ctx.fillRect(x, DIV_Y + 3, 2, 2);
+  /* depth marker: how far the top pane is scrolled */
+  const f = view.scroll / SCROLL_MAX;
+  ctx.fillStyle = PAL.sky;
+  ctx.fillRect(Math.round(lerp(6, CW - 26, f)), DIV_Y + 2, 20, 4);
+}
+
+function drawCabinet(ctx) {
+  ctx.fillStyle = PAL.abyss;
+  ctx.fillRect(0, TOP_Y, TX, CH - TOP_Y); ctx.fillRect(TX + TW, TOP_Y, CW - TX - TW, CH - TOP_Y);
+  ctx.fillStyle = PAL.navy;
+  for (let y = TOP_Y; y < CH; y += 8) { ctx.fillRect(2, y, 6, 4); ctx.fillRect(CW - 8, y, 6, 4); }
+}
+
+/* -------------------------------------------------------------- backglass */
+function drawBackglass(ctx, t) {
+  const p = G.players[G.cur];
+  ctx.fillStyle = PAL.ink; ctx.fillRect(0, 0, CW, BG_H);
+  ditherRectV(ctx, 0, 0, CW, BG_H, PAL.abyss, PAL.navy, 0, 0.5);
+  ctx.fillStyle = PAL.blue; ctx.fillRect(0, BG_H - 2, CW, 1);
+
+  if (!p || G.mode === 'attract') {
+    drawTextC(ctx, 'FATHOM', CW / 2, 10, 5, PAL.cyan);
+    drawTextC(ctx, 'DESCENT OF THE KRAKENS EYE', CW / 2, 46, 1, PAL.sky);
+    const hs = 'BEST  ' + fmt(G.hiscores[0].s) + '  ' + G.hiscores[0].n;
+    drawTextC(ctx, hs, CW / 2, 62, 1, PAL.amber);
+    drawTextC(ctx, Math.sin(G.t * 3) > 0 ? 'PRESS 1-4 FOR PLAYERS' : 'TEN STATIONS DOWN THE TRENCH',
+      CW / 2, 78, 1, PAL.lime);
+    ctx.globalAlpha = 0.22; ctx.fillStyle = PAL.ink;
+    for (let yy = 0; yy < BG_H; yy += 2) ctx.fillRect(0, yy, CW, 1);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  /* --- score, dot matrix style */
+  const s = fmt(p.score);
+  const px = s.length > 9 ? 2 : 3;
+  dmdText(ctx, s, CW - 8 - textWidth(s, px), 8, px, PAL.amber);
+  drawText(ctx, (p.idx + 1) + 'UP', 6, 8, 2, PAL.cyan);
+  drawText(ctx, 'BALL ' + Math.min(p.ball, 3), 6, 24, 1, PAL.silver);
+  if (G.nPlayers > 1) {
+    let x = 60;
+    for (const q of G.players) {
+      if (q === p) continue;
+      drawText(ctx, (q.idx + 1) + ':' + fmt(q.score), x, 24, 1, PAL.gray);
+      x += textWidth((q.idx + 1) + ':' + fmt(q.score), 1) + 8;
+    }
+  }
+
+  /* --- journey map */
+  const L = LEVELS[Math.min(p.level, LEVELS.length - 1)];
+  drawText(ctx, L.name, 6, 40, 1, PAL.lime);
+  const dtxt = L.depth + ' FM';
+  drawText(ctx, dtxt, CW - 6 - textWidth(dtxt, 1), 40, 1, PAL.sky);
+  const y = 56;
+  ctx.fillStyle = PAL.navy; ctx.fillRect(10, y + 2, CW - 20, 1);
+  for (let i = 0; i < LEVELS.length; i++) {
+    const x = 12 + i * ((CW - 26) / (LEVELS.length - 1));
+    const done = i < p.level, here = i === p.level;
+    ctx.fillStyle = PAL.ink; ctx.fillRect(Math.round(x) - 3, y - 1, 7, 7);
+    ctx.fillStyle = here ? (Math.sin(t * 9) > 0 ? PAL.white : PAL.lime) : done ? PAL.teal : PAL.blue;
+    ctx.fillRect(Math.round(x) - 2, y, 5, 5);
+    if (here) glow(ctx, x + 0.5, y + 2.5, 9, PAL.lime, 0.8);
+  }
+
+  /* --- objective / status line */
+  const o = L.obj;
+  let st = o.text, sub = '';
+  if (o.k !== 'super' && o.k !== 'multiball') sub = Math.min(p.prog[o.k], o.n) + '/' + o.n;
+  else sub = p.prog[o.k] + '/' + o.n;
+  drawText(ctx, st, 6, 70, 1, PAL.amber);
+  drawText(ctx, sub, CW - 6 - textWidth(sub, 1), 70, 1, PAL.amber);
+
+  /* --- flags row */
+  let fx = 6;
+  const flag = (txt, on, col) => {
+    ctx.fillStyle = on ? col : PAL.abyss;
+    ctx.fillRect(fx - 1, 81, textWidth(txt, 1) + 2, 9);
+    drawText(ctx, txt, fx, 82, 1, on ? PAL.ink : PAL.navy);
+    fx += textWidth(txt, 1) + 6;
+  };
+  flag('MB', G.mbActive, PAL.lime);
+  flag('X' + p.bonusX, p.bonusX > 1, PAL.cyan);
+  flag('LOCK' + p.locks, p.locks > 0, PAL.lime);
+  flag('SAVE', G.ballSaveT > 0, PAL.cyan);
+  flag('KB', G.T.kickback.charged, PAL.lime);
+  for (let i = 0; i < 4; i++) flag(G.T.rollovers[i].letter, p.dive[i], PAL.amber);
+  if (G.mode2) {
+    const txt = G.mode2.name + ' ' + Math.ceil(G.mode2.t);
+    drawText(ctx, txt, CW - 6 - textWidth(txt, 1), 82, 1, PAL.lilac);
+  } else if (G.tilt.warns > 0) {
+    const txt = 'TILT ' + G.tilt.warns + '/3';
+    drawText(ctx, txt, CW - 6 - textWidth(txt, 1), 82, 1, G.tilt.dead ? PAL.red : PAL.ochre);
+  }
+  /* DMD scanlines over the whole backglass */
+  ctx.globalAlpha = 0.22; ctx.fillStyle = PAL.ink;
+  for (let yy = 0; yy < BG_H; yy += 2) ctx.fillRect(0, yy, CW, 1);
+  ctx.globalAlpha = 1;
+}
+/* score digits with a lit-dot look */
+function dmdText(ctx, s, x, y, px, col) {
+  ctx.globalAlpha = 0.25; drawText(ctx, s, x, y, px, col); ctx.globalAlpha = 1;
+  ctx.save();
+  drawText(ctx, s, x, y, px, col);
+  ctx.restore();
+}
+
+/* --------------------------------------------------------------- overlays */
+function drawOverlays(ctx, t) {
+  /* messages float over the top pane */
+  let y = TOP_Y + 8;
+  for (const m of G.msgs) {
+    const a = clamp(m.t / 0.4, 0, 1);
+    ctx.globalAlpha = a;
+    const w = Math.max(textWidth(m.text, 2), textWidth(m.sub, 1)) + 14;
+    ctx.fillStyle = PAL.ink; ctx.fillRect(CW / 2 - w / 2, y - 3, w, m.sub ? 26 : 16);
+    ctx.strokeStyle = PAL.cyan; ctx.lineWidth = 1; ctx.strokeRect(CW / 2 - w / 2 + 0.5, y - 2.5, w - 1, (m.sub ? 26 : 16) - 1);
+    drawTextC(ctx, m.text, CW / 2, y + 1, 2, PAL.white);
+    if (m.sub) drawTextC(ctx, m.sub, CW / 2, y + 17, 1, PAL.cyan);
+    ctx.globalAlpha = 1;
+    y += (m.sub ? 30 : 20);
+  }
+  if (G.tilt.dead) {
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 12);
+    drawTextC(ctx, 'TILT', CW / 2, BOT_Y + 120, 6, PAL.red);
+    ctx.globalAlpha = 1;
+  }
+}
+/* ==========================================================================
+   AUDIO — Web Audio, chiptune only.  Square + triangle voices, a noise
+   channel for impacts.  Nothing is sampled; every sound is synthesised.
+   ========================================================================== */
+let AC = null, master = null, musicGain = null, sfxGain = null, noiseBuf = null;
+let audioReady = false;
+
+function initAudio() {
+  if (audioReady) return;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  AC = new Ctx();
+  master = AC.createGain(); master.gain.value = 0.55; master.connect(AC.destination);
+  musicGain = AC.createGain(); musicGain.gain.value = 0.30; musicGain.connect(master);
+  sfxGain = AC.createGain(); sfxGain.gain.value = 0.85; sfxGain.connect(master);
+  /* one second of white noise, reused for every impact */
+  noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  audioReady = true;
+  music('off');
+}
+
+/* one tone: type, start freq, end freq, duration, gain, optional detune */
+function tone(type, f0, f1, dur, g, when, dest) {
+  if (!audioReady) return;
+  const t0 = (when || AC.currentTime);
+  const o = AC.createOscillator();
+  const gn = AC.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(Math.max(20, f0), t0);
+  if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+  gn.gain.setValueAtTime(0.0001, t0);
+  gn.gain.exponentialRampToValueAtTime(Math.max(0.0002, g), t0 + Math.min(0.012, dur * 0.3));
+  gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(gn); gn.connect(dest || sfxGain);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+/* noise burst through a bandpass: every impact in the game */
+function noise(dur, g, freq, q, when, type) {
+  if (!audioReady) return;
+  const t0 = (when || AC.currentTime);
+  const src = AC.createBufferSource(); src.buffer = noiseBuf;
+  src.loop = true;
+  const bp = AC.createBiquadFilter();
+  bp.type = type || 'bandpass'; bp.frequency.setValueAtTime(freq, t0); bp.Q.value = q || 1;
+  const gn = AC.createGain();
+  gn.gain.setValueAtTime(g, t0);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(bp); bp.connect(gn); gn.connect(sfxGain);
+  src.start(t0); src.stop(t0 + dur + 0.02);
+}
+
+let lastSfx = {};
+function sfx(name, v) {
+  if (!audioReady) return;
+  v = v === undefined ? 1 : clamp(v, 0.05, 1);
+  const now = AC.currentTime;
+  /* rate-limit the chattier voices so a rattle does not become a buzz */
+  const gate = { wall: 0.03, plastic: 0.03, metal: 0.03, rubber: 0.03, post: 0.03, wire: 0.04, target: 0.03, fliphit: 0.04, clack: 0.03, spin: 0.02 };
+  if (gate[name] !== undefined) { if (now - (lastSfx[name] || 0) < gate[name]) return; lastSfx[name] = now; }
+  switch (name) {
+    /* --- surfaces, each with its own voice */
+    case 'wall':    noise(0.05, 0.16 * v, 900, 1.4); tone('triangle', 180, 90, 0.05, 0.06 * v); break;
+    case 'plastic': noise(0.04, 0.16 * v, 2200, 2);  tone('square', 520, 300, 0.03, 0.04 * v); break;
+    case 'metal':   noise(0.09, 0.13 * v, 4200, 6);  tone('triangle', 1500, 900, 0.08, 0.05 * v); break;
+    case 'wire':    noise(0.05, 0.09 * v, 3200, 8); break;
+    case 'rubber':  tone('triangle', 300, 120, 0.08, 0.16 * v); noise(0.03, 0.08 * v, 700, 1); break;
+    case 'post':    tone('triangle', 420, 150, 0.07, 0.16 * v); noise(0.03, 0.09 * v, 900, 1); break;
+    case 'target':  tone('square', 700, 500, 0.05, 0.10 * v); noise(0.04, 0.10 * v, 1800, 3); break;
+    case 'flesh':   tone('sine', 150, 60, 0.14, 0.16 * v); noise(0.10, 0.09 * v, 400, 0.7); break;
+    case 'fliphit': tone('square', 240, 150, 0.05, 0.09 * v); noise(0.035, 0.10 * v, 1300, 1.5); break;
+    case 'clack':   noise(0.045, 0.16 * v, 3000, 5); tone('triangle', 900, 600, 0.04, 0.06 * v); break;
+    /* --- mechanisms */
+    case 'flip':    noise(0.05, 0.20, 480, 1.2); tone('square', 110, 70, 0.06, 0.10); break;
+    case 'bumper':  tone('square', 880, 220, 0.13, 0.20); noise(0.07, 0.16, 1500, 2); break;
+    case 'sling':   tone('square', 660, 180, 0.10, 0.18); noise(0.05, 0.18, 2400, 2); break;
+    case 'drop':    tone('square', 1200, 800, 0.07, 0.16); noise(0.05, 0.14, 2600, 4); break;
+    case 'grid':    tone('square', 1500, 1100, 0.06, 0.14); tone('square', 2200, 1600, 0.05, 0.07); break;
+    case 'spin':    tone('square', 1400 + rnd() * 500, 900, 0.028, 0.10); break;
+    case 'orbit':   for (let i = 0; i < 4; i++) tone('square', 500 + i * 220, 0, 0.05, 0.10, AC.currentTime + i * 0.045); break;
+    case 'rollover':tone('square', 1000, 1600, 0.07, 0.14); break;
+    case 'rolloverlit': tone('square', 700, 900, 0.05, 0.08); break;
+    case 'ramproll':noise(0.09, 0.05 * v, 700, 0.8); break;
+    case 'rampenter': tone('triangle', 300, 900, 0.20, 0.13); break;
+    case 'rampdone': for (let i = 0; i < 5; i++) tone('square', 440 * Math.pow(1.26, i), 0, 0.07, 0.12, AC.currentTime + i * 0.05); break;
+    case 'rampfail':tone('square', 500, 140, 0.28, 0.13); break;
+    case 'plunger': noise(0.16, 0.22 * v, 300 + 600 * v, 1); tone('triangle', 90 + 120 * v, 50, 0.18, 0.16 * v); break;
+    case 'saucer':  tone('triangle', 700, 200, 0.24, 0.18); noise(0.14, 0.10, 600, 1); break;
+    case 'kickout': noise(0.10, 0.26, 500, 1); tone('square', 160, 90, 0.12, 0.16); break;
+    case 'kickback':noise(0.14, 0.30, 420, 1); tone('square', 200, 1000, 0.16, 0.18); break;
+    case 'charge':  for (let i = 0; i < 3; i++) tone('square', 500 + i * 300, 0, 0.06, 0.12, AC.currentTime + i * 0.06); break;
+    case 'search':  for (let i = 0; i < 3; i++) tone('triangle', 200, 400, 0.12, 0.10, AC.currentTime + i * 0.14); break;
+    /* --- events */
+    case 'lock':    for (let i = 0; i < 6; i++) tone('square', 300 + i * 160, 0, 0.10, 0.14, AC.currentTime + i * 0.055);
+                    noise(0.3, 0.14, 500, 1); break;
+    case 'gateopen': {
+      for (let i = 0; i < 14; i++) tone('square', 120 + i * 55, 0, 0.09, 0.10, AC.currentTime + i * 0.07);
+      noise(0.9, 0.16, 260, 0.6);
+      tone('triangle', 60, 40, 1.0, 0.20);
+      break;
+    }
+    case 'gateclank': noise(0.06, 0.09 * v, 1800, 4); break;
+    case 'gateopen2': tone('triangle', 900, 300, 0.5, 0.16); noise(0.3, 0.12, 700, 1); break;
+    case 'gateshut': noise(0.24, 0.18, 320, 0.8); tone('triangle', 200, 70, 0.26, 0.16); break;
+    case 'jackpot': for (let i = 0; i < 8; i++) tone('square', 660 * Math.pow(1.12, i), 0, 0.09, 0.15, AC.currentTime + i * 0.045); break;
+    case 'super':   for (let i = 0; i < 16; i++) tone('square', 440 * Math.pow(1.09, i), 0, 0.11, 0.15, AC.currentTime + i * 0.05);
+                    noise(0.6, 0.14, 1800, 1); break;
+    case 'multiball': for (let i = 0; i < 12; i++) {
+                      tone('square', 220 * Math.pow(1.15, i), 0, 0.13, 0.16, AC.currentTime + i * 0.07);
+                      tone('triangle', 110 * Math.pow(1.15, i), 0, 0.13, 0.14, AC.currentTime + i * 0.07); }
+                    break;
+    case 'skill':   for (let i = 0; i < 7; i++) tone('square', 880 * Math.pow(1.2, i % 4), 0, 0.09, 0.15, AC.currentTime + i * 0.06); break;
+    case 'divedone':for (let i = 0; i < 4; i++) tone('square', [660, 880, 990, 1320][i], 0, 0.14, 0.15, AC.currentTime + i * 0.09); break;
+    case 'bankdone':for (let i = 0; i < 5; i++) tone('square', [523, 659, 784, 1046, 1319][i], 0, 0.12, 0.14, AC.currentTime + i * 0.07); break;
+    case 'gulp':    tone('sine', 400, 60, 0.35, 0.24); noise(0.25, 0.12, 300, 0.6); break;
+    case 'gulpbad': tone('sine', 200, 40, 0.6, 0.24); tone('square', 120, 50, 0.6, 0.12); break;
+    case 'spit':    tone('sine', 80, 500, 0.22, 0.20); noise(0.16, 0.14, 900, 1); break;
+    case 'kill':    noise(0.4, 0.22, 500, 0.6); for (let i = 0; i < 6; i++) tone('square', 900 - i * 120, 0, 0.09, 0.12, AC.currentTime + i * 0.05); break;
+    case 'extra':   for (let i = 0; i < 10; i++) tone('square', [523, 784, 1046, 784][i % 4], 0, 0.11, 0.15, AC.currentTime + i * 0.10); break;
+    case 'modestart': for (let i = 0; i < 6; i++) tone('triangle', 300 + i * 180, 0, 0.10, 0.15, AC.currentTime + i * 0.06); break;
+    case 'modehit': tone('square', 1200, 1700, 0.07, 0.14); break;
+    case 'modedone':for (let i = 0; i < 8; i++) tone('square', [523, 659, 784, 1046][i % 4] * (i > 3 ? 2 : 1), 0, 0.10, 0.14, AC.currentTime + i * 0.07); break;
+    case 'modefail':tone('square', 400, 120, 0.4, 0.14); break;
+    case 'levelup': for (let i = 0; i < 12; i++) {
+                      tone('square', 262 * Math.pow(2, i / 12) * 2, 0, 0.13, 0.15, AC.currentTime + i * 0.09);
+                      tone('triangle', 131 * Math.pow(2, i / 12), 0, 0.13, 0.13, AC.currentTime + i * 0.09); }
+                    break;
+    case 'tiltwarn':tone('square', 200, 200, 0.35, 0.22); tone('square', 203, 203, 0.35, 0.22); break;
+    case 'tilt':    for (let i = 0; i < 6; i++) { tone('square', 160, 90, 0.28, 0.22, AC.currentTime + i * 0.22); noise(0.2, 0.14, 300, 0.8, AC.currentTime + i * 0.22); } break;
+    case 'nudge':   noise(0.09, 0.14, 200, 0.7); break;
+    case 'drain':   tone('triangle', 320, 60, 0.7, 0.22); tone('square', 160, 40, 0.7, 0.10); noise(0.5, 0.08, 300, 0.6); break;
+    case 'ballsave':for (let i = 0; i < 4; i++) tone('square', 400 + i * 200, 0, 0.10, 0.15, AC.currentTime + i * 0.06); break;
+    case 'bonusstart': tone('triangle', 200, 600, 0.3, 0.16); break;
+    case 'bonustick': tone('square', 900 + rnd() * 200, 0, 0.035, 0.10); break;
+    case 'bonusend': for (let i = 0; i < 5; i++) tone('square', [392, 523, 659, 784, 1046][i], 0, 0.16, 0.14, AC.currentTime + i * 0.10); break;
+    case 'handoff': for (let i = 0; i < 3; i++) tone('triangle', 300 + i * 150, 0, 0.14, 0.14, AC.currentTime + i * 0.12); break;
+    case 'gameover':for (let i = 0; i < 8; i++) tone('square', 500 - i * 50, 0, 0.22, 0.14, AC.currentTime + i * 0.16); break;
+    case 'select':  tone('square', 900, 1300, 0.05, 0.14); break;
+    case 'start':   for (let i = 0; i < 6; i++) tone('square', [262, 330, 392, 523, 659, 784][i], 0, 0.12, 0.16, AC.currentTime + i * 0.08); break;
+    default: break;
+  }
+}
+
+/* ------------------------------------------------------------------ music
+   Two loops: a slow descending bass figure for normal play, and a fast
+   arpeggio for multiball.  Scheduled a beat at a time. */
+const MUSIC = {
+  off:  null,
+  main: {
+    bpm: 96, len: 16,
+    bass: [40, 0, 43, 0, 45, 0, 43, 0, 38, 0, 41, 0, 43, 0, 36, 0],
+    lead: [0, 0, 64, 0, 67, 0, 0, 71, 0, 69, 0, 67, 0, 64, 0, 0],
+    hat:  [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0]
+  },
+  multiball: {
+    bpm: 168, len: 16,
+    bass: [45, 45, 52, 45, 48, 48, 55, 48, 43, 43, 50, 43, 41, 41, 48, 53],
+    lead: [69, 76, 72, 79, 74, 81, 76, 84, 72, 79, 76, 83, 71, 78, 74, 81],
+    hat:  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+  }
+};
+const mus = { name: 'off', step: 0, next: 0 };
+function music(name) {
+  if (mus.name === name) return;
+  mus.name = name; mus.step = 0;
+  if (audioReady) mus.next = AC.currentTime + 0.05;
+}
+function midi(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+function updateMusic() {
+  if (!audioReady) return;
+  const M = MUSIC[mus.name];
+  if (!M) return;
+  const beat = 60 / M.bpm / 2;
+  let guard = 0;
+  while (mus.next < AC.currentTime + 0.25 && guard++ < 16) {
+    const s = mus.step % M.len;
+    const t = mus.next;
+    if (M.bass[s]) tone('triangle', midi(M.bass[s]), 0, beat * 1.6, 0.22, t, musicGain);
+    if (M.lead[s]) tone('square', midi(M.lead[s]), 0, beat * 0.85, 0.10, t, musicGain);
+    if (M.hat[s]) {
+      const src = AC.createBufferSource(); src.buffer = noiseBuf;
+      const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7000;
+      const gn = AC.createGain();
+      gn.gain.setValueAtTime(0.05, t); gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+      src.connect(hp); hp.connect(gn); gn.connect(musicGain);
+      src.start(t); src.stop(t + 0.06);
+    }
+    mus.step++; mus.next += beat;
+  }
+}
+/* ==========================================================================
+   MAIN — input, the fixed-step loop, and every screen that is not the table.
+   ========================================================================== */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d', { alpha: false });
+ctx.imageSmoothingEnabled = false;
+
+const key = { left: false, right: false, plunge: false };
+const keyDown = {};
+
+/* -------------------------------------------------------------- scaling */
+function fit() {
+  const s = Math.max(1, Math.min(Math.floor(window.innerWidth / CW * 20) / 20,
+                                 Math.floor((window.innerHeight - 10) / CH * 20) / 20));
+  cv.style.width = Math.round(CW * s) + 'px';
+  cv.style.height = Math.round(CH * s) + 'px';
+}
+window.addEventListener('resize', fit);
+
+/* --------------------------------------------------------------- input */
+const KEYMAP = {
+  ArrowLeft: 'left', KeyZ: 'left',
+  ArrowRight: 'right', Slash: 'right',
+  Space: 'plunge', ArrowDown: 'plunge'
+};
+window.addEventListener('keydown', e => {
+  initAudio();
+  if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'Space'].indexOf(e.code) >= 0) e.preventDefault();
+  if (keyDown[e.code]) return;
+  keyDown[e.code] = true;
+  const k = KEYMAP[e.code];
+  if (k) key[k] = true;
+  if (k === 'left' || k === 'right') { if (G.mode === 'play' && !G.tilt.dead) sfx('flip'); }
+  if (k === 'plunge' && G.mode === 'play') G.T.plunger.charging = true;
+  onKey(e.code);
+});
+window.addEventListener('keyup', e => {
+  keyDown[e.code] = false;
+  const k = KEYMAP[e.code];
+  if (k) key[k] = false;
+  if (k === 'plunge' && G.mode === 'play') releasePlunger();
+});
+window.addEventListener('blur', () => { for (const k in keyDown) keyDown[k] = false; key.left = key.right = key.plunge = false; });
+cv.addEventListener('mousedown', initAudio);
+
+function onKey(code) {
+  /* nudging is live in play only */
+  if (G.mode === 'play') {
+    if (code === 'KeyX') nudge(-1, -0.25);        /* shove the ball left  */
+    else if (code === 'KeyC') nudge(1, -0.25);     /* shove the ball right */
+    else if (code === 'ArrowUp') nudge(0, -1);
+  }
+  if (code === 'KeyR') { resetGame(); return; }
+  switch (G.mode) {
+    case 'attract':
+      if (code === 'Digit1') startGame(1);
+      else if (code === 'Digit2') startGame(2);
+      else if (code === 'Digit3') startGame(3);
+      else if (code === 'Digit4') startGame(4);
+      else if (code === 'Space' || code === 'Enter') startGame(1);
+      break;
+    case 'handoff':
+      if (code === 'Space' || code === 'Enter' || KEYMAP[code]) { serveBall(); }
+      break;
+    case 'gameover':
+      if (code === 'Space' || code === 'Enter') { G.mode = G.hiEntry ? 'hiscore' : 'attract'; G.stateT = 0; }
+      break;
+    case 'hiscore': {
+      const n = G.hiName;
+      if (code === 'ArrowUp') { n[G.hiIdx] = (n[G.hiIdx] + 1) % HI_CHARS.length; sfx('select'); }
+      else if (code === 'ArrowDown') { n[G.hiIdx] = (n[G.hiIdx] + HI_CHARS.length - 1) % HI_CHARS.length; sfx('select'); }
+      else if (code === 'ArrowRight') { G.hiIdx = Math.min(2, G.hiIdx + 1); sfx('select'); }
+      else if (code === 'ArrowLeft') { G.hiIdx = Math.max(0, G.hiIdx - 1); sfx('select'); }
+      else if (code === 'Space' || code === 'Enter') commitHiScore();
+      break;
+    }
+  }
+}
+const HI_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ.-0123456789';
+
+/* ------------------------------------------------------------ game start */
+function resetGame() {
+  G.T = buildTable();
+  G.balls.length = 0; clearCreatures(); TIMERS.length = 0;
+  G.players = [newPlayer(0)]; G.cur = 0; G.nPlayers = 1;
+  G.mode = 'attract'; G.stateT = 0; G.msgs.length = 0; G.pops.length = 0;
+  G.mbActive = false; G.mode2 = null; G.tilt = { bob: 0, warns: 0, dead: false, flash: 0 };
+  G.env.gy = BASE_G; G.env.roll = BASE_ROLL;
+  G.reverse = false; G.cutoutOn = false; G.ballKind = 'std'; G.seq = null;
+  bgLevel = -1;
+  music('off');
+}
+function startGame(n) {
+  G.nPlayers = n;
+  G.players = [];
+  for (let i = 0; i < n; i++) G.players.push(newPlayer(i));
+  G.cur = 0;
+  sfx('start');
+  G.mode = 'handoff'; G.stateT = 0;
+}
+function commitHiScore() {
+  const name = G.hiName.map(i => HI_CHARS[i]).join('');
+  G.hiscores.splice(G.hiPos, 0, { n: name, s: G.hiEntry.score });
+  G.hiscores.length = 5;
+  G.hiEntry = null;
+  G.mode = 'attract'; G.stateT = 0;
+  sfx('divedone');
+}
+
+/* ================================================================= update */
+const PHYS_DT = 1 / 480;
+let acc = 0, last = 0;
+
+function update(dt) {
+  G.t += dt;
+  G.stateT += dt;
+  updateTimers(dt);
+  updateVisuals(dt);
+  updateMusic();
+
+  /* the descent sequence runs on wall-clock time whatever screen is up, so a
+     drain in the middle of one can never leave it stuck on. */
+  if (G.seq) {
+    G.seq.t += dt;
+    if (G.seq.t > G.seq.dur) {
+      if (G.seq.k === 'levelup' && G.mode === 'play') resetTableForLevel();
+      G.seq = null;
+    }
+  }
+  if (G.mode === 'play') {
+    const scale = G.seq ? 0.35 : 1;
+    updateMode(dt * scale);
+    updateHolds(dt * scale);
+    updatePlunger(dt * scale);
+    updateCutout(dt * scale);
+    if (G.ballSaveT > 0) G.ballSaveT -= dt * scale;
+    acc += dt * scale;
+    let guard = 0;
+    while (acc >= PHYS_DT && guard++ < 40) { physTick(PHYS_DT); acc -= PHYS_DT; }
+    if (guard >= 40) acc = 0;
+    /* leaving the plunger lane arms the rest of the table */
+    for (const b of G.balls) if (!b.launched && b.x < 376) b.launched = true;
+  } else if (G.mode === 'bonus') {
+    updateBonus(dt);
+  } else if (G.mode === 'attract') {
+    G.attractT += dt;
+  }
+  updateCamera(dt);
+}
+
+function updateVisuals(dt) {
+  const T = G.T;
+  const dec = (o, k) => { if (o[k] > 0) o[k] -= dt; };
+  T.bumpers.forEach(b => dec(b, 'flash'));
+  T.slings.forEach(s => dec(s, 'flash'));
+  T.drops.forEach(d => dec(d, 'flash'));
+  T.grid.forEach(g => dec(g, 'flash'));
+  T.rollovers.forEach(r => dec(r, 'flash'));
+  T.ramps.forEach(r => dec(r, 'flash'));
+  T.sockets.forEach(s => dec(s, 'flash'));
+  dec(T.saucer, 'flash'); dec(T.kickback, 'flash'); dec(T.kbTarget, 'flash');
+  dec(G.tilt, 'flash');
+  /* spinner spins down and ticks */
+  const sp = T.spinner;
+  if (sp.vel > 0.02) {
+    const before = sp.ang;
+    sp.ang += sp.vel * dt * 6;
+    sp.vel *= Math.pow(0.28, dt);
+    if (Math.floor(before / Math.PI) !== Math.floor(sp.ang / Math.PI)) sfx('spin', clamp(sp.vel / 6, 0.1, 0.7));
+    if (sp.vel < 0.02) sp.vel = 0;
+  }
+  /* tilt bob decays over a few seconds */
+  if (G.tilt.bob > 0) G.tilt.bob = Math.max(0, G.tilt.bob - dt * 0.34);
+  /* screen shake */
+  if (G.shake.mag > 0.02) {
+    G.shake.mag *= Math.pow(0.02, dt);
+    G.shake.x = (rnd() - 0.5) * G.shake.mag * 2;
+    G.shake.y = (rnd() - 0.5) * G.shake.mag * 2;
+  } else { G.shake.mag = 0; G.shake.x *= 0.6; G.shake.y *= 0.6; }
+  if (G.flash > 0) G.flash -= dt * 2.4;
+  /* message + popup lifetimes */
+  for (let i = G.msgs.length - 1; i >= 0; i--) { G.msgs[i].t -= dt; if (G.msgs[i].t <= 0) G.msgs.splice(i, 1); }
+  for (let i = G.pops.length - 1; i >= 0; i--) { G.pops[i].t -= dt * 1.3; if (G.pops[i].t <= 0) G.pops.splice(i, 1); }
+  /* ball trails and glow */
+  for (const b of G.balls) {
+    if (b.glow > 0) b.glow -= dt * 3;
+    b.trail.push([b.x, b.y]);
+    if (b.trail.length > 7) b.trail.shift();
+  }
+}
+
+/* flipper brownout on the deepest levels: always telegraphed first */
+function updateCutout(dt) {
+  if (!G.cutoutOn) { G.cutoutT = 0; G.cutoutWarn = 0; return; }
+  if (G.cutoutT > 0) { G.cutoutT -= dt; if (G.cutoutT <= 0) say('POWER RESTORED', '', 1.2); return; }
+  if (G.cutoutWarn > 0) {
+    G.cutoutWarn -= dt;
+    if (G.cutoutWarn <= 0) {
+      G.cutoutT = 2.6;
+      say((G.cutoutWhich === 0 ? 'LEFT' : 'RIGHT') + ' FLIPPER DEAD', '', 2);
+      sfx('tiltwarn');
+    }
+    return;
+  }
+  if (rnd() < dt * 0.09) {
+    G.cutoutWhich = rndI(0, 1);
+    G.cutoutWarn = 2.2;
+    say('BROWNOUT WARNING', (G.cutoutWhich === 0 ? 'LEFT' : 'RIGHT') + ' FLIPPER', 2.2);
+    sfx('charge');
+  }
+}
+
+/* ------------------------------------------------------------------ camera */
+function updateCamera(dt) {
+  let y = BOT_TABLE_Y;
+  let best = null;
+  for (const b of G.balls) if (b.state !== 'gone') { if (!best || b.y < best.y) best = b; }
+  if (best) y = best.y;
+  view.target = clamp(y - TOP_H * 0.58, 0, SCROLL_MAX);
+  const k = 1 - Math.pow(0.0009, dt);
+  view.scroll += (view.target - view.scroll) * k;
+  if (Math.abs(view.target - view.scroll) < 0.4) view.scroll = view.target;
+}
+
+/* ------------------------------------------------------------------- bonus */
+function updateBonus(dt) {
+  const a = G.bonusAnim, p = P();
+  a.t += dt;
+  if (a.done) { if (a.t > 1.6) { G.mode = 'play'; endBall(); } return; }
+  if (a.t > 0.7) {
+    const stepAmt = Math.max(1, Math.round(a.base / 28));
+    a.shown = Math.min(a.base, a.shown + stepAmt);
+    if (a.shown % 3 === 0) sfx('bonustick');
+    if (a.shown >= a.base) {
+      a.done = true; a.t = 0;
+      const total = a.base * a.x;
+      p.score += total;
+      sfx('bonusend');
+    }
+  }
+}
+
+/* =================================================================== draw */
+function draw() {
+  render(ctx, G.t);
+  switch (G.mode) {
+    case 'attract': drawAttract(); break;
+    case 'handoff': drawHandoff(); break;
+    case 'bonus': drawBonus(); break;
+    case 'gameover': drawGameOver(); break;
+    case 'hiscore': drawHiScore(); break;
+  }
+  if (G.mode === 'play' && G.seq) drawLevelUp();
+  if (G.mode === 'play' && G.stateT < 4 && P().ball === 1 && P().level === 0 && G.cur === 0) drawHelp();
+}
+
+function panel(x, y, w, h, col) {
+  ctx.fillStyle = PAL.ink; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = col || PAL.cyan; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+  ctx.fillStyle = col || PAL.cyan;
+  ctx.fillRect(x + 3, y + 3, 3, 3); ctx.fillRect(x + w - 6, y + 3, 3, 3);
+  ctx.fillRect(x + 3, y + h - 6, 3, 3); ctx.fillRect(x + w - 6, y + h - 6, 3, 3);
+}
+
+function drawAttract() {
+  const t = G.attractT;
+  ctx.fillStyle = PAL.ink; ctx.globalAlpha = 0.82; ctx.fillRect(0, BG_H, CW, CH - BG_H); ctx.globalAlpha = 1;
+  const page = Math.floor(t / 7) % 2;
+  panel(28, 150, CW - 56, 300);
+  /* title */
+  drawTextC(ctx, 'FATHOM', CW / 2, 172, 6, PAL.cyan);
+  drawTextC(ctx, 'DESCENT OF THE KRAKENS EYE', CW / 2, 214, 1, PAL.sky);
+  ctx.fillStyle = PAL.blue; ctx.fillRect(60, 228, CW - 120, 1);
+  if (page === 0) {
+    drawTextC(ctx, 'PILOT SABLE VANCE', CW / 2, 244, 1, PAL.lime);
+    drawTextC(ctx, 'TEN STATIONS DOWN THE TRENCH', CW / 2, 258, 1, PAL.silver);
+    const L = LEVELS[Math.floor(t * 1.2) % LEVELS.length];
+    drawTextC(ctx, L.name, CW / 2, 282, 2, PAL.amber);
+    drawTextC(ctx, L.depth + ' FATHOMS', CW / 2, 300, 1, PAL.sky);
+    /* controls */
+    const rows = [
+      'Z / <   LEFT FLIPPER', '/ / >   RIGHT FLIPPER',
+      'SPACE   PULL PLUNGER', 'X       NUDGE LEFT', 'C       NUDGE RIGHT',
+      'UP      NUDGE FORWARD', 'R       RESET'
+    ];
+    rows.forEach((r, i) => drawTextC(ctx, r, CW / 2, 314 + i * 12, 1, PAL.gray));
+  } else {
+    drawTextC(ctx, 'HIGH SCORES', CW / 2, 246, 2, PAL.amber);
+    G.hiscores.forEach((h, i) => {
+      drawText(ctx, (i + 1) + '. ' + h.n, 90, 274 + i * 18, 1, i === 0 ? PAL.lime : PAL.silver);
+      const s = fmt(h.s);
+      drawText(ctx, s, CW - 90 - textWidth(s, 1), 274 + i * 18, 1, i === 0 ? PAL.lime : PAL.silver);
+    });
+  }
+  if (Math.sin(t * 4) > -0.3) drawTextC(ctx, 'PRESS 1-4 FOR PLAYERS', CW / 2, 420, 2, PAL.white);
+  drawTextC(ctx, 'AN ORIGINAL TABLE - NO ASSETS, ALL CODE', CW / 2, 470, 1, PAL.navy);
+}
+
+function drawHandoff() {
+  const p = P();
+  ctx.fillStyle = PAL.ink; ctx.globalAlpha = 0.86; ctx.fillRect(0, BG_H, CW, CH - BG_H); ctx.globalAlpha = 1;
+  panel(40, 200, CW - 80, 230, PAL.lime);
+  drawTextC(ctx, 'PLAYER ' + (p.idx + 1), CW / 2, 222, 4, PAL.lime);
+  drawTextC(ctx, 'BALL ' + p.ball + ' OF 3', CW / 2, 262, 2, PAL.white);
+  drawTextC(ctx, LEVELS[p.level].name, CW / 2, 290, 2, PAL.amber);
+  drawTextC(ctx, LEVELS[p.level].obj.text, CW / 2, 310, 1, PAL.sky);
+  if (LEVELS[p.level].mods.length) {
+    drawTextC(ctx, 'HAZARDS: ' + LEVELS[p.level].mods.map(m => MOD_INFO[m][0]).join(' '), CW / 2, 328, 1, PAL.red);
+  }
+  ctx.fillStyle = PAL.blue; ctx.fillRect(70, 342, CW - 140, 1);
+  G.players.forEach((q, i) => {
+    const y = 352 + i * 14;
+    drawText(ctx, (i + 1) + 'UP', 76, y, 1, q === p ? PAL.lime : PAL.gray);
+    drawText(ctx, 'B' + Math.min(q.ball, 3), 108, y, 1, q === p ? PAL.lime : PAL.gray);
+    drawText(ctx, 'L' + (q.level + 1), 134, y, 1, q === p ? PAL.lime : PAL.gray);
+    const s = fmt(q.score);
+    drawText(ctx, s, CW - 76 - textWidth(s, 1), y, 1, q === p ? PAL.lime : PAL.gray);
+  });
+  if (Math.sin(G.stateT * 5) > -0.2) drawTextC(ctx, 'PRESS SPACE', CW / 2, 410, 2, PAL.white);
+  if (G.stateT > 6) serveBall();
+}
+
+function drawBonus() {
+  const a = G.bonusAnim, p = P();
+  ctx.fillStyle = PAL.ink; ctx.globalAlpha = 0.8; ctx.fillRect(0, BG_H, CW, CH - BG_H); ctx.globalAlpha = 1;
+  panel(50, 230, CW - 100, 180, PAL.amber);
+  drawTextC(ctx, 'END OF BALL BONUS', CW / 2, 250, 2, PAL.amber);
+  drawTextC(ctx, fmt(a.shown), CW / 2, 286, 4, PAL.white);
+  drawTextC(ctx, 'MULTIPLIER  X' + a.x, CW / 2, 326, 2, PAL.cyan);
+  if (a.done) {
+    drawTextC(ctx, 'TOTAL ' + fmt(a.base * a.x), CW / 2, 356, 2, PAL.lime);
+    if (Math.sin(G.t * 10) > 0) drawTextC(ctx, 'COLLECTED', CW / 2, 382, 1, PAL.white);
+  }
+}
+
+function drawLevelUp() {
+  const p = P(), L = LEVELS[p.level];
+  const s = G.seq;
+  const k = clamp(s.t / 0.4, 0, 1);
+  ctx.globalAlpha = 0.72 * k;
+  ctx.fillStyle = PAL.ink; ctx.fillRect(0, BG_H, CW, CH - BG_H);
+  ctx.globalAlpha = 1;
+  panel(30, 200, CW - 60, 220, PAL.lime);
+  drawTextC(ctx, 'DESCENDING', CW / 2, 216, 2, PAL.cyan);
+  drawTextC(ctx, L.name, CW / 2, 242, 3, PAL.lime);
+  drawTextC(ctx, L.depth + ' FATHOMS', CW / 2, 274, 1, PAL.sky);
+  ctx.fillStyle = PAL.blue; ctx.fillRect(60, 288, CW - 120, 1);
+  drawTextC(ctx, 'OBJECTIVE', CW / 2, 298, 1, PAL.gray);
+  drawTextC(ctx, L.obj.text, CW / 2, 312, 2, PAL.amber);
+  const mods = L.mods;
+  if (mods.length) {
+    drawTextC(ctx, 'HAZARD CHANGE', CW / 2, 338, 1, PAL.gray);
+    mods.slice(0, 4).forEach((m, i) => {
+      const info = MOD_INFO[m];
+      drawTextC(ctx, info[0] + ' - ' + info[1], CW / 2, 352 + i * 13, 1,
+        Math.sin(G.t * 8 + i) > 0 ? PAL.red : PAL.ochre);
+    });
+  }
+  /* descending bar */
+  const f = clamp(s.t / s.dur, 0, 1);
+  ctx.fillStyle = PAL.ink; ctx.fillRect(60, 404, CW - 120, 6);
+  ctx.fillStyle = PAL.lime; ctx.fillRect(60, 404, (CW - 120) * f, 6);
+}
+
+function drawGameOver() {
+  ctx.fillStyle = PAL.ink; ctx.globalAlpha = 0.88; ctx.fillRect(0, BG_H, CW, CH - BG_H); ctx.globalAlpha = 1;
+  panel(40, 210, CW - 80, 220, PAL.red);
+  drawTextC(ctx, 'GAME OVER', CW / 2, 232, 4, PAL.red);
+  const sorted = G.players.slice().sort((a, b) => b.score - a.score);
+  sorted.forEach((q, i) => {
+    const y = 286 + i * 20;
+    drawText(ctx, 'P' + (q.idx + 1), 80, y, 2, i === 0 ? PAL.lime : PAL.silver);
+    drawText(ctx, 'L' + (q.deepest + 1), 120, y, 1, PAL.sky);
+    const s = fmt(q.score);
+    drawText(ctx, s, CW - 80 - textWidth(s, 2), y, 2, i === 0 ? PAL.lime : PAL.silver);
+  });
+  drawTextC(ctx, 'DEEPEST: ' + LEVELS[sorted[0].deepest].name, CW / 2, 388, 1, PAL.amber);
+  if (Math.sin(G.stateT * 5) > -0.2) drawTextC(ctx, 'PRESS SPACE', CW / 2, 410, 2, PAL.white);
+  if (G.stateT > 12) { G.mode = G.hiEntry ? 'hiscore' : 'attract'; G.stateT = 0; }
+}
+
+function drawHiScore() {
+  ctx.fillStyle = PAL.ink; ctx.globalAlpha = 0.9; ctx.fillRect(0, BG_H, CW, CH - BG_H); ctx.globalAlpha = 1;
+  panel(50, 230, CW - 100, 190, PAL.amber);
+  drawTextC(ctx, 'GREAT SCORE', CW / 2, 250, 3, PAL.amber);
+  drawTextC(ctx, fmt(G.hiEntry.score), CW / 2, 282, 2, PAL.white);
+  drawTextC(ctx, 'ENTER INITIALS', CW / 2, 306, 1, PAL.sky);
+  for (let i = 0; i < 3; i++) {
+    const x = CW / 2 - 40 + i * 40;
+    const sel = i === G.hiIdx;
+    ctx.fillStyle = sel ? PAL.navy : PAL.ink;
+    ctx.fillRect(x - 12, 322, 26, 34);
+    drawTextC(ctx, HI_CHARS[G.hiName[i]], x, 328, 4, sel ? PAL.white : PAL.silver);
+    if (sel && Math.sin(G.t * 9) > 0) { ctx.fillStyle = PAL.lime; ctx.fillRect(x - 10, 358, 22, 2); }
+  }
+  drawTextC(ctx, 'UP DOWN CHANGE - SPACE OK', CW / 2, 376, 1, PAL.gray);
+}
+
+function drawHelp() {
+  const a = clamp(4 - G.stateT, 0, 1);
+  ctx.globalAlpha = a;
+  drawTextC(ctx, 'HOLD SPACE TO CHARGE THE PLUNGER', CW / 2, BOT_Y + 250, 1, PAL.white);
+  drawTextC(ctx, 'X AND C TO NUDGE - WATCH THE TILT', CW / 2, BOT_Y + 264, 1, PAL.cyan);
+  ctx.globalAlpha = 1;
+}
+
+/* ==================================================================== loop */
+function frame(now) {
+  if (!last) last = now;
+  let dt = (now - last) / 1000;
+  last = now;
+  dt = Math.min(dt, 0.05);
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+resetGame();
+fit();
+paintBackdrop(0);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
