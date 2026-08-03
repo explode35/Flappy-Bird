@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>FOURTH &amp; FURY &mdash; United Gridiron League</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden;
+    font-family:ui-monospace,Menlo,Consolas,monospace;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000;}
+  canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block;
+    box-shadow:0 0 0 4px #3c3c3c,0 0 0 8px #000,0 0 40px #000;}
+  #hint{position:fixed;left:0;right:0;bottom:3px;text-align:center;color:#3c3c3c;
+    font-size:10px;letter-spacing:1px;pointer-events:none;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv" width="256" height="240"></canvas></div>
+<div id="hint">FOURTH &amp; FURY &mdash; click to enable sound</div>
+<script>
+"use strict";
+/* ==========================================================================
+   FOURTH & FURY  —  United Gridiron League
+   An original 8-bit arcade football game.  Sprites, field and audio are all
+   generated in code; there are no assets and no build step.
+   ========================================================================== */
+
+/* --------------------------------------------------------------- palette --
+   Sixteen colours lifted from the NES master palette.  Everything on screen
+   is one of these. */
+const C = {
+  black:'#000000', white:'#fcfcfc', ltgray:'#bcbcbc', gray:'#7c7c7c', dkgray:'#3c3c3c',
+  red:'#d82800', dkred:'#881400', orange:'#fc9838', yellow:'#f8d800',
+  ltgreen:'#58d854', green:'#00a800', dkgreen:'#006800',
+  cyan:'#3cbcfc', blue:'#0058f8', dkblue:'#0000bc', purple:'#6844fc',
+  pink:'#f878f8', tan:'#e0a060', brown:'#7c4000'
+};
+
+/* ------------------------------------------------------------------ maths */
+const TAU = Math.PI * 2;
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp  = (a,b,t) => a+(b-a)*t;
+const sign  = v => v<0?-1:v>0?1:0;
+const dist  = (ax,ay,bx,by) => Math.hypot(bx-ax,by-ay);
+const dist2 = (ax,ay,bx,by) => { const dx=bx-ax, dy=by-ay; return dx*dx+dy*dy; };
+function approach(v, target, rate) { return v < target ? Math.min(target, v+rate) : Math.max(target, v-rate); }
+
+/* xorshift rng so sims are repeatable when seeded */
+let _seed = 0x1a2b3c4d >>> 0;
+function rnd(){ _seed^=_seed<<13; _seed^=_seed>>>17; _seed^=_seed<<5; _seed>>>=0; return _seed/4294967296; }
+const rndR = (a,b) => a + (b-a)*rnd();
+const rndI = (a,b) => Math.floor(a + (b-a+1)*rnd());
+function seedRnd(s){ _seed = (s>>>0) || 1; }
+function pick(arr){ return arr[Math.floor(rnd()*arr.length)]; }
+
+/* --------------------------------------------------------- bitmap font ----
+   5x7 cells, column-major, LSB at the top.  Drawn as square blocks so it
+   stays chunky at any scale. */
+const FONT = {};
+(function(){
+  const D = {
+    ' ':'0000000000','0':'3E5149453E','1':'00427F4000','2':'4261514946','3':'2141454B31',
+    '4':'1814127F10','5':'2745454539','6':'3C4A494930','7':'0171090503','8':'3649494936',
+    '9':'064949291E','A':'7E1111117E','B':'7F49494936','C':'3E41414122','D':'7F4141221C',
+    'E':'7F49494941','F':'7F09090901','G':'3E4149497A','H':'7F0808087F','I':'00417F4100',
+    'J':'2040413F01','K':'7F08142241','L':'7F40404040','M':'7F020C027F','N':'7F0408107F',
+    'O':'3E4141413E','P':'7F09090906','Q':'3E4151215E','R':'7F09192946','S':'4649494931',
+    'T':'01017F0101','U':'3F4040403F','V':'1F2040201F','W':'7F2018207F','X':'6314081463',
+    'Y':'0708700807','Z':'6151494543','-':'0808080808','.':'0060600000',':':'0036360000',
+    '!':'00005F0000','/':'2010080402','*':'14083E0814','+':'08083E0808','>':'4122140800',
+    '<':'0814224100','(':'001C224100',')':'0041221C00','?':'0201510906',',':'0050300000',
+    "'":'0007000000','%':'2313086462','#':'147F147F14','=':'1414141414','$':'2649792412',
+    '"':'0007000700','&':'36494955220','@':'3E7F7F7F3E'
+  };
+  for (const k in D){ const c=[]; for(let i=0;i<5;i++) c.push(parseInt(D[k].substr(i*2,2),16)); FONT[k]=c; }
+})();
+
+function textW(s, px, sp){ sp = sp===undefined?1:sp; return String(s).length*(5*px+sp*px)-sp*px; }
+function text(g, s, x, y, px, col, sp){
+  sp = sp===undefined?1:sp;
+  g.fillStyle = col;
+  s = String(s).toUpperCase();
+  let cx = x|0;
+  for (let i=0;i<s.length;i++){
+    const gl = FONT[s[i]] || FONT['?'];
+    for (let c=0;c<5;c++){
+      const bits = gl[c];
+      for (let r=0;r<7;r++) if (bits & (1<<r)) g.fillRect(cx+c*px, (y|0)+r*px, px, px);
+    }
+    cx += (5+sp)*px;
+  }
+  return cx;
+}
+function textC(g, s, cx, y, px, col, sp){ text(g, s, Math.round(cx - textW(s,px,sp)/2), y, px, col, sp); }
+/* text with a 1px black drop shadow, for anything drawn over the field */
+function textS(g, s, x, y, px, col, sp){ text(g,s,x+1,y+1,px,C.black,sp); text(g,s,x,y,px,col,sp); }
+function textCS(g, s, cx, y, px, col, sp){ textS(g, s, Math.round(cx - textW(s,px,sp)/2), y, px, col, sp); }
+
+/* --------------------------------------------------------------- dither --- */
+const BAYER = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+/* two-tone checker fill, the only shading the era allowed */
+function ditherRect(g, x, y, w, h, cA, cB, t){
+  g.fillStyle = cA; g.fillRect(x,y,w,h);
+  g.fillStyle = cB;
+  for (let j=0;j<h;j++) for (let i=0;i<w;i++)
+    if (BAYER[(y+j)&3][(x+i)&3] < t*16) g.fillRect(x+i, y+j, 1, 1);
+}
+
+/* number formatting */
+function clockStr(sec){
+  sec = Math.max(0, Math.ceil(sec));
+  const m = Math.floor(sec/60), s = sec%60;
+  return m + ':' + (s<10?'0':'') + s;
+}
+function ordinal(n){ return n===1?'1ST':n===2?'2ND':n===3?'3RD':n===4?'4TH':n+'TH'; }
+/* ==========================================================================
+   THE LEAGUE — twelve invented clubs, their rosters, and the playbook.
+   ========================================================================== */
+const LEAGUE = 'UNITED GRIDIRON LEAGUE';
+
+/* --------------------------------------------------------------- playbook --
+   Four plays a side.  That is the whole strategic surface, and it is the
+   point: with four options a read is worth something. */
+const OFF_PLAYS = [
+  { n:'DIVE',   kind:'run',  sub:'inside',  blurb:'STRAIGHT UP THE GUT' },
+  { n:'SWEEP',  kind:'run',  sub:'outside', blurb:'GET TO THE EDGE' },
+  { n:'SLANT',  kind:'pass', sub:'short',   blurb:'QUICK THROW UNDERNEATH' },
+  { n:'BOMB',   kind:'pass', sub:'deep',    blurb:'TAKE THE TOP OFF' }
+];
+const DEF_PLAYS = [
+  { n:'STUFF',  kind:'run',  sub:'inside',  blurb:'CLOG THE MIDDLE' },
+  { n:'CONTAIN',kind:'run',  sub:'outside', blurb:'SET THE EDGE' },
+  { n:'ZONE',   kind:'pass', sub:'short',   blurb:'JUMP THE SHORT ROUTES' },
+  { n:'BLITZ',  kind:'pass', sub:'deep',    blurb:'PRESSURE AND PLAY DEEP' }
+];
+
+/* MATCH[off][def] : +1 the offence is wide open, -1 the play is blown up.
+   The diagonal is the read payoff.  Off-diagonal same-family calls still
+   clog things up softly, which is what stops pure guessing from being flat. */
+const MATCH = [
+  /*            STUFF CONTAIN ZONE  BLITZ */
+  /* DIVE  */ [ -1.0, -0.35,  0.35,  0.70 ],
+  /* SWEEP */ [ -0.35, -1.0,  0.25,  0.60 ],
+  /* SLANT */ [  0.50,  0.30, -1.0, -0.20 ],
+  /* BOMB  */ [  0.80,  0.60, -0.20, -1.0 ]
+];
+
+/* ------------------------------------------------------------------ names */
+const FIRST = ['DEL','RUFUS','MACK','ODIE','VANCE','TITO','BRUNO','LEX','CASS','HOYT',
+  'AMOS','JUDE','REN','OTIS','CLAY','SAUL','GUS','ELI','MOSE','WYATT','KIP','ROSCOE',
+  'DARIUS','LEV','TOBY','ARLO','SILAS','NED','JETT','BUCK'];
+const LAST = ['HALLORAN','OKONKWO','BRISBANE','VOSS','MARCHETTI','DELACROIX','STROM',
+  'KOVACS','ABERNATHY','QUILL','TANAKA','FEATHERSTONE','MBEKI','LARKIN','OYELARAN',
+  'SWAIN','PETROV','CALLOWAY','NUNEZ','HARGROVE','IRONSIDE','DAMBROSIO','KESTREL',
+  'WOLCOTT','FAIRWEATHER','BRANNIGAN','SZABO','ADEYEMI','THORNE','RASK'];
+
+/* ------------------------------------------------------------------ teams
+   Each club gets two uniform colours and exactly one dominant star.  The
+   star archetypes are deliberately different so the counter is different. */
+const TEAMS = [
+  { city:'GRANITE CITY',  name:'ANVILS',       ab:'GRA', c1:C.gray,    c2:C.dkgray, star:'power'  },
+  { city:'PORT MERIDIAN', name:'GALES',        ab:'POR', c1:C.cyan,    c2:C.dkblue, star:'speed'  },
+  { city:'FOXHOLLOW',     name:'REVENANTS',    ab:'FOX', c1:C.purple,  c2:C.black,  star:'wrecker'},
+  { city:'VERDIGRIS',     name:'HERONS',       ab:'VER', c1:C.ltgreen, c2:C.dkgreen,star:'arm'    },
+  { city:'SALTMARSH',     name:'DREDGERS',     ab:'SAL', c1:C.brown,   c2:C.tan,    star:'power'  },
+  { city:'HIGH PLAINS',   name:'COMBINES',     ab:'HIP', c1:C.yellow,  c2:C.brown,  star:'arm'    },
+  { city:'KETTLE RIDGE',  name:'FURNACE',      ab:'KET', c1:C.orange,  c2:C.dkred,  star:'wrecker'},
+  { city:'CINDER HARBOR', name:'LAMPLIGHTERS', ab:'CIN', c1:C.white,   c2:C.orange, star:'speed'  },
+  { city:'MOUNT ASCHER',  name:'IBEX',         ab:'ASC', c1:C.ltgray,  c2:C.red,    star:'power'  },
+  { city:'DUSTBOWL',      name:'SIDEWINDERS',  ab:'DUS', c1:C.tan,     c2:C.dkred,  star:'speed'  },
+  { city:'NORTHGATE',     name:'ICEBREAKERS',  ab:'NOR', c1:C.white,   c2:C.blue,   star:'wrecker'},
+  { city:'BRASS VALLEY',  name:'BELLOWS',      ab:'BRA', c1:C.yellow,  c2:C.dkgreen,star:'arm'    }
+];
+
+const STAR_INFO = {
+  power:   { pos:'RB', label:'BRUISER',  hint:'RUNS THROUGH ARM TACKLES' },
+  speed:   { pos:'WR', label:'BURNER',   hint:'OUTRUNS ANY DEEP COVER'   },
+  arm:     { pos:'QB', label:'GUNSLINGER',hint:'NEVER MISSES A THROW'    },
+  wrecker: { pos:'DL', label:'WRECKER',  hint:'SHEDS BLOCKS AND EATS RUNS' }
+};
+
+/* ------------------------------------------------------------ roster gen --
+   Deterministic per team, so a club plays the same every season. */
+function makeRoster(teamIdx){
+  const t = TEAMS[teamIdx];
+  seedRnd(9001 + teamIdx * 7919);
+  const used = {};
+  const nm = () => {
+    let s;
+    do { s = FIRST[rndI(0,FIRST.length-1)] + ' ' + LAST[rndI(0,LAST.length-1)]; } while (used[s]);
+    used[s] = 1; return s;
+  };
+  const mk = (pos, spd, pow, acc) => ({
+    pos, name: nm(), num: rndI(1,89),
+    spd: clamp(spd,1,10), pow: clamp(pow,1,10), acc: clamp(acc||5,1,10), star:false
+  });
+  const r = {
+    QB: mk('QB', rndR(4,6), rndR(3,5), rndR(4,7)),
+    RB: mk('RB', rndR(6,8), rndR(5,7)),
+    WR: [ mk('WR', rndR(7,9), rndR(3,5)), mk('WR', rndR(6,8), rndR(3,5)) ],
+    OL: [], DL: [], LB: [], DB: []
+  };
+  for (let i=0;i<5;i++) r.OL.push(mk('OL', rndR(2.5,4), rndR(6,8)));
+  for (let i=0;i<4;i++) r.DL.push(mk('DL', rndR(3,5), rndR(6,8)));
+  for (let i=0;i<3;i++) r.LB.push(mk('LB', rndR(5,7), rndR(5,7)));
+  for (let i=0;i<2;i++) r.DB.push(mk('DB', rndR(7,9), rndR(3,5)));
+
+  /* --- the star.  Deliberately over-tuned: that is the identity. */
+  const s = t.star;
+  if (s === 'power')   { const p=r.RB;   p.spd=7.5; p.pow=10; p.star=true; }
+  if (s === 'speed')   { const p=r.WR[0];p.spd=10;  p.pow=4;  p.star=true; }
+  if (s === 'arm')     { const p=r.QB;   p.acc=10;  p.spd=6;  p.star=true; }
+  if (s === 'wrecker') { const p=r.DL[0];p.pow=10;  p.spd=7;  p.star=true; }
+  r.starRef = s==='power'?r.RB : s==='speed'?r.WR[0] : s==='arm'?r.QB : r.DL[0];
+  return r;
+}
+const ROSTERS = TEAMS.map((t,i) => makeRoster(i));
+
+/* --------------------------------------------------------------- formation
+   Nine a side.  Offsets are in yards from the line of scrimmage (dx, toward
+   the defence is +) and from the field centre (dy). */
+const FORM_OFF = [
+  { role:'QB', dx:-2.2, dy: 0.0 },
+  { role:'RB', dx:-4.6, dy: 0.6 },
+  { role:'OL', dx:-0.6, dy:-3.2 }, { role:'OL', dx:-0.6, dy:-1.6 },
+  { role:'OL', dx:-0.6, dy: 0.0 }, { role:'OL', dx:-0.6, dy: 1.6 },
+  { role:'OL', dx:-0.6, dy: 3.2 },
+  { role:'WR', dx:-0.4, dy:-9.5 }, { role:'WR', dx:-0.4, dy: 9.5 }
+];
+const FORM_DEF = [
+  { role:'DL', dx: 0.9, dy:-3.4 }, { role:'DL', dx: 0.9, dy:-1.2 },
+  { role:'DL', dx: 0.9, dy: 1.2 }, { role:'DL', dx: 0.9, dy: 3.4 },
+  { role:'LB', dx: 4.5, dy:-5.0 }, { role:'LB', dx: 4.2, dy: 0.0 },
+  { role:'LB', dx: 4.5, dy: 5.0 },
+  { role:'DB', dx: 9.0, dy:-8.5 }, { role:'DB', dx: 9.0, dy: 8.5 }
+];
+
+/* route shapes per offensive play, in yards from the snap spot.  The runner
+   is player controlled; these drive receivers and the initial back path. */
+const ROUTES = {
+  0: { RB:[[2,0],[6,0.4]],            WR:[[6,-1],[12,-2]] },       /* DIVE  */
+  1: { RB:[[1,5],[5,8],[11,9]],       WR:[[5,-2],[10,-3]] },       /* SWEEP */
+  2: { RB:[[3,-3],[6,-5]],            WR:[[5,3],[9,1]] },          /* SLANT */
+  3: { RB:[[1,-2],[3,-3]],            WR:[[9,1],[22,2],[34,1]] }   /* BOMB  */
+};
+/* ==========================================================================
+   THE SIMULATION — field space, movement, pursuit, blocking, contact.
+   All positions are in YARDS.  x runs goal line to goal line (0..120, with
+   ten-yard end zones at each end); y is across the field (0..32).
+   ========================================================================== */
+const FIELD_LEN = 120, FIELD_WID = 32;
+const GOAL_L = 10, GOAL_R = 110;          /* the two goal lines            */
+const MIDY = FIELD_WID / 2;
+
+/* screen geometry (NES framebuffer) */
+const SCR_W = 256, SCR_H = 240;
+const PX_X = 8;                            /* px per yard along the field   */
+const PX_Y = 5;                            /* px per yard across the field  */
+const FIELD_TOP = 44, FIELD_H = FIELD_WID * PX_Y;   /* 160 */
+const VIEW_YDS = SCR_W / PX_X;             /* 32 yards on screen            */
+
+/* --------------------------------------------------------------- movement
+   Speed, acceleration and turn rate are all separate, and all three fall out
+   of the speed stat.  Crucially the turn rate DROPS as you go faster, so a
+   burst downfield commits you and a cutback costs real speed to make.  That
+   trade is the whole open-field game. */
+const MAXSPD = p => 3.8 + p.spd * 0.60;    /* yards / second                */
+const ACCEL  = p => 13 + p.spd * 1.7;      /* yards / second^2              */
+const TURNRT = (p, sp) => Math.max(1.5, (6.4 + p.spd*0.16) - sp*0.42);  /* rad/s */
+const BRAKE = 26, COAST = 16;
+const BURST_MUL = 1.25;
+
+function angDiff(a,b){ let d=(a-b)%TAU; if(d>Math.PI)d-=TAU; if(d<-Math.PI)d+=TAU; return d; }
+
+function makeEnt(team, role, p, x, y){
+  return {
+    team, role, p, x, y, vx:0, vy:0,
+    face: team === 0 ? 1 : -1,
+    anim: 0, stam: 1, bursting: false,
+    state: 'idle',            /* idle|run|block|blocked|pursue|route|struggle|down */
+    engaged: null, engagedT: 0,
+    assign: null, route: null, routeI: 0,
+    reactT: 0,                /* frozen until this hits zero (play matchup)  */
+    shed: 0,                  /* how quickly this defender beats a block     */
+    struggle: 0, mash: 0, stunT: 0, spdBonus: 1,
+    hasBall: false, id: 0
+  };
+}
+
+/* Steer toward a desired direction.  Reversing costs more than continuing,
+   which is what gives the runner a turn radius instead of instant pivots. */
+function driveEnt(e, dt, dx, dy, wantBurst){
+  const m = Math.hypot(dx, dy);
+  let mx = MAXSPD(e.p) * (e.spdBonus || 1);
+  /* burst: sustained sprint on a stamina budget */
+  if (wantBurst && e.stam > 0.06) { e.bursting = true; }
+  else if (!wantBurst || e.stam <= 0.001) { e.bursting = false; }
+  if (e.bursting){ mx *= BURST_MUL; e.stam = Math.max(0, e.stam - dt*0.40); if (e.stam<=0) e.bursting=false; }
+  else e.stam = Math.min(1, e.stam + dt*0.26);
+
+  let sp = Math.hypot(e.vx, e.vy);
+  if (m > 0.01){
+    const want = Math.atan2(dy, dx);
+    let cur = sp > 0.25 ? Math.atan2(e.vy, e.vx) : want;
+    const d = angDiff(want, cur);
+    /* rotate the heading at a speed-dependent rate */
+    const step = TURNRT(e.p, sp) * dt;
+    cur += clamp(d, -step, step);
+    /* the sharper the cut, the more speed it costs to make it */
+    const sharp = clamp(Math.abs(d) / Math.PI, 0, 1);
+    const cap = mx * (1 - 0.72*sharp);
+    if (sp > cap) sp = Math.max(cap, sp - BRAKE*dt);
+    else          sp = Math.min(mx,  sp + ACCEL(e.p)*dt);
+    e.vx = Math.cos(cur)*sp; e.vy = Math.sin(cur)*sp;
+  } else {
+    const ns = Math.max(0, sp - COAST*dt);
+    if (sp > 1e-4){ e.vx *= ns/sp; e.vy *= ns/sp; }
+  }
+
+  e.x += e.vx * dt;
+  e.y += e.vy * dt;
+  /* the sidelines are hard walls; out of bounds is handled by the play code */
+  e.y = clamp(e.y, 0.8, FIELD_WID - 0.8);
+  e.x = clamp(e.x, 0.4, FIELD_LEN - 0.4);
+
+  const s2 = Math.hypot(e.vx, e.vy);
+  if (s2 > 0.6){ e.anim += s2 * dt * 1.7; if (Math.abs(e.vx) > 0.3) e.face = sign(e.vx); }
+  else e.anim = 0;
+  e.speedNow = s2;
+}
+
+/* ------------------------------------------------------------ pursuit AI --
+   Defenders aim at where the carrier WILL be, not where he is.  The lead
+   time is capped so a good cutback genuinely beats the angle. */
+function pursuePoint(d, t){
+  const rel = dist(d.x, d.y, t.x, t.y);
+  const myS = Math.max(2, MAXSPD(d.p));
+  let lead = clamp(rel / myS, 0, 1.1);
+  const px = t.x + t.vx * lead;
+  const py = t.y + t.vy * lead;
+  return [px, py];
+}
+
+/* ------------------------------------------------------------- collisions */
+const CONTACT_R = 1.05;                    /* yards                          */
+
+function sep(a, b, r){
+  const dx = b.x-a.x, dy = b.y-a.y;
+  let d = Math.hypot(dx,dy);
+  if (d >= r || d < 1e-5) return false;
+  const push = (r-d)/2;
+  const ux = dx/d, uy = dy/d;
+  a.x -= ux*push; a.y -= uy*push;
+  b.x += ux*push; b.y += uy*push;
+  return true;
+}
+/* ==========================================================================
+   THE PLAY ENGINE — formation, assignments, pursuit, blocking, contact.
+
+   Everything hangs off one number: adv = MATCH[offPlay][defPlay], running
+   from -1 (the defence called your number) to +1 (they guessed wrong and the
+   lane is open).  adv sets defender reaction time, how fast they shed blocks
+   and how well blockers hold.  Nothing else needs to know about play calling.
+   ========================================================================== */
+
+const PLAY = {
+  phase: 'idle',        /* idle|call|presnap|live|result */
+  t: 0,
+  offPlay: 0, defPlay: 0, adv: 0,
+  los: 60, dir: 1,      /* dir: +1 attacking the right end zone         */
+  carrier: null, qb: null, rb: null, ball: null,
+  result: null, resultT: 0, gain: 0, endSpot: 60,
+  handoffAt: -1, handedOff: false,
+  passMode: false, passT: 0, throwWind: 0,
+  snapT: 0, blowup: false
+};
+
+/* -------------------------------------------------------------- formation */
+function buildPlay(g, offTeam, defTeam, los, dir, offPlay, defPlay){
+  const ents = [];
+  const oR = ROSTERS[offTeam], dR = ROSTERS[defTeam];
+  const adv = MATCH[offPlay][defPlay];
+  PLAY.adv = adv;
+  PLAY.blowup = adv <= -0.99;
+  PLAY.handedOff = false; PLAY.handoffAt = -1;
+  PLAY.passMode = false; PLAY.throwWind = 0; PLAY.ball = null;
+  let id = 1;
+
+  const place = (team, role, p, dx, dy) => {
+    const e = makeEnt(team, role, p, los + dx*dir, clamp(MIDY + dy, 1.5, FIELD_WID-1.5));
+    e.id = id++; e.face = dir; ents.push(e); return e;
+  };
+
+  const oQB = place(0,'QB', oR.QB, FORM_OFF[0].dx, FORM_OFF[0].dy);
+  const oRB = place(0,'RB', oR.RB, FORM_OFF[1].dx, FORM_OFF[1].dy);
+  const oOL = [], oWR = [];
+  for (let i=2;i<7;i++) oOL.push(place(0,'OL', oR.OL[i-2], FORM_OFF[i].dx, FORM_OFF[i].dy));
+  oWR.push(place(0,'WR', oR.WR[0], FORM_OFF[7].dx, FORM_OFF[7].dy));
+  oWR.push(place(0,'WR', oR.WR[1], FORM_OFF[8].dx, FORM_OFF[8].dy));
+
+  const dDL = [], dLB = [], dDB = [];
+  for (let i=0;i<4;i++) dDL.push(place(1,'DL', dR.DL[i], FORM_DEF[i].dx, FORM_DEF[i].dy));
+  for (let i=4;i<7;i++) dLB.push(place(1,'LB', dR.LB[i-4], FORM_DEF[i].dx, FORM_DEF[i].dy));
+  for (let i=7;i<9;i++) dDB.push(place(1,'DB', dR.DB[i-7], FORM_DEF[i].dx, FORM_DEF[i].dy));
+
+  /* --- how badly the defence read it ----------------------------------- */
+  for (const d of ents) if (d.team === 1){
+    d.reactT = adv > 0 ? 0.06 + adv*0.20 : (adv > -0.99 ? 0.04 : 0);
+    /* How long he plays his CALL before converting to chasing the ball.  Read
+       it right and he converts instantly; guess wrong and he is still honouring
+       an assignment while the ball goes somewhere else. */
+    d.commit = (adv <= -0.99) ? 0 : (adv < 0 ? 0.22 : 0.55 + adv*0.95);
+    d.fooledT = 0;
+    d.shed   = clamp(1.0 - adv*0.70, 0.3, 2.6);
+    d.blowup = PLAY.blowup;
+    d.spdBonus = PLAY.blowup ? 1.12 : 1;
+    d.stam = 1;
+  }
+  for (const d of ents) if (d.team===1 && d.p.star && d.role==='DL'){
+    d.shed = Math.max(d.shed, 1.8); d.reactT *= 0.35;
+  }
+  /* --- a busted call takes people out of the play ----------------------- */
+  if (adv > 0){
+    const front = ents.filter(e => e.team===1 && e.job !== 'safety');
+    /* Where this play is actually going.  The defenders who would have been
+       waiting there are precisely the ones the wrong call sends elsewhere. */
+    const rr = ROUTES[offPlay], last = rr.RB[rr.RB.length-1];
+    const aim = OFF_PLAYS[offPlay].kind === 'run'
+      ? [los + last[0]*dir, clamp(MIDY + FORM_OFF[1].dy + last[1], 2, FIELD_WID-2)]
+      : [los + dir*(offPlay===3?18:7), oWR[0].y];
+    const away = front.slice().sort(
+      (a,b) => dist(a.x,a.y,aim[0],aim[1]) - dist(b.x,b.y,aim[0],aim[1]));
+    const n = Math.round(adv * 5.5);
+    for (let i=0;i<n && i<away.length;i++){
+      away[i].fooledT = 0.85 + adv*1.00;
+      if (away[i].p.star) away[i].fooledT *= 0.35;   /* a wrecker recovers fast */
+    }
+  }
+
+  /* --- assignments ------------------------------------------------------ */
+  const defFront = dDL.concat(dLB);
+  oOL.forEach(o => {
+    let best = null, bd = 1e9;
+    for (const d of defFront){
+      if (d._claimed) continue;
+      const dd = Math.abs(d.y - o.y) + Math.abs(d.x - o.x)*0.35;
+      if (dd < bd){ bd = dd; best = d; }
+    }
+    if (best){ best._claimed = true; o.assign = best; }
+    o.blockWin = clamp(0.52 + adv*0.38, 0.10, 0.95);
+  });
+
+  const rt = ROUTES[offPlay];
+  oRB.route = rt.RB.map(p => [los + p[0]*dir, clamp(MIDY + FORM_OFF[1].dy + p[1], 2, FIELD_WID-2)]);
+  oWR.forEach((w,i) => {
+    const s = i===0 ? -1 : 1;
+    w.route = rt.WR.map(p => [los + p[0]*dir, clamp(w.y + p[1]*s, 2, FIELD_WID-2)]);
+    w.routeI = 0;
+  });
+  oRB.routeI = 0;
+
+  const dp = DEF_PLAYS[defPlay];
+  defFront.forEach((d,i) => {
+    if (dp.n === 'STUFF')        d.job = 'gapIn';
+    else if (dp.n === 'CONTAIN') d.job = (d.role==='DL' && (i===0||i===3)) ? 'edge' : 'gapIn';
+    else if (dp.n === 'ZONE')    d.job = d.role==='DL' ? 'rush' : 'zoneShort';
+    else                         d.job = 'rush';
+  });
+  dDB.forEach((d,i) => {
+    d.job = (dp.n==='BLITZ') ? 'deep' : (dp.n==='ZONE' ? 'zoneShort' : 'cover');
+    d.cover = oWR[i] || oWR[0];
+  });
+  dDB[1].job = 'safety';               /* last line of defence, every play */
+  dDB[1].reactT *= 0.3;
+
+  PLAY.qb = oQB; PLAY.rb = oRB; PLAY.wrs = oWR; PLAY.ol = oOL;
+  PLAY.dl = dDL; PLAY.lb = dLB; PLAY.db = dDB;
+  PLAY.offPlay = offPlay; PLAY.defPlay = defPlay;
+  PLAY.los = los; PLAY.dir = dir;
+  PLAY.carrier = null; PLAY.snapT = 0;
+  PLAY.offTeam = offTeam; PLAY.defTeam = defTeam;
+  g.ents = ents;
+  return ents;
+}
+
+/* ------------------------------------------------------------- the snap -- */
+function snapBall(g){
+  PLAY.phase = 'live'; PLAY.t = 0;
+  const o = OFF_PLAYS[PLAY.offPlay];
+  PLAY.qb.hasBall = true;
+  PLAY.carrier = PLAY.qb;
+  PLAY.handoffAt = (o.kind === 'run') ? 0.42 : -1;
+  sfxPlay('snap');
+}
+
+/* ------------------------------------------------------------- behaviours */
+function stepDefender(d, dt){
+  if (d.fooledT > 0) d.fooledT -= dt;
+  if (d.reactT > 0){ d.reactT -= dt; driveEnt(d, dt, 0, 0, false); return; }
+  if (d.stunT > 0){ d.stunT -= dt; driveEnt(d, dt, 0, 0, false); return; }
+  const car = PLAY.carrier;
+  const ballLoose = PLAY.ball && PLAY.ball.live;
+
+  /* engaged by a blocker: fight through at a rate set by the read and power */
+  if (d.blowup && PLAY.t < 1.5){                 /* they called your number */
+    if (d.engaged){ d.engaged.engaged = null; d.engaged = null; }
+    /* attack the mesh point, not the ball's current spot */
+    const mx2 = PLAY.los - PLAY.dir*3.0, my2 = PLAY.rb.y;
+    const car2 = PLAY.carrier;
+    /* only sit on the mesh point while a hand-off is still coming; on a pass
+       the blown-up read means going straight at the passer */
+    const pending = PLAY.handoffAt > 0 && !PLAY.handedOff;
+    const aimx = (pending || !car2) ? mx2 : car2.x;
+    const aimy = (pending || !car2) ? my2 : car2.y;
+    driveEnt(d, dt, aimx-d.x, aimy-d.y, true);
+    return;
+  }
+  else if (d.engaged && d.engaged.engaged === d){
+    d.engagedT += dt * d.shed * (0.55 + d.p.pow*0.075);
+    if (d.engagedT < d.engaged.blockWin * 2.6){
+      const tx = car ? car.x : d.x + PLAY.dir, ty = car ? car.y : d.y;
+      driveEnt(d, dt, sign(tx-d.x)*0.30, sign(ty-d.y)*0.30, false);
+      return;
+    }
+    d.engaged.engaged = null; d.engaged = null; d.engagedT = 0;
+  }
+
+  let tx, ty, burst = false;
+  const offKind = OFF_PLAYS[PLAY.offPlay].kind;
+  const committed = PLAY.t < d.commit || d.fooledT > 0;
+  const L = PLAY.los, DIR = PLAY.dir;
+
+  if (ballLoose){ tx = PLAY.ball.tx; ty = PLAY.ball.ty; burst = true; }
+  else if (!car){ tx = d.x - DIR; ty = d.y; }
+  else if (committed){
+    /* --- playing the call, not the ball --- */
+    switch (d.job){
+      case 'rush': {                     /* blitz: loop wide at the passer */
+        const out = d.y >= MIDY ? 1 : -1;
+        tx = L - DIR*3.5;
+        ty = MIDY + out*(6.5 + Math.abs(d.y - MIDY)*0.55);
+        burst = true; break;
+      }
+      case 'gapIn':                      /* plug the interior gap */
+        tx = L + DIR*0.5; ty = MIDY + (d.y - MIDY)*0.55; break;
+      case 'edge': {                     /* set the edge outside */
+        const out = d.y > MIDY ? 1 : -1;
+        tx = L + DIR*1.2; ty = MIDY + out*8.5; break;
+      }
+      case 'zoneShort':
+        tx = L + DIR*7.0; ty = d.y + (car.y - d.y)*0.20; break;
+      case 'deep':
+        tx = L + DIR*17; ty = d.y + (car.y - d.y)*0.15; break;
+      case 'safety':
+        tx = L + DIR*15; ty = car.y*0.55 + MIDY*0.45; break;
+      default:
+        tx = L + DIR*2; ty = d.y;
+    }
+  }
+  else if (d.job === 'safety'){
+    const depth = L + DIR*15;
+    const past = (DIR>0 ? car.x > depth-11 : car.x < depth+11);
+    if (past){ const pp = pursuePoint(d, car); tx=pp[0]; ty=pp[1]; burst = true; }
+    else { tx = depth; ty = car.y*0.55 + MIDY*0.45; }
+  }
+  else if (d.job === 'cover' && d.cover && offKind === 'pass' && !PLAY.handedOff && PLAY.t < 2.6){
+    tx = d.cover.x + DIR*1.4; ty = d.cover.y;
+  }
+  else {
+    const pp = pursuePoint(d, car);
+    tx = pp[0]; ty = pp[1];
+    if (d.job === 'edge'){
+      const out = (car.y > MIDY) ? 1 : -1;
+      ty = car.y + out*2.4; tx = car.x + DIR*1.8;
+    }
+    burst = dist(d.x,d.y,car.x,car.y) < 10 && d.stam > 0.22;
+  }
+  driveEnt(d, dt, tx-d.x, ty-d.y, burst);
+}
+
+function stepBlocker(o, dt){
+  const d = o.assign;
+  const car = PLAY.carrier;
+  if (!d){ driveEnt(o, dt, PLAY.dir*0.4, 0, false); return; }
+  if (o.engaged === d){
+    const awayX = car ? sign(o.x - car.x) : PLAY.dir;
+    driveEnt(o, dt, PLAY.dir*0.5 + awayX*0.2, sign(o.y-d.y)*0.15, false);
+    sep(o, d, 0.9);
+    return;
+  }
+  const ax = car ? (d.x*0.72 + car.x*0.28) : d.x;
+  const ay = car ? (d.y*0.72 + car.y*0.28) : d.y;
+  driveEnt(o, dt, ax-o.x, ay-o.y, false);
+  if (dist(o.x,o.y,d.x,d.y) < 1.0 && !d.engaged){
+    o.engaged = d; d.engaged = o; d.engagedT = 0;
+    sfxPlay('block');
+  }
+}
+
+function stepRoute(e, dt){
+  if (!e.route || e.routeI >= e.route.length){ driveEnt(e, dt, PLAY.dir, 0, true); return; }
+  const t = e.route[e.routeI];
+  if (dist(e.x,e.y,t[0],t[1]) < 1.4) e.routeI++;
+  driveEnt(e, dt, t[0]-e.x, t[1]-e.y, e.routeI>0);
+}
+
+/* --------------------------------------------------------- the collision --
+   Contact is never instant death.  The carrier drops into a struggle and the
+   player mashes out of it, weighted by power against power.  Extra tacklers
+   arriving raise the bar, which is what gang tackling should feel like. */
+function beginStruggle(car, d){
+  car.state = 'struggle';
+  car.struggle = 0; car.mash = 0;
+  car.tacklers = [d];
+  car.need = clamp(4.2 + (d.p.pow - car.p.pow)*0.70 + (car.breaks||0)*2.0, 2.5, 11);
+  car.strugMax = 0.80;
+  d.state = 'struggle';
+  G.shake = Math.max(G.shake, 4);
+  crowdHype = Math.min(1, crowdHype + 0.15);
+  sfxPlay('hit');
+}
+function stepStruggle(car, dt, mashed){
+  car.struggle += dt;
+  if (mashed) car.mash++;
+  const creep = 0.9 * (car.p.pow/10);
+  car.x += PLAY.dir * creep * dt;
+  for (const t of car.tacklers){ t.x += PLAY.dir*creep*dt*0.9; t.y += (car.y-t.y)*dt*2; }
+  car.vx = 0; car.vy = 0;
+  if (car.mash >= car.need){
+    car.state = 'run';
+    car.breaks = (car.breaks||0) + 1;
+    for (const t of car.tacklers){ t.state='pursue'; t.stunT = 0.45; t.engaged=null; }
+    car.tacklers = [];
+    car.immune = 0.25;
+    car.vx = PLAY.dir * MAXSPD(car.p) * 0.72;
+    G.shake = Math.max(G.shake, 6); G.flash = Math.max(G.flash, 0.18);
+    crowdHype = 1;
+    sfxPlay('break');
+    return 'broke';
+  }
+  if (car.struggle >= car.strugMax) return 'down';
+  return null;
+}
+
+/* ------------------------------------------------------------- play step -- */
+function stepPlay(g, dt, input){
+  PLAY.t += dt;
+
+  if (PLAY.handoffAt > 0 && PLAY.t >= PLAY.handoffAt && !PLAY.handedOff){
+    PLAY.handedOff = true;
+    PLAY.qb.hasBall = false; PLAY.rb.hasBall = true;
+    PLAY.carrier = PLAY.rb;
+  }
+  const C0 = PLAY.carrier;
+
+  if (C0){
+    if (C0.state === 'struggle'){
+      const r = stepStruggle(C0, dt, input.mash);
+      if (r === 'down') return endPlay(g, 'tackle');
+    } else {
+      if (C0.immune > 0) C0.immune -= dt;
+      driveEnt(C0, dt, input.x, input.y, input.burst);
+      C0.state = 'run';
+    }
+  }
+
+  for (const e of g.ents){
+    if (e === C0 || e.state === 'struggle') continue;
+    if (e.team === 0){
+      if (e.role === 'OL') stepBlocker(e, dt);
+      else if (e.role === 'WR') stepRoute(e, dt);
+      else if (e === PLAY.rb && !PLAY.handedOff) stepRoute(e, dt);
+      else if (e === PLAY.qb && PLAY.handedOff) driveEnt(e, dt, -PLAY.dir*0.4, 0, false);
+      else driveEnt(e, dt, 0, 0, false);
+    } else stepDefender(e, dt);
+  }
+
+  for (let i=0;i<g.ents.length;i++) for (let j=i+1;j<g.ents.length;j++){
+    const a=g.ents[i], b=g.ents[j];
+    if (a.state==='struggle'||b.state==='struggle') continue;
+    if (a===C0 || b===C0) continue;          /* never fend defenders off the carrier */
+    if (Math.abs(a.x-b.x) < 1.2 && Math.abs(a.y-b.y) < 1.2) sep(a,b,0.92);
+  }
+
+  if (C0 && C0.state !== 'struggle' && !(C0.immune > 0)){
+    for (const d of g.ents){
+      if (d.team !== 1 || d.stunT > 0 || d.fooledT > 0) continue;
+      if (dist(d.x,d.y,C0.x,C0.y) < CONTACT_R){ beginStruggle(C0, d); break; }
+    }
+  } else if (C0 && C0.state === 'struggle'){
+    for (const d of g.ents){
+      if (d.team !== 1 || d.stunT > 0 || C0.tacklers.indexOf(d) >= 0) continue;
+      if (dist(d.x,d.y,C0.x,C0.y) < CONTACT_R*1.3){
+        C0.tacklers.push(d); d.state='struggle'; C0.need += 1.5;
+      }
+    }
+  }
+
+  if (C0){
+    if (PLAY.dir > 0 ? C0.x >= GOAL_R : C0.x <= GOAL_L) return endPlay(g, 'td');
+    if (C0.y <= 1.0 || C0.y >= FIELD_WID-1.0) return endPlay(g, 'oob');
+    if (PLAY.dir > 0 ? C0.x <= 0.6 : C0.x >= FIELD_LEN-0.6) return endPlay(g, 'safety');
+  }
+  if (PLAY.t > 14) return endPlay(g, 'tackle');
+  return null;
+}
+
+function endPlay(g, how){
+  PLAY.phase = 'result'; PLAY.resultT = 0;
+  const C0 = PLAY.carrier;
+  const spot = C0 ? C0.x : PLAY.los;
+  PLAY.gain = (spot - PLAY.los) * PLAY.dir;
+  PLAY.endSpot = spot;
+  PLAY.result = how;
+  if (C0) C0.state = 'down';
+  sfxPlay(how==='td' ? 'td' : 'whistle');
+  return how;
+}
+
+/* ==========================================================================
+   PASSING — press A to look, then a receiver number to throw.  The ball has
+   real flight time, so a defender sitting on the route can undercut it.
+   ========================================================================== */
+function enterPassMode(){
+  if (PLAY.passMode || PLAY.handedOff) return;
+  PLAY.passMode = true;
+  PLAY.targets = [PLAY.wrs[0], PLAY.wrs[1], PLAY.rb];
+  sfxPlay('blip');
+}
+function throwBall(idx){
+  const tgt = PLAY.targets[idx];
+  if (!tgt || !PLAY.carrier) return;
+  const from = PLAY.carrier;
+  const acc = from.p.acc || 5;
+  /* lead the receiver; a poor arm scatters the ball */
+  const flight = clamp(dist(from.x,from.y,tgt.x,tgt.y) / 26, 0.35, 1.5);
+  const lx = tgt.x + tgt.vx*flight, ly = tgt.y + tgt.vy*flight;
+  const err = (10 - acc) * 0.30;
+  PLAY.ball = {
+    x: from.x, y: from.y, x0: from.x, y0: from.y,
+    tx: lx + rndR(-err,err), ty: clamp(ly + rndR(-err,err), 1.5, FIELD_WID-1.5),
+    t: 0, flight, live: true, target: tgt, h: 0
+  };
+  from.hasBall = false;
+  PLAY.carrier = null;
+  PLAY.passMode = false;
+  PLAY.threw = true;
+  sfxPlay('throw');
+}
+function stepBall(dt){
+  const b = PLAY.ball;
+  if (!b || !b.live) return;
+  b.t += dt;
+  const u = clamp(b.t / b.flight, 0, 1);
+  b.x = lerp(b.x0, b.tx, u);
+  b.y = lerp(b.y0, b.ty, u);
+  b.h = Math.sin(u*Math.PI) * 5;            /* arc height, for the shadow    */
+  /* anyone can play the ball once it is close to coming down */
+  if (u > 0.55){
+    let best=null, bd=2.2;
+    for (const e of G.ents){
+      const dd = dist(e.x,e.y,b.x,b.y);
+      if (dd < bd){ bd = dd; best = e; }
+    }
+    if (best){
+      b.live = false;
+      if (best.team === 0){
+        best.hasBall = true; PLAY.carrier = best; PLAY.caught = true;
+        sfxPlay('catch'); crowdHype = 1;
+      } else {
+        PLAY.intBy = best; return endPlay(G, 'int');
+      }
+      return;
+    }
+  }
+  if (u >= 1){ b.live = false; return endPlay(G, 'incomplete'); }
+}
+
+/* ==========================================================================
+   THE GAME — downs, clock, scoring, and a CPU that guesses from tendencies.
+   ========================================================================== */
+const GM = {
+  home:0, away:1, score:[0,0],
+  qtr:1, clock:0, quarterLen:150,
+  poss:0,                       /* which TEAM INDEX (0 home, 1 away) has it  */
+  ballOn:60, down:1, toGo:10, dir:1,
+  playing:false, twoMin:false,
+  humanSide:0, twoPlayer:false,
+  hist:[[],[]],                 /* recent offensive calls, per side          */
+  lastResult:'', lastGain:0
+};
+
+/* --- the CPU's guess.  It never sees the pick; it reads the situation and
+   the caller's habits, which is what makes spamming one play fatal. */
+function cpuGuess(side){
+  const h = GM.hist[side];
+  const w = [1,1,1,1];
+  /* habit: what has this caller been doing lately, most recent weighted most */
+  for (let i=0;i<h.length;i++){
+    const age = h.length - 1 - i;
+    w[h[i]] += 2.4 * Math.pow(0.68, age);
+  }
+  /* situation */
+  const dist2go = GM.toGo;
+  if (GM.down >= 3 && dist2go >= 7){ w[2]+=1.5; w[3]+=1.6; }      /* must pass */
+  if (GM.down >= 3 && dist2go <= 2){ w[0]+=2.0; w[1]+=0.8; }      /* short yardage */
+  if (dist2go <= 3){ w[0]+=0.9; }
+  const behind = GM.score[side] - GM.score[1-side];
+  const late = (GM.qtr >= 4 && GM.clock < 60);
+  if (late && behind < 0){ w[3]+=1.8; w[2]+=0.8; }                 /* needs chunks */
+  if (late && behind > 0){ w[0]+=1.4; w[1]+=0.6; }                 /* bleed clock */
+  /* keep it honest: a floor of randomness so it can never be fully solved */
+  const total = w.reduce((a,b)=>a+b,0);
+  const FLOOR = 0.18;
+  let r = rnd();
+  if (r < FLOOR) return rndI(0,3);
+  r = rnd()*total; let acc2=0;
+  for (let i=0;i<4;i++){ acc2 += w[i]; if (r <= acc2) return i; }
+  return 3;
+}
+function cpuOffenseCall(side){
+  const w=[1.1,1.0,1.0,0.7];
+  if (GM.down>=3 && GM.toGo>=7){ w[2]+=1.4; w[3]+=1.2; w[0]-=0.6; }
+  if (GM.toGo<=2){ w[0]+=1.6; }
+  const total=w.reduce((a,b)=>a+Math.max(0.05,b),0);
+  let r=rnd()*total, acc2=0;
+  for(let i=0;i<4;i++){ acc2+=Math.max(0.05,w[i]); if(r<=acc2) return i; }
+  return 0;
+}
+function noteCall(side, play){
+  const h = GM.hist[side];
+  h.push(play);
+  if (h.length > 8) h.shift();
+}
+/* ==========================================================================
+   RENDERING — everything is tiles, blocks and dither.  No gradients.
+   ========================================================================== */
+const cam = { x: 0, target: 0 };
+
+const sxOf = x => Math.round((x - cam.x) * PX_X);
+const syOf = y => Math.round(FIELD_TOP + y * PX_Y);
+
+/* ------------------------------------------------------------- the field --
+   Painted once per drive into an offscreen strip, then blitted.  The strip
+   is the whole 120 yards wide so scrolling costs nothing. */
+let turf = null, turfKey = '';
+function paintField(homeIdx, awayIdx){
+  const key = homeIdx + '/' + awayIdx;
+  if (turf && turfKey === key) return;
+  if (!turf){ turf = document.createElement('canvas'); turf.width = FIELD_LEN*PX_X; turf.height = FIELD_H; }
+  turfKey = key;
+  const g = turf.getContext('2d');
+  const H = TEAMS[homeIdx], A = TEAMS[awayIdx];
+
+  /* mowed stripes, five yards apart, dithered so they read as texture */
+  for (let yd = 0; yd < FIELD_LEN; yd += 5){
+    const x = yd*PX_X, w = 5*PX_X;
+    const dark = ((yd/5)|0) % 2 === 0;
+    ditherRect(g, x, 0, w, FIELD_H, C.green, C.dkgreen, dark ? 0.62 : 0.20);
+  }
+  /* end zones */
+  for (const [x0,x1,T] of [[0,GOAL_L,A],[GOAL_R,FIELD_LEN,H]]){
+    ditherRect(g, x0*PX_X, 0, (x1-x0)*PX_X, FIELD_H, T.c1, T.c2, 0.42);
+    g.save();
+    g.translate((x0+ (x1-x0)/2)*PX_X, FIELD_H/2);
+    g.rotate(-Math.PI/2);
+    textC(g, T.name, 0, -5, 2, T.c2 === C.black ? C.white : C.black, 2);
+    textC(g, T.name, 0, -6, 2, C.white, 2);
+    g.restore();
+  }
+  /* yard lines */
+  for (let yd = GOAL_L; yd <= GOAL_R; yd += 5){
+    const x = Math.round(yd*PX_X);
+    g.fillStyle = C.white;
+    g.fillRect(x, 0, (yd===GOAL_L||yd===GOAL_R)?2:1, FIELD_H);
+  }
+  /* hash marks */
+  g.fillStyle = C.white;
+  for (let yd = GOAL_L; yd <= GOAL_R; yd++){
+    if (yd % 5 === 0) continue;
+    const x = Math.round(yd*PX_X);
+    g.fillRect(x, Math.round(FIELD_H*0.34), 1, 3);
+    g.fillRect(x, Math.round(FIELD_H*0.66), 1, 3);
+    g.fillRect(x, 1, 1, 3);
+    g.fillRect(x, FIELD_H-4, 1, 3);
+  }
+  /* yardage numbers, counting down from both ends the way a real field does */
+  for (let yd = GOAL_L+10; yd <= GOAL_R-10; yd += 10){
+    const n = Math.min(yd-GOAL_L, GOAL_R-yd);
+    const s = String(n);
+    const x = Math.round(yd*PX_X);
+    textC(g, s, x, 9, 1, C.white, 1);
+    textC(g, s, x, FIELD_H-16, 1, C.white, 1);
+  }
+}
+
+/* ------------------------------------------------------------ the crowd --- */
+function drawCrowd(g, t){
+  for (const [y0,h] of [[FIELD_TOP-16,16],[FIELD_TOP+FIELD_H,16]]){
+    ditherRect(g, 0, y0, SCR_W, h, C.dkgray, C.black, 0.5);
+    for (let i=0;i<64;i++){
+      const x = (i*4 + ((i*37)%3)) % SCR_W;
+      const row = (i*7)%h;
+      const bob = ((Math.sin(t*3 + i*1.7) > 0.6) ? 1 : 0) * (crowdHype>0.5?1:0);
+      const col = [C.red,C.blue,C.yellow,C.white,C.purple,C.cyan][(i*5)%6];
+      g.fillStyle = col;
+      g.fillRect(x, y0 + ((row+bob)%h), 2, 2);
+    }
+  }
+}
+let crowdHype = 0;
+
+/* --------------------------------------------------------- player sprite --
+   8 wide, 13 tall, built on the 8x8 grid: helmet tile over a body tile.
+   Three colours plus transparency, four-frame run cycle. */
+function drawPlayer(g, e, T, opts){
+  const sx = sxOf(e.x), sy = syOf(e.y);
+  if (sx < -12 || sx > SCR_W+12) return;
+  const x = sx - 4, y = sy - 11;
+  const c1 = T.c1, c2 = T.c2;
+  const fr = (Math.floor(e.anim) % 4);
+  const dn = e.state === 'down';
+  /* shadow */
+  g.fillStyle = C.black;
+  g.globalAlpha = 0.35; g.fillRect(sx-4, sy+1, 8, 2); g.globalAlpha = 1;
+  if (dn){
+    g.fillStyle = c1; g.fillRect(sx-5, sy-3, 10, 4);
+    g.fillStyle = c2; g.fillRect(sx-5+(e.face>0?6:0), sy-4, 4, 3);
+    return;
+  }
+  /* legs */
+  const lo = [0,1,0,-1][fr], ro = [0,-1,0,1][fr];
+  g.fillStyle = C.white;
+  g.fillRect(x+1, y+9+Math.max(0,lo), 2, 4-Math.abs(lo));
+  g.fillRect(x+5, y+9+Math.max(0,ro), 2, 4-Math.abs(ro));
+  /* body */
+  g.fillStyle = c1; g.fillRect(x+1, y+4, 6, 6);
+  /* arms swing opposite the legs */
+  g.fillStyle = c1;
+  g.fillRect(x + (e.face>0?7:0), y+5+ro, 1, 3);
+  g.fillRect(x + (e.face>0?0:7), y+5+lo, 1, 3);
+  /* helmet */
+  g.fillStyle = c2; g.fillRect(x+1, y, 6, 4);
+  g.fillStyle = C.tan; g.fillRect(x + (e.face>0?5:2), y+2, 2, 2);
+  g.fillStyle = C.dkgray; g.fillRect(x + (e.face>0?6:1), y+2, 1, 1);
+  /* ball */
+  if (e.hasBall){
+    g.fillStyle = C.brown;
+    g.fillRect(x + (e.face>0?-1:7), y+6, 3, 2);
+    g.fillStyle = C.white; g.fillRect(x + (e.face>0?0:8), y+6, 1, 1);
+  }
+  /* star marker */
+  if (e.p && e.p.star && opts && opts.markStars){
+    g.fillStyle = C.yellow; g.fillRect(sx-1, y-3, 2, 2);
+  }
+  /* struggle shake */
+  if (e.state === 'struggle'){
+    g.fillStyle = (Math.floor(e.struggle*24)%2) ? C.white : C.red;
+    g.fillRect(sx-5, y-4, 10, 2);
+  }
+}
+/* placeholder until the audio pass */
+function audioKick(){}
+function sfxPlay(){}
+function music(){}
+/* ==========================================================================
+   MAIN — canvas, input, the loop, and every screen.
+   ========================================================================== */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d', { alpha:false });
+ctx.imageSmoothingEnabled = false;
+
+function fit(){
+  const s = Math.max(1, Math.min(Math.floor(window.innerWidth / SCR_W),
+                                 Math.floor((window.innerHeight-12) / SCR_H)));
+  cv.style.width = (SCR_W*s)+'px'; cv.style.height = (SCR_H*s)+'px';
+}
+window.addEventListener('resize', fit);
+
+/* ------------------------------------------------------------------ input */
+const PADS = [
+  { up:'ArrowUp', dn:'ArrowDown', lf:'ArrowLeft', rt:'ArrowRight', a:'KeyZ', b:'KeyX' },
+  { up:'KeyW',    dn:'KeyS',      lf:'KeyA',      rt:'KeyD',       a:'KeyF', b:'KeyG' }
+];
+const held = {}, pressed = {};
+const pad = [{x:0,y:0,a:0,b:0,aP:0,bP:0},{x:0,y:0,a:0,b:0,aP:0,bP:0}];
+window.addEventListener('keydown', e => {
+  audioKick();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].indexOf(e.code)>=0) e.preventDefault();
+  if (!held[e.code]) pressed[e.code] = true;
+  held[e.code] = true;
+});
+window.addEventListener('keyup', e => { held[e.code] = false; });
+window.addEventListener('blur', () => { for (const k in held) held[k] = false; });
+cv.addEventListener('mousedown', audioKick);
+function readPads(){
+  for (let i=0;i<2;i++){
+    const m = PADS[i], p = pad[i];
+    p.x = (held[m.rt]?1:0)-(held[m.lf]?1:0);
+    p.y = (held[m.dn]?1:0)-(held[m.up]?1:0);
+    p.aP = !!pressed[m.a]; p.bP = !!pressed[m.b];
+    p.a = !!held[m.a];     p.b = !!held[m.b];
+  }
+}
+const kp = c => !!pressed[c];
+
+/* ==================================================================== state */
+const G = { mode:'title', t:0, stateT:0, ents:[], shake:0, flash:0, banner:null, bannerT:0 };
+let selHome = 0, selAway = 1, menuIdx = 0;
+
+function say(text, sub, t){ G.banner = {text, sub:sub||''}; G.bannerT = t||1.6; }
+
+/* ------------------------------------------------------------- the drive -- */
+function newGame(twoPlayer){
+  GM.home = selHome; GM.away = selAway;
+  GM.score = [0,0]; GM.qtr = 1; GM.clock = GM.quarterLen;
+  GM.hist = [[],[]];
+  GM.twoPlayer = !!twoPlayer; GM.humanSide = 0;
+  GM.poss = 0; GM.dir = 1; GM.ballOn = 35; GM.down = 1; GM.toGo = 10;
+  G.mode = 'call';
+  beginCall();
+}
+function beginCall(){
+  G.mode = 'call';
+  CALL.offPick = -1; CALL.defPick = -1; CALL.cursor = 0; CALL.cursor2 = 0;
+  CALL.t = 0; CALL.locked = false;
+  /* the CPU commits its guess up front, from tendencies only */
+  const offSide = GM.poss, defSide = 1-GM.poss;
+  CALL.cpuOff = (offSide === GM.humanSide && !GM.twoPlayer) ? -1 : cpuOffenseCall(offSide);
+  CALL.cpuDef = (defSide === GM.humanSide && GM.twoPlayer) ? -1 : cpuGuess(offSide);
+}
+const CALL = { offPick:-1, defPick:-1, cursor:0, cursor2:0, t:0, locked:false, cpuOff:-1, cpuDef:-1 };
+
+function startSnap(){
+  const offT = GM.poss === 0 ? GM.home : GM.away;
+  const defT = GM.poss === 0 ? GM.away : GM.home;
+  GM.dir = GM.poss === 0 ? 1 : -1;
+  noteCall(GM.poss, CALL.offPick);
+  buildPlay(G, offT, defT, GM.ballOn, GM.dir, CALL.offPick, CALL.defPick);
+  PLAY.threw = false; PLAY.caught = false; PLAY.intBy = null;
+  snapBall(G);
+  G.mode = 'live';
+  cam.x = clamp(GM.ballOn - VIEW_YDS/2, 0, FIELD_LEN-VIEW_YDS);
+}
+
+/* who is the human controlling right now? */
+function humanControlsOffense(){
+  return GM.twoPlayer ? true : (GM.poss === GM.humanSide);
+}
+
+function livePlayInput(){
+  const p = pad[ GM.twoPlayer ? (GM.poss===0?0:1) : 0 ];
+  const mine = humanControlsOffense();
+  if (!mine) return botOffenseInput();
+  return { x:p.x, y:p.y, burst:p.b, mash:(p.aP||p.bP), aP:p.aP };
+}
+/* the CPU running the ball uses the same reading a player would */
+function botOffenseInput(){
+  const car = PLAY.carrier;
+  if (!car) return {x:0,y:0,burst:false,mash:false,aP:false};
+  let best=[GM.dir,0], bs=-1e9;
+  for (let a=-100;a<=100;a+=10){
+    const ang = (GM.dir>0?0:Math.PI) + a*Math.PI/180;
+    const dx=Math.cos(ang), dy=Math.sin(ang);
+    const px=car.x+dx*4.5, py=clamp(car.y+dy*4.5,1.5,FIELD_WID-1.5);
+    let s=(px-car.x)*GM.dir*1.5;
+    for (const d of G.ents){ if(d.team!==1) continue;
+      const dd=dist(px,py,d.x,d.y); if(dd<7) s-=(7-dd)*(7-dd)*0.30; }
+    s -= Math.abs(py-MIDY)*0.02;
+    if (s>bs){ bs=s; best=[dx,dy]; }
+  }
+  const mash = (Math.floor(G.t/0.14) !== Math.floor((G.t-0.016)/0.14));
+  const wantThrow = OFF_PLAYS[PLAY.offPlay].kind==='pass' && !PLAY.threw && PLAY.t>1.0;
+  return { x:best[0], y:best[1], burst:car.stam>0.35, mash, aP:wantThrow, cpuThrow:wantThrow };
+}
+
+/* --------------------------------------------------------------- the down */
+function finishDown(){
+  const gain = PLAY.gain;
+  GM.lastGain = gain; GM.lastResult = PLAY.result;
+  const scoringTeam = GM.poss;
+
+  if (PLAY.result === 'td'){
+    GM.score[scoringTeam] += 7;
+    say('TOUCHDOWN!', TEAMS[scoringTeam===0?GM.home:GM.away].name, 2.6);
+    G.flash = 1; G.shake = 10; crowdHype = 1;
+    kickoffTo(1-scoringTeam);
+    return;
+  }
+  if (PLAY.result === 'int'){
+    say('INTERCEPTED!', '', 2.2);
+    GM.poss = 1-GM.poss;
+    GM.ballOn = clamp(PLAY.intBy ? PLAY.intBy.x : GM.ballOn, GOAL_L+1, GOAL_R-1);
+    GM.down = 1; GM.toGo = 10;
+    setToGo();
+    beginCall(); return;
+  }
+  if (PLAY.result === 'safety'){
+    GM.score[1-scoringTeam] += 2;
+    say('SAFETY', '', 2.2);
+    kickoffTo(scoringTeam); return;
+  }
+  GM.ballOn = clamp(PLAY.endSpot, GOAL_L+0.5, GOAL_R-0.5);
+  GM.toGo = Math.max(1, Math.round(Math.abs(GM.firstDownAt - GM.ballOn)));
+  const gainedLine = (GM.dir>0 ? GM.ballOn >= GM.firstDownAt : GM.ballOn <= GM.firstDownAt);
+  if (gainedLine){
+    GM.down = 1; GM.toGo = 10; setToGo();
+    say('FIRST DOWN', '', 1.2);
+  } else {
+    GM.down++;
+    if (GM.down > 4){
+      say('TURNOVER ON DOWNS', '', 2.0);
+      GM.poss = 1-GM.poss; GM.dir = -GM.dir;
+      GM.down = 1; setToGo();
+    }
+  }
+  beginCall();
+}
+function setToGo(){
+  GM.firstDownAt = GM.ballOn + GM.dir*10;
+  if (GM.dir>0 && GM.firstDownAt > GOAL_R) GM.firstDownAt = GOAL_R;
+  if (GM.dir<0 && GM.firstDownAt < GOAL_L) GM.firstDownAt = GOAL_L;
+  GM.toGo = Math.max(1, Math.round(Math.abs(GM.firstDownAt - GM.ballOn)));
+}
+function kickoffTo(team){
+  GM.poss = team; GM.dir = team===0?1:-1;
+  GM.ballOn = team===0 ? GOAL_L+25 : GOAL_R-25;
+  GM.down = 1; setToGo();
+  beginCall();
+}
+
+/* ==================================================================== update */
+function update(dt){
+  G.t += dt; G.stateT += dt;
+  readPads();
+  if (G.bannerT>0) G.bannerT -= dt;
+  if (G.shake>0) G.shake = Math.max(0,G.shake-dt*26);
+  if (G.flash>0) G.flash = Math.max(0,G.flash-dt*3);
+  crowdHype = Math.max(0, crowdHype - dt*0.35);
+
+  if (G.mode === 'title') updateTitle();
+  else if (G.mode === 'select') updateSelect();
+  else if (G.mode === 'call') updateCall(dt);
+  else if (G.mode === 'live') updateLive(dt);
+  else if (G.mode === 'result'){
+    PLAY.resultT += dt;
+    /* let the pile settle, show the banner, then next down */
+    if (PLAY.resultT > 1.5){ G.mode='call'; finishDown(); }
+  }
+
+  const foc = PLAY.carrier ? PLAY.carrier.x : (PLAY.ball && PLAY.ball.live ? PLAY.ball.x : GM.ballOn);
+  cam.target = clamp(foc - VIEW_YDS/2, 0, FIELD_LEN-VIEW_YDS);
+  cam.x += (cam.target-cam.x)*(1-Math.exp(-6.5*dt));
+  for (const k in pressed) delete pressed[k];
+}
+function updateTitle(){
+  if (kp('Space')||kp('Enter')||kp('KeyZ')){ G.mode='select'; menuIdx=0; sfxPlay('blip'); }
+}
+function updateSelect(){
+  const p=pad[0];
+  if (kp('ArrowLeft')) { selHome=(selHome+TEAMS.length-1)%TEAMS.length; sfxPlay('blip'); }
+  if (kp('ArrowRight')){ selHome=(selHome+1)%TEAMS.length; sfxPlay('blip'); }
+  if (kp('ArrowUp'))   { selAway=(selAway+TEAMS.length-1)%TEAMS.length; sfxPlay('blip'); }
+  if (kp('ArrowDown')) { selAway=(selAway+1)%TEAMS.length; sfxPlay('blip'); }
+  if (selAway===selHome) selAway=(selAway+1)%TEAMS.length;
+  if (kp('KeyZ')||kp('Space')){ turfKey=''; newGame(false); sfxPlay('start'); }
+  if (kp('KeyF')){ turfKey=''; newGame(true); sfxPlay('start'); }
+}
+/* --- blind, simultaneous selection ---------------------------------------- */
+function updateCall(dt){
+  CALL.t += dt;
+  const offIsHuman = GM.twoPlayer || GM.poss===GM.humanSide;
+  const defIsHuman = GM.twoPlayer;
+  if (!offIsHuman && CALL.offPick<0) CALL.offPick = CALL.cpuOff;
+  if (!defIsHuman && CALL.defPick<0) CALL.defPick = CALL.cpuDef;
+
+  if (offIsHuman && CALL.offPick<0){
+    const p = pad[GM.twoPlayer ? (GM.poss===0?0:1) : 0];
+    if (kp(PADS[GM.twoPlayer?(GM.poss===0?0:1):0].lf)) CALL.cursor=(CALL.cursor+3)%4;
+    if (kp(PADS[GM.twoPlayer?(GM.poss===0?0:1):0].rt)) CALL.cursor=(CALL.cursor+1)%4;
+    if (p.aP){ CALL.offPick = CALL.cursor; sfxPlay('blip'); }
+  }
+  if (defIsHuman && CALL.defPick<0){
+    const i = GM.poss===0?1:0;
+    if (kp(PADS[i].lf)) CALL.cursor2=(CALL.cursor2+3)%4;
+    if (kp(PADS[i].rt)) CALL.cursor2=(CALL.cursor2+1)%4;
+    if (pad[i].aP){ CALL.defPick = CALL.cursor2; sfxPlay('blip'); }
+  }
+  if (CALL.offPick>=0 && CALL.defPick>=0 && CALL.t>0.25) startSnap();
+}
+function updateLive(dt){
+  /* the clock runs fast: a full game lands in the ten to fifteen minute range */
+  GM.clock -= dt * 3.2;
+  if (GM.clock <= 0) advanceQuarter();
+  if (!GM.twoMin && GM.qtr>=2 && GM.clock<120){ GM.twoMin=true; say('TWO MINUTE WARNING','',1.8); }
+  const inp = livePlayInput();
+  /* pass mechanics */
+  if (OFF_PLAYS[PLAY.offPlay].kind==='pass' && !PLAY.threw){
+    if (inp.aP && !PLAY.passMode) enterPassMode();
+    else if (PLAY.passMode){
+      if (inp.cpuThrow) throwBall(0);
+      else if (kp('Digit1')) throwBall(0);
+      else if (kp('Digit2')) throwBall(1);
+      else if (kp('Digit3')) throwBall(2);
+    }
+    /* sack clock: hold it too long and the rush gets home on its own */
+  }
+  if (PLAY.ball && PLAY.ball.live) stepBall(dt);
+  const r = stepPlay(G, dt, inp);
+  if (r) G.mode = 'result';
+}
+
+function advanceQuarter(){
+  GM.clock = GM.quarterLen; GM.twoMin = false;
+  GM.qtr++;
+  if (GM.qtr === 3){ say('HALFTIME', TEAMS[GM.away].ab+' '+GM.score[1]+'  '+TEAMS[GM.home].ab+' '+GM.score[0], 3); }
+  else if (GM.qtr > 4){
+    GM.qtr = 4; GM.clock = 0;
+    const w = GM.score[0]===GM.score[1] ? 'TIE GAME'
+      : 'WINNER  ' + TEAMS[GM.score[0]>GM.score[1]?GM.home:GM.away].name;
+    say('FINAL', w, 6);
+    G.mode = 'title'; last = 0;
+  } else say(ordinal(GM.qtr)+' QUARTER','',1.6);
+}
+
+/* ==================================================================== draw */
+function draw(){
+  const g = ctx;
+  g.fillStyle = C.black; g.fillRect(0,0,SCR_W,SCR_H);
+  if (G.mode==='title'){ drawTitle(g); return; }
+  if (G.mode==='select'){ drawSelect(g); return; }
+
+  paintField(GM.home, GM.away);
+  g.save();
+  if (G.shake>0.2) g.translate(Math.round(rndR(-G.shake,G.shake)*0.3), Math.round(rndR(-G.shake,G.shake)*0.3));
+  g.drawImage(turf, Math.round(cam.x*PX_X), 0, SCR_W, FIELD_H, 0, FIELD_TOP, SCR_W, FIELD_H);
+
+  /* line of scrimmage + first down marker */
+  const losX = sxOf(GM.ballOn), fdX = sxOf(GM.firstDownAt||GM.ballOn+10);
+  g.fillStyle = C.blue;   g.fillRect(losX,FIELD_TOP,1,FIELD_H);
+  g.fillStyle = C.yellow; g.fillRect(fdX ,FIELD_TOP,1,FIELD_H);
+
+  drawCrowd(g, G.t);
+  const list = G.ents.slice().sort((a,b)=>a.y-b.y);
+  for (const e of list) drawPlayer(g, e, TEAMS[e.team===0?(GM.poss===0?GM.home:GM.away):(GM.poss===0?GM.away:GM.home)], {markStars:true});
+
+  /* the ball in flight, with a shadow so the arc reads */
+  if (PLAY.ball && PLAY.ball.live){
+    const bx=sxOf(PLAY.ball.x), by=syOf(PLAY.ball.y);
+    g.fillStyle=C.black; g.globalAlpha=0.4; g.fillRect(bx-1,by,3,2); g.globalAlpha=1;
+    g.fillStyle=C.brown; g.fillRect(bx-1, by-Math.round(PLAY.ball.h)-3, 3, 3);
+  }
+  /* receiver markers while looking to throw */
+  if (PLAY.passMode){
+    PLAY.targets.forEach((t,i)=>{
+      if(!t) return;
+      const tx=sxOf(t.x), ty=syOf(t.y)-18;
+      g.fillStyle=C.black; g.fillRect(tx-4,ty-1,9,9);
+      g.fillStyle=C.yellow; g.fillRect(tx-3,ty,7,7);
+      text(g, String(i+1), tx-1, ty+1, 1, C.black);
+    });
+  }
+  g.restore();
+
+  drawScoreboard(g);
+  drawBanner(g);
+  if (G.mode==='call') drawPlayCall(g);
+  if (G.flash>0){ g.globalAlpha=Math.min(0.85,G.flash); g.fillStyle=C.white; g.fillRect(0,0,SCR_W,SCR_H); g.globalAlpha=1; }
+}
+
+function drawScoreboard(g){
+  g.fillStyle = C.black; g.fillRect(0,0,SCR_W,28);
+  g.fillStyle = C.dkgray; g.fillRect(0,27,SCR_W,1);
+  const H=TEAMS[GM.home], A=TEAMS[GM.away];
+  g.fillStyle=A.c1; g.fillRect(4,4,6,6); g.fillStyle=A.c2; g.fillRect(4,4,6,2);
+  text(g, A.ab, 13, 4, 1, C.white);
+  text(g, String(GM.score[1]), 36, 4, 1, C.yellow);
+  g.fillStyle=H.c1; g.fillRect(4,15,6,6); g.fillStyle=H.c2; g.fillRect(4,15,6,2);
+  text(g, H.ab, 13, 15, 1, C.white);
+  text(g, String(GM.score[0]), 36, 15, 1, C.yellow);
+  text(g, ordinal(GM.qtr), 58, 4, 1, C.ltgray);
+  text(g, clockStr(GM.clock), 58, 15, 1, GM.clock<120&&GM.qtr>=2?C.red:C.white);
+  const dd = ordinal(GM.down)+' AND '+(GM.toGo>=10?'10':GM.toGo);
+  text(g, dd, 104, 4, 1, C.white);
+  const side = (GM.ballOn-GOAL_L) > 50 ? TEAMS[GM.home].ab : TEAMS[GM.away].ab;
+  const yl = Math.round(Math.min(GM.ballOn-GOAL_L, GOAL_R-GM.ballOn));
+  text(g, 'BALL ON '+side+' '+yl, 104, 15, 1, C.ltgray);
+  const pT = TEAMS[GM.poss===0?GM.home:GM.away];
+  g.fillStyle=pT.c1; g.fillRect(SCR_W-14,4,10,17);
+  g.fillStyle=pT.c2; g.fillRect(SCR_W-14,4,10,5);
+  text(g,'>',SCR_W-12,12,1,C.black);
+}
+
+function drawBanner(g){
+  if (G.bannerT<=0 || !G.banner) return;
+  const b=G.banner;
+  const w = Math.max(textW(b.text,2), textW(b.sub,1))+14;
+  const y = FIELD_TOP+FIELD_H/2-16;
+  g.fillStyle=C.black; g.fillRect(SCR_W/2-w/2, y, w, b.sub?26:16);
+  g.fillStyle=C.yellow; g.fillRect(SCR_W/2-w/2, y, w, 1);
+  g.fillRect(SCR_W/2-w/2, y+(b.sub?25:15), w, 1);
+  textC(g, b.text, SCR_W/2, y+4, 2, C.white);
+  if (b.sub) textC(g, b.sub, SCR_W/2, y+16, 1, C.yellow);
+}
+
+/* --- the play call screen: neither side sees the other -------------------- */
+function drawPlayCall(g){
+  g.fillStyle=C.black; g.globalAlpha=0.82; g.fillRect(0,28,SCR_W,SCR_H-28); g.globalAlpha=1;
+  const offIsHuman = GM.twoPlayer || GM.poss===GM.humanSide;
+  textC(g,'CALL YOUR PLAY',SCR_W/2,40,2,C.yellow);
+  const oT = TEAMS[GM.poss===0?GM.home:GM.away];
+  textC(g, oT.city+' BALL', SCR_W/2, 58, 1, C.ltgray);
+
+  const drawSet=(title,plays,cursor,picked,y,isHuman,col)=>{
+    text(g,title,20,y,1,col);
+    for(let i=0;i<4;i++){
+      const bx=20+i*56, by=y+11;
+      const sel = isHuman && cursor===i && picked<0;
+      g.fillStyle = sel?col:C.dkgray; g.fillRect(bx,by,52,26);
+      g.fillStyle = C.black; g.fillRect(bx+1,by+1,50,24);
+      const lab = (picked>=0 && !isHuman) ? '?' : (i+1)+'';
+      text(g, lab, bx+3, by+3, 1, sel?col:C.gray);
+      if (picked>=0 && isHuman && picked===i) text(g,'*',bx+44,by+3,1,C.yellow);
+      textC(g, (isHuman||picked<0) ? plays[i].n : '???', bx+26, by+12, 1, sel?C.white:C.ltgray);
+    }
+  };
+  drawSet('OFFENCE', OFF_PLAYS, CALL.cursor, CALL.offPick, 74, offIsHuman, C.cyan);
+  drawSet('DEFENCE', DEF_PLAYS, CALL.cursor2, CALL.defPick, 128, GM.twoPlayer, C.red);
+
+  if (offIsHuman && CALL.offPick<0) textC(g,'P1  LEFT/RIGHT  THEN  Z',SCR_W/2,186,1,C.white);
+  else if (CALL.offPick>=0 && CALL.defPick<0) textC(g,'WAITING ON DEFENCE',SCR_W/2,186,1,C.ltgray);
+  if (GM.twoPlayer) textC(g,'P2  A/D  THEN  F',SCR_W/2,198,1,C.white);
+  textC(g, OFF_PLAYS[CALL.cursor].blurb, SCR_W/2, 214, 1, C.gray);
+}
+
+function drawTitle(g){
+  ditherRect(g,0,0,SCR_W,SCR_H,C.dkblue,C.black,0.5);
+  textC(g,'FOURTH',SCR_W/2,40,4,C.white);
+  textC(g,'& FURY',SCR_W/2,76,4,C.yellow);
+  g.fillStyle=C.red; g.fillRect(40,110,SCR_W-80,2);
+  textC(g,LEAGUE,SCR_W/2,120,1,C.cyan);
+  textC(g,'FOUR PLAYS. NO PEEKING.',SCR_W/2,146,1,C.ltgray);
+  if (Math.sin(G.t*4)>-0.3) textC(g,'PRESS Z TO START',SCR_W/2,180,2,C.white);
+  textC(g,'ARROWS MOVE   Z SNAP/THROW   X BURST',SCR_W/2,206,1,C.gray);
+  textC(g,'AN ORIGINAL GAME - NO ASSETS, ALL CODE',SCR_W/2,222,1,C.dkgray);
+}
+function drawSelect(g){
+  ditherRect(g,0,0,SCR_W,SCR_H,C.dkgreen,C.black,0.55);
+  textC(g,'CHOOSE YOUR CLUBS',SCR_W/2,16,2,C.yellow);
+  const row=(T,y,lab,col)=>{
+    text(g,lab,12,y,1,col);
+    g.fillStyle=T.c1; g.fillRect(12,y+11,16,16);
+    g.fillStyle=T.c2; g.fillRect(12,y+11,16,6);
+    text(g,T.city,34,y+11,1,C.white);
+    text(g,T.name,34,y+21,1,C.ltgray);
+    const st=STAR_INFO[T.star];
+    text(g,'STAR: '+st.pos+' '+st.label,34,y+33,1,C.yellow);
+    text(g,st.hint,34,y+43,1,C.gray);
+  };
+  row(TEAMS[selHome],34,'HOME   (LEFT/RIGHT)',C.cyan);
+  row(TEAMS[selAway],126,'AWAY   (UP/DOWN)',C.red);
+  textC(g,'Z = 1 PLAYER    F = 2 PLAYER',SCR_W/2,214,1,C.white);
+}
+
+/* ==================================================================== loop */
+let last=0;
+function frame(now){
+  if(!last) last=now;
+  let dt=(now-last)/1000; last=now; dt=Math.min(dt,0.05);
+  update(dt); draw();
+  requestAnimationFrame(frame);
+}
+fit();
+setToGo();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
