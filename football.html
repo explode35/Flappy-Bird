@@ -959,10 +959,135 @@ function drawPlayer(g, e, T, opts){
     g.fillRect(sx-5, y-4, 10, 2);
   }
 }
-/* placeholder until the audio pass */
-function audioKick(){}
-function sfxPlay(){}
-function music(){}
+/* ==========================================================================
+   AUDIO — Web Audio, chiptune only.  Two square voices, a triangle bass and
+   a noise channel: the palette the hardware actually had.  Nothing sampled.
+   ========================================================================== */
+let AC=null, MASTER=null, MUSG=null, SFXG=null, NOISE=null, CROWDG=null;
+let audioOn=false;
+
+function audioKick(){
+  if (audioOn) return;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  AC = new Ctx();
+  MASTER = AC.createGain(); MASTER.gain.value = 0.62; MASTER.connect(AC.destination);
+  MUSG = AC.createGain(); MUSG.gain.value = 0.30; MUSG.connect(MASTER);
+  SFXG = AC.createGain(); SFXG.gain.value = 0.90; SFXG.connect(MASTER);
+  NOISE = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+  const d = NOISE.getChannelData(0);
+  for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+  /* the crowd is a permanent filtered-noise bed whose level tracks the game */
+  const src = AC.createBufferSource(); src.buffer = NOISE; src.loop = true;
+  const bp = AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=780; bp.Q.value=0.65;
+  CROWDG = AC.createGain(); CROWDG.gain.value = 0.03;
+  src.connect(bp); bp.connect(CROWDG); CROWDG.connect(MASTER);
+  src.start();
+  audioOn = true;
+  music('title');
+}
+function tone(type, f0, f1, dur, g, when, dest){
+  if (!audioOn) return;
+  const t0 = when || AC.currentTime;
+  const o = AC.createOscillator(), gn = AC.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(Math.max(20,f0), t0);
+  if (f1 && f1!==f0) o.frequency.exponentialRampToValueAtTime(Math.max(20,f1), t0+dur);
+  gn.gain.setValueAtTime(0.0001, t0);
+  gn.gain.exponentialRampToValueAtTime(Math.max(0.0002,g), t0+Math.min(0.010,dur*0.3));
+  gn.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+  o.connect(gn); gn.connect(dest||SFXG);
+  o.start(t0); o.stop(t0+dur+0.02);
+}
+function nz(dur, g, freq, q, when, type){
+  if (!audioOn) return;
+  const t0 = when || AC.currentTime;
+  const s = AC.createBufferSource(); s.buffer = NOISE; s.loop = true;
+  const f = AC.createBiquadFilter(); f.type = type||'bandpass';
+  f.frequency.setValueAtTime(freq, t0); f.Q.value = q||1;
+  const gn = AC.createGain();
+  gn.gain.setValueAtTime(g, t0);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+  s.connect(f); f.connect(gn); gn.connect(SFXG);
+  s.start(t0); s.stop(t0+dur+0.02);
+}
+let lastAt = {};
+function sfxPlay(name, v){
+  if (!audioOn) return;
+  v = v===undefined?1:clamp(v,0.05,1);
+  const T = AC.currentTime;
+  if (lastAt[name] && T - lastAt[name] < 0.035) return;
+  lastAt[name] = T;
+  switch(name){
+    case 'snap':   nz(0.05,0.26,900,1.2); tone('square',150,90,0.06,0.12); break;
+    case 'hit':    nz(0.14,0.46,320,0.8); tone('triangle',110,45,0.15,0.28); break;
+    case 'block':  nz(0.06,0.20,540,1.0); break;
+    case 'break':  nz(0.16,0.36,620,0.8);
+                   for(let i=0;i<4;i++) tone('square',420+i*180,0,0.07,0.17,T+i*0.045); break;
+    case 'whistle':tone('square',2100,2400,0.17,0.13); tone('square',2150,2450,0.17,0.13,T+0.02); break;
+    case 'td':     for(let i=0;i<8;i++){ const n=[523,659,784,1046,784,1046,1319,1568][i];
+                     tone('square',n,0,0.16,0.20,T+i*0.11); tone('triangle',n/2,0,0.16,0.16,T+i*0.11); }
+                   nz(0.5,0.18,1800,1,T); break;
+    case 'int':    for(let i=0;i<6;i++) tone('square',700-i*90,0,0.14,0.20,T+i*0.09);
+                   nz(0.35,0.20,300,0.7); break;
+    case 'catch':  tone('square',900,1300,0.08,0.18); break;
+    case 'throw':  nz(0.08,0.18,1400,1.4); tone('triangle',300,700,0.10,0.12); break;
+    case 'blip':   tone('square',1200,1500,0.045,0.18); break;
+    case 'start':  for(let i=0;i<5;i++) tone('square',[392,523,659,784,1046][i],0,0.11,0.19,T+i*0.075); break;
+    case 'kick':   nz(0.12,0.38,420,0.9); tone('triangle',180,70,0.14,0.22); break;
+    case 'fgood':  for(let i=0;i<6;i++) tone('square',[523,659,784,1046,1319,1568][i],0,0.14,0.19,T+i*0.10); break;
+    case 'fmiss':  tone('square',420,120,0.5,0.20); tone('triangle',210,60,0.5,0.14); break;
+    default: break;
+  }
+}
+
+/* ------------------------------------------------------------------ music
+   Three loops: a title march, a driving bed for the play-call screen, and a
+   championship fanfare.  Scheduled a step at a time off the audio clock. */
+const TRACKS = {
+  off: null,
+  title: { bpm:132, len:16,
+    bass:[45,0,45,0,50,0,50,0,43,0,43,0,48,0,48,0],
+    lead:[69,72,76,72,74,77,81,77,69,72,76,79,81,79,76,72],
+    hat: [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1] },
+  call: { bpm:152, len:16,
+    bass:[40,40,47,40,38,38,45,38,36,36,43,36,41,41,48,48],
+    lead:[64,0,67,0,71,0,67,0,62,0,65,0,69,0,65,67],
+    hat: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] },
+  champ:{ bpm:120, len:16,
+    bass:[48,0,48,0,53,0,53,0,55,0,55,0,53,0,48,0],
+    lead:[72,76,79,84,81,79,76,79,84,81,79,76,72,76,79,84],
+    hat: [1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0] }
+};
+const MUS = { name:'off', step:0, next:0 };
+function music(name){
+  if (MUS.name === name) return;
+  MUS.name = name; MUS.step = 0;
+  if (audioOn) MUS.next = AC.currentTime + 0.05;
+}
+const midi = n => 440*Math.pow(2,(n-69)/12);
+function updateMusic(){
+  if (!audioOn) return;
+  if (CROWDG) CROWDG.gain.value = 0.03 + (typeof crowdHype==='number'?crowdHype:0)*0.17;
+  const M = TRACKS[MUS.name];
+  if (!M) return;
+  const beat = 60/M.bpm/2;
+  let guard = 0;
+  while (MUS.next < AC.currentTime + 0.22 && guard++ < 16){
+    const s = MUS.step % M.len, t = MUS.next;
+    if (M.bass[s]) tone('triangle', midi(M.bass[s]), 0, beat*1.7, 0.24, t, MUSG);
+    if (M.lead[s]) tone('square',   midi(M.lead[s]), 0, beat*0.85, 0.10, t, MUSG);
+    if (M.hat[s]){
+      const src = AC.createBufferSource(); src.buffer = NOISE;
+      const hp = AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=7200;
+      const gn = AC.createGain();
+      gn.gain.setValueAtTime(0.05,t); gn.gain.exponentialRampToValueAtTime(0.0001,t+0.035);
+      src.connect(hp); hp.connect(gn); gn.connect(MUSG);
+      src.start(t); src.stop(t+0.05);
+    }
+    MUS.step++; MUS.next += beat;
+  }
+}
 /* ==========================================================================
    MAIN — canvas, input, the loop, and every screen.
    ========================================================================== */
@@ -1020,8 +1145,16 @@ function newGame(twoPlayer){
   G.mode = 'call';
   beginCall();
 }
+const KICK = { kind:'punt', phase:'power', bar:0, dirn:1, power:0, acc:0, t:0, cursor:0 };
+function fgDistance(){ return Math.abs((GM.dir>0?GOAL_R:GOAL_L) - GM.ballOn) + 7; }
+
 function beginCall(){
+  /* fourth down is a decision before it is a play call */
+  if (GM.down === 4 && !GM.noFourth){
+    G.mode = 'fourth'; KICK.cursor = 0; return;
+  }
   G.mode = 'call';
+  music('call');
   CALL.offPick = -1; CALL.defPick = -1; CALL.cursor = 0; CALL.cursor2 = 0;
   CALL.t = 0; CALL.locked = false;
   /* the CPU commits its guess up front, from tendencies only */
@@ -1133,6 +1266,7 @@ function kickoffTo(team){
 function update(dt){
   G.t += dt; G.stateT += dt;
   readPads();
+  updateMusic();
   if (G.bannerT>0) G.bannerT -= dt;
   if (G.shake>0) G.shake = Math.max(0,G.shake-dt*26);
   if (G.flash>0) G.flash = Math.max(0,G.flash-dt*3);
@@ -1140,6 +1274,8 @@ function update(dt){
 
   if (G.mode === 'title') updateTitle();
   else if (G.mode === 'select') updateSelect();
+  else if (G.mode === 'fourth') updateFourth();
+  else if (G.mode === 'kick') updateKick(dt);
   else if (G.mode === 'call') updateCall(dt);
   else if (G.mode === 'live') updateLive(dt);
   else if (G.mode === 'result'){
@@ -1154,6 +1290,7 @@ function update(dt){
   for (const k in pressed) delete pressed[k];
 }
 function updateTitle(){
+  music('title');
   if (kp('Space')||kp('Enter')||kp('KeyZ')){ G.mode='select'; menuIdx=0; sfxPlay('blip'); }
 }
 function updateSelect(){
@@ -1188,6 +1325,82 @@ function updateCall(dt){
   }
   if (CALL.offPick>=0 && CALL.defPick>=0 && CALL.t>0.25) startSnap();
 }
+/* --- fourth down: go for it, punt, or try the field goal ------------------ */
+function updateFourth(){
+  const human = GM.twoPlayer || GM.poss===GM.humanSide;
+  const canFG = fgDistance() <= 52;
+  const opts = canFG ? ['GO FOR IT','PUNT','FIELD GOAL'] : ['GO FOR IT','PUNT'];
+  if (!human){
+    /* the CPU keeps it simple and situational */
+    const d = fgDistance();
+    let pickCPU = 1;
+    if (canFG && d <= 42) pickCPU = 2;
+    if (GM.toGo <= 2 && Math.abs(GM.ballOn-MIDY) > 0) pickCPU = (rnd()<0.45?0:pickCPU);
+    if (GM.qtr>=4 && GM.score[GM.poss] < GM.score[1-GM.poss] && GM.clock < 90) pickCPU = 0;
+    chooseFourth(pickCPU, opts.length);
+    return;
+  }
+  if (kp('ArrowLeft'))  { KICK.cursor = (KICK.cursor+opts.length-1)%opts.length; sfxPlay('blip'); }
+  if (kp('ArrowRight')) { KICK.cursor = (KICK.cursor+1)%opts.length; sfxPlay('blip'); }
+  if (pad[0].aP) chooseFourth(KICK.cursor, opts.length);
+}
+function chooseFourth(idx, n){
+  if (idx === 0){ GM.noFourth = true; beginCall(); GM.noFourth = false; return; }
+  KICK.kind = (idx===2) ? 'fg' : 'punt';
+  KICK.phase = 'power'; KICK.bar = 0; KICK.dirn = 1; KICK.power = 0; KICK.acc = 0;
+  G.mode = 'kick'; music('off');
+  sfxPlay('blip');
+}
+/* power then accuracy, each a sweeping bar you stop with A */
+function updateKick(dt){
+  KICK.bar += KICK.dirn * dt * (KICK.phase==='power' ? 1.35 : 1.9);
+  if (KICK.bar > 1){ KICK.bar = 1; KICK.dirn = -1; }
+  if (KICK.bar < 0){ KICK.bar = 0; KICK.dirn = 1; }
+  const human = GM.twoPlayer || GM.poss===GM.humanSide;
+  let stop = human ? pad[0].aP : false;
+  if (!human){
+    /* the CPU aims for a good but not perfect strike */
+    const want = KICK.phase==='power' ? 0.86 : 0.5;
+    if (Math.abs(KICK.bar - want) < 0.06) stop = true;
+  }
+  if (!stop) return;
+  if (KICK.phase === 'power'){ KICK.power = KICK.bar; KICK.phase = 'acc'; KICK.bar = 0; KICK.dirn = 1; sfxPlay('blip'); return; }
+  KICK.acc = Math.abs(KICK.bar - 0.5) * 2;      /* 0 = dead centre, 1 = shank */
+  resolveKick();
+}
+function resolveKick(){
+  sfxPlay('kick'); G.shake = 5;
+  if (KICK.kind === 'fg'){
+    const d = fgDistance();
+    const reach = 22 + KICK.power * 42;          /* yards this strike can carry */
+    const good = (reach >= d) && (KICK.acc < 0.34 + Math.max(0, (reach-d))*0.004);
+    if (good){
+      GM.score[GM.poss] += 3;
+      say('FIELD GOAL IS GOOD', d.toFixed(0)+' YARDS', 2.6);
+      sfxPlay('fgood'); crowdHype = 1; G.flash = 0.6;
+      G.mode='call'; kickoffTo(1-GM.poss);
+    } else {
+      say('NO GOOD', reach < d ? 'SHORT' : 'WIDE', 2.4);
+      sfxPlay('fmiss');
+      GM.poss = 1-GM.poss; GM.dir = -GM.dir;
+      GM.ballOn = clamp(GM.ballOn, GOAL_L+1, GOAL_R-1);
+      GM.down = 1; setToGo(); G.mode='call'; beginCall();
+    }
+    return;
+  }
+  /* punt: distance from power, a shank costs you yards */
+  const dist2 = (26 + KICK.power*36) * (1 - KICK.acc*0.35);
+  let land = GM.ballOn + GM.dir*dist2;
+  const endLine = GM.dir>0 ? GOAL_R : GOAL_L;
+  let touchback = (GM.dir>0 ? land >= endLine : land <= endLine);
+  say('PUNT', Math.round(dist2)+' YARDS', 2.0);
+  GM.poss = 1-GM.poss; GM.dir = -GM.dir;
+  GM.ballOn = touchback ? (GM.dir>0 ? GOAL_L+20 : GOAL_R-20)
+                        : clamp(land, GOAL_L+1, GOAL_R-1);
+  GM.down = 1; setToGo();
+  G.mode='call'; beginCall();
+}
+
 function updateLive(dt){
   /* the clock runs fast: a full game lands in the ten to fifteen minute range */
   GM.clock -= dt * 3.2;
@@ -1265,6 +1478,8 @@ function draw(){
   drawScoreboard(g);
   drawBanner(g);
   if (G.mode==='call') drawPlayCall(g);
+  if (G.mode==='fourth') drawFourth(g);
+  if (G.mode==='kick') drawKick(g);
   if (G.flash>0){ g.globalAlpha=Math.min(0.85,G.flash); g.fillStyle=C.white; g.fillRect(0,0,SCR_W,SCR_H); g.globalAlpha=1; }
 }
 
@@ -1333,6 +1548,48 @@ function drawPlayCall(g){
   textC(g, OFF_PLAYS[CALL.cursor].blurb, SCR_W/2, 214, 1, C.gray);
 }
 
+function drawFourth(g){
+  g.fillStyle=C.black; g.globalAlpha=0.85; g.fillRect(0,28,SCR_W,SCR_H-28); g.globalAlpha=1;
+  textC(g,'FOURTH DOWN',SCR_W/2,60,2,C.yellow);
+  const d = fgDistance(), canFG = d <= 52;
+  textC(g, GM.toGo+' TO GO   -   '+Math.round(d)+' YARD ATTEMPT', SCR_W/2, 80, 1, C.ltgray);
+  const opts = canFG ? ['GO FOR IT','PUNT','FIELD GOAL'] : ['GO FOR IT','PUNT'];
+  opts.forEach((o,i)=>{
+    const w=74, bx=SCR_W/2 - (opts.length*w)/2 + i*w + 3, by=110;
+    const sel = KICK.cursor===i;
+    g.fillStyle = sel?C.yellow:C.dkgray; g.fillRect(bx,by,w-6,28);
+    g.fillStyle = C.black; g.fillRect(bx+1,by+1,w-8,26);
+    textC(g,o,bx+(w-6)/2,by+11,1,sel?C.white:C.gray);
+  });
+  if (!canFG) textC(g,'TOO FAR FOR A FIELD GOAL',SCR_W/2,150,1,C.dkgray);
+  textC(g,'LEFT / RIGHT   THEN  Z',SCR_W/2,176,1,C.white);
+}
+function drawKick(g){
+  g.fillStyle=C.black; g.globalAlpha=0.85; g.fillRect(0,28,SCR_W,SCR_H-28); g.globalAlpha=1;
+  textC(g, KICK.kind==='fg'?'FIELD GOAL':'PUNT', SCR_W/2, 56, 2, C.yellow);
+  const lab = KICK.phase==='power' ? 'POWER' : 'AIM';
+  textC(g, lab, SCR_W/2, 84, 1, C.white);
+  /* the bar */
+  const bw=180, bx=SCR_W/2-bw/2, by=96;
+  g.fillStyle=C.dkgray; g.fillRect(bx-2,by-2,bw+4,18);
+  g.fillStyle=C.black;  g.fillRect(bx,by,bw,14);
+  if (KICK.phase==='power'){
+    for(let i=0;i<bw;i+=3){
+      const t=i/bw;
+      g.fillStyle = t>0.9?C.red : t>0.65?C.yellow : C.ltgreen;
+      if (t <= KICK.bar) g.fillRect(bx+i,by+2,2,10);
+    }
+  } else {
+    g.fillStyle=C.dkgreen; g.fillRect(bx+bw/2-14,by+2,28,10);
+    g.fillStyle=C.ltgreen; g.fillRect(bx+bw/2-5,by+2,10,10);
+    g.fillStyle=C.white;   g.fillRect(bx+Math.round(KICK.bar*bw)-1,by,3,14);
+  }
+  if (KICK.phase==='acc'){
+    g.fillStyle=C.gray; g.fillRect(bx,by+20,Math.round(KICK.power*bw),3);
+    textC(g,'POWER SET',SCR_W/2,128,1,C.gray);
+  }
+  textC(g,'PRESS Z TO STOP THE BAR',SCR_W/2,150,1,C.white);
+}
 function drawTitle(g){
   ditherRect(g,0,0,SCR_W,SCR_H,C.dkblue,C.black,0.5);
   textC(g,'FOURTH',SCR_W/2,40,4,C.white);
