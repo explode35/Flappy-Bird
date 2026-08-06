@@ -275,7 +275,7 @@ function genSand(w, h, seed, gravel) {
 function genMetalPanel(w, h, seed, corrugated) {
   const m = G(w, h);
   const panel = corrugated
-    ? corrugation(w, h, { ribs: 12, sharpness: 1.6, vertical: true, amplitude: 1 })
+    ? corrugation(w, h, { ribs: 9, sharpness: 1.15, vertical: true, amplitude: 1 })
     : tileLattice(w, h, { n: 2, grout: 0.014, bevel: 0.03 }).mask;
   const grain = fbm(w, h, { period: 64, octaves: 2, seed: seed + 1 });
   const dent = blotches(w, h, { period: 3, octaves: 3, seed: seed + 4, threshold: 0.6, softness: 0.25, warp: 1 });
@@ -300,17 +300,19 @@ function genMetalPanel(w, h, seed, corrugated) {
   lighten(m.albedo, scr, 0.35);
   lighten(m.albedo, edgeWear(m.height, w, h, { radius: 3, threshold: 0.02 }), 0.25);
 
-  roughBase(m.rough, 0.42);
+  // Painted sheet, not bare mirror steel — a broader specular lobe both
+  // reads more truthfully and stops the ribs sparkling.
+  roughBase(m.rough, corrugated ? 0.62 : 0.42);
   roughTo(m.rough, rustPlace, 0.95, 1);
   roughTo(m.rough, scr, 0.24, 0.8);
   roughJitter(m.rough, grain, 0.14);
   clampRough(m.rough, 0.12);
 
   const metal = new Float32Array(w * h);
-  for (let i = 0; i < metal.length; i++) metal[i] = 1 - rustPlace[i] * 0.75;
+  for (let i = 0; i < metal.length; i++) metal[i] = (corrugated ? 0.78 : 1) - rustPlace[i] * 0.75;
   m.metal = metal;
   m.ao = heightAO(m.height, w, h, { strength: 0.9 });
-  m.normalStrength = corrugated ? 1.05 : 0.62;
+  m.normalStrength = corrugated ? 0.52 : 0.62;
   capSaturation(m.albedo, 0.5);
   return m;
 }
@@ -552,7 +554,7 @@ export class Materials {
     const m = recipe.gen(res, res);
 
     const maxAniso = this.ctx.renderer.capabilities.getMaxAnisotropy?.() ?? 1;
-    const aniso = Math.min(8, maxAniso);
+    const aniso = Math.min(16, maxAniso);
 
     const albedoTex = toTexture(rgbToRgba(m.albedo, res, res, m.alpha), res, res, true);
     const normalTex = toTexture(normalFromHeight(m.height, res, res, m.normalStrength), res, res, false);

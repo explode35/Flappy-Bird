@@ -15,7 +15,7 @@ export const FinalGradeShader = {
     uTime:       { value: 0 },
     uVignette:   { value: 0.42 },
     uGrain:      { value: 0.035 },
-    uCA:         { value: 0.55 },
+    uCA:         { value: 0.32 },
     uSharpen:    { value: 0.35 },
     uMotion:     { value: new THREE.Vector2(0, 0) },  // screen-space px, from camera delta
     uDamage:     { value: 0 },                        // 0..1 red pulse on the edges
