@@ -90,15 +90,20 @@ What I established:
 * The strip is full-height with a hard vertical edge, and the width is stable
   at ~430 px of 1920 across every run — it is deterministic, not a race.
 
-`Sky.init` now snapshots and restores the renderer viewport, scissor and
-scissor-test around `PMREMGenerator.fromScene`, which is correct practice
-regardless — PMREM renders cube faces through its own viewport and a leaked
-scissor rectangle would truncate every later frame exactly like this. Whether
-that is *this* bug is unverified; the confirming capture did not finish.
+* It is **not** a leaked `PMREMGenerator` viewport or scissor. `Sky.init` now
+  snapshots and restores viewport, scissor and scissor-test around
+  `fromScene` — correct practice regardless — and the captured frame was
+  unchanged (233 bytes of 849 KB, i.e. drifting dust particles).
 
-The remaining untested lead is a canvas backing-store vs CSS size mismatch at
-first layout. I have not reproduced this outside the software-GL harness, so
-it may not affect real GPU playback — but I have not confirmed that either.
+So four hypotheses are eliminated with evidence. The remaining untested lead is
+a canvas backing-store vs CSS size mismatch at first layout: check
+`renderer.domElement.width` against `clientWidth` and the composer's render
+target dimensions on a booted page, which is a single `page.evaluate` and much
+cheaper than another screenshot round.
+
+I have not reproduced this outside the software-GL harness, so it may not
+affect real GPU playback — but I have not confirmed that either, and I would
+not ship without checking on a real GPU first.
 
 Known weakest areas, in the order I would fix them:
 
