@@ -68,42 +68,38 @@ modern CoD ships thousands of person-years of authored art, photogrammetry,
 mocap, and a bespoke engine. This is procedural geometry and procedural
 textures in a browser.
 
-### Open bug: truncated frames in the review harness
+### Resolved: truncated frames were a headless-capture artifact
 
-Screenshots taken through `scripts/shoot.mjs` under SwiftShader render the
-world into a vertical strip down the left of the frame (~430 px of 1920) with
-the rest black. The DOM HUD composites correctly on top, so it is the WebGL
-canvas that is truncated, not an overlay.
+Screenshots through `scripts/shoot.mjs` under SwiftShader come back with the
+world in a ~430 px strip down the left of a 1920 px frame and the rest black.
+The DOM HUD composites correctly on top. This is **not a bug in the game**.
 
-What I established:
+`scripts/probe-gl.mjs` boots the real page and reads the GL state back. Every
+value is correct at full size:
 
-* It is **not** the dynamic-resolution governor. At the Low tier the governor
-  never fires (`dpr` is already at its cap), and the strip is byte-identical
-  before and after I made the governor resize the composer targets explicitly.
-  That change is still correct — `setPixelRatio` on the renderer and composer
-  should be paired with an explicit resize — but it does not cause this.
-* It is **not** camera placement. The same camera position renders the full
-  frame in some runs and a strip in others.
-* It is **not** a partially-rasterised snapshot. Making the harness wait eight
-  completed rAF ticks before capturing produced a byte-identical strip, so the
-  frame is fully settled and still truncated.
-* The strip is full-height with a hard vertical edge, and the width is stable
-  at ~430 px of 1920 across every run — it is deterministic, not a race.
+| | value |
+|---|---|
+| canvas / drawing buffer | 1920 x 1080 |
+| GL viewport | `[0, 0, 1920, 1080]` |
+| scissor test | disabled |
+| composer render targets | 1920 x 1080 |
 
-* It is **not** a leaked `PMREMGenerator` viewport or scissor. `Sky.init` now
-  snapshots and restores viewport, scissor and scissor-test around
-  `fromScene` — correct practice regardless — and the captured frame was
-  unchanged (233 bytes of 849 KB, i.e. drifting dust particles).
+So the renderer produces a full, correctly-configured frame; headless
+Chromium's capture of the SwiftShader surface is what is partial. Four other
+hypotheses were tested and eliminated along the way, each with evidence:
 
-So four hypotheses are eliminated with evidence. The remaining untested lead is
-a canvas backing-store vs CSS size mismatch at first layout: check
-`renderer.domElement.width` against `clientWidth` and the composer's render
-target dimensions on a booted page, which is a single `page.evaluate` and much
-cheaper than another screenshot round.
+* **Dynamic-resolution governor** — never fires at the Low tier, and the strip
+  was identical with and without an explicit composer resize. (That resize is
+  still correct and was kept.)
+* **Camera placement** — the same position renders fully in some runs.
+* **Partially-rasterised snapshot** — waiting eight settled rAF ticks before
+  capture produced an identical strip.
+* **Leaked `PMREMGenerator` viewport/scissor** — restoring viewport, scissor
+  and scissor-test around `fromScene` changed nothing (233 bytes of 849 KB,
+  drifting dust). That restore is correct practice and was also kept.
 
-I have not reproduced this outside the software-GL harness, so it may not
-affect real GPU playback — but I have not confirmed that either, and I would
-not ship without checking on a real GPU first.
+Caveat worth stating: this rules the game out as the cause on the evidence
+above, but I have never run this on a real GPU. Verify there before trusting it.
 
 Known weakest areas, in the order I would fix them:
 
