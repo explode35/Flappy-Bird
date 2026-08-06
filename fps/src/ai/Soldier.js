@@ -68,7 +68,24 @@ function buildShared(ctx) {
     gunMag:   chamferBox(0.045, 0.19, 0.05, { chamfer: 0.01, uvScale: 0.1 }),
     gunStock: chamferBox(0.05, 0.10, 0.20, { chamfer: 0.012, uvScale: 0.1 }),
   };
-  SHARED = { G, mats };
+  // Four pre-built kit variants, made once. Cloning nine materials per soldier
+  // meant ~108 unique programs for a full squad, and a shader compile the first
+  // time each one is drawn — the single biggest stall in the game. Four
+  // variants give the same "not clones" read for a fixed 36 materials.
+  const variants = [];
+  const rv = (n) => { let a = n; return () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; }; };
+  for (let i = 0; i < 4; i++) {
+    const r = rv(97 + i * 31);
+    const tint = new THREE.Color().setHSL(0.10 + r() * 0.08, 0.09 + r() * 0.09, 0.38 + r() * 0.12);
+    const set = {};
+    for (const k of Object.keys(mats)) {
+      set[k] = mats[k].clone();
+      if (k === 'fatigue' || k === 'carrier' || k === 'pouch') set[k].color.lerp(tint, 0.4);
+    }
+    variants.push(set);
+  }
+
+  SHARED = { G, mats, variants };
   return SHARED;
 }
 
@@ -76,7 +93,7 @@ export class Soldier {
   constructor(ctx, rng) {
     this.ctx = ctx;
     this.rng = rng;
-    const { G, mats } = buildShared(ctx);
+    const { G, variants } = buildShared(ctx);
 
     this.position = new THREE.Vector3();
     this.velocity = new THREE.Vector3();
@@ -116,13 +133,8 @@ export class Soldier {
     root.name = 'soldier';
     this.root = root;
 
-    // Per-soldier tint so a squad does not read as clones.
-    const tint = new THREE.Color().setHSL(0.12 + rng() * 0.06, 0.10 + rng() * 0.08, 0.42 + rng() * 0.1);
-    const M = {};
-    for (const k of Object.keys(mats)) {
-      M[k] = mats[k].clone();
-      if (k === 'fatigue' || k === 'carrier' || k === 'pouch') M[k].color.lerp(tint, 0.35);
-    }
+    // Pick one of the shared kit variants rather than minting new materials.
+    const M = variants[(rng() * variants.length) | 0];
     this.mats = M;
 
     // Only the big silhouette parts cast shadows. Pouches and straps add
@@ -541,6 +553,7 @@ export class Soldier {
   dispose() {
     this.ctx.physics?.unregisterEnemy?.(this);
     this.root.removeFromParent();
-    for (const k of Object.keys(this.mats)) this.mats[k].dispose();
+    // Materials and geometry are shared with every other soldier; disposing
+    // them here would break the next one to spawn.
   }
 }
