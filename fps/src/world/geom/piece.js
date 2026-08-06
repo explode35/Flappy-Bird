@@ -22,7 +22,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { chamferBox } from './chamfer.js';
+import { chamferBox, normalizeGeometry } from './chamfer.js';
 
 const _m = new THREE.Matrix4();
 const _v = new THREE.Vector3();
@@ -41,9 +41,17 @@ export class Piece {
     this.anchors = {};
   }
 
-  /** @param {string} mat material name from the Materials catalogue. */
+  /**
+   * @param {string} mat material name from the Materials catalogue.
+   *
+   * Stock three geometries (Plane/Torus/Sphere) carry no `color` attribute, and
+   * mergeGeometries refuses to mix attribute sets. Normalising here means prop
+   * authors can drop a TorusGeometry straight in and it just works.
+   */
   add(mat, geo, decor = false) {
-    if (geo) this.parts.push({ mat, geo, decor });
+    if (!geo) return this;
+    if (!geo.attributes.color) normalizeGeometry(geo, { uvScale: geo.attributes.uv ? 0 : 1 });
+    this.parts.push({ mat, geo, decor });
     return this;
   }
 

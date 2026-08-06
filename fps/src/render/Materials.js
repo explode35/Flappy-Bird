@@ -148,7 +148,7 @@ function genConcrete(w, h, seed, wall) {
   clampRough(m.rough);
 
   m.ao = heightAO(m.height, w, h, { strength: 0.9 });
-  m.normalStrength = wall ? 2.0 : 1.7;
+  m.normalStrength = wall ? 0.68 : 0.58;
   capSaturation(m.albedo, 0.4);
   return m;
 }
@@ -184,7 +184,7 @@ function genBrick(w, h, seed) {
   roughJitter(m.rough, rough, 0.12);
   clampRough(m.rough);
   m.ao = heightAO(m.height, w, h, { strength: 1.1 });
-  m.normalStrength = 2.6;
+  m.normalStrength = 0.88;
   capSaturation(m.albedo, 0.46);
   return m;
 }
@@ -215,7 +215,7 @@ function genPlaster(w, h, seed) {
   roughTo(m.rough, spall, 0.95, 0.8);
   clampRough(m.rough);
   m.ao = heightAO(m.height, w, h, { strength: 0.85 });
-  m.normalStrength = 1.5;
+  m.normalStrength = 0.51;
   capSaturation(m.albedo, 0.38);
   return m;
 }
@@ -242,7 +242,7 @@ function genAsphalt(w, h, seed) {
   roughTo(m.rough, patch, 0.6, 0.7);   // fresh tar is smoother and catches highlights
   clampRough(m.rough);
   m.ao = heightAO(m.height, w, h, { strength: 1.0 });
-  m.normalStrength = 1.9;
+  m.normalStrength = 0.65;
   capSaturation(m.albedo, 0.25);
   return m;
 }
@@ -267,7 +267,7 @@ function genSand(w, h, seed, gravel) {
   roughJitter(m.rough, dunes, 0.12);
   clampRough(m.rough);
   m.ao = heightAO(m.height, w, h, { strength: gravel ? 1.1 : 0.6 });
-  m.normalStrength = gravel ? 2.2 : 1.2;
+  m.normalStrength = gravel ? 0.78 : 0.42;
   capSaturation(m.albedo, 0.34);
   return m;
 }
@@ -310,7 +310,7 @@ function genMetalPanel(w, h, seed, corrugated) {
   for (let i = 0; i < metal.length; i++) metal[i] = 1 - rustPlace[i] * 0.75;
   m.metal = metal;
   m.ao = heightAO(m.height, w, h, { strength: 0.9 });
-  m.normalStrength = corrugated ? 3.0 : 1.8;
+  m.normalStrength = corrugated ? 1.05 : 0.62;
   capSaturation(m.albedo, 0.5);
   return m;
 }
@@ -327,7 +327,7 @@ function genRustMetal(w, h, seed) {
   const flake = pits(w, h, { count: 500, seed: seed + 33, radius: 3, radVar: 2, strength: 1 });
   for (let i = 0; i < m.height.length; i++) m.height[i] = clamp01(m.height[i] - flake[i] * 0.3);
   darken(m.albedo, flake, 0.35);
-  m.normalStrength = 2.4;
+  m.normalStrength = 0.82;
   return m;
 }
 
@@ -347,7 +347,7 @@ function genGunmetal(w, h, seed) {
   clampRough(m.rough, 0.1);
   m.metal = 1;
   m.ao = heightAO(m.height, w, h, { strength: 0.7 });
-  m.normalStrength = 1.1;
+  m.normalStrength = 0.37;
   return m;
 }
 
@@ -365,7 +365,7 @@ function genPolymer(w, h, seed) {
   roughJitter(m.rough, base, 0.1);
   clampRough(m.rough);
   m.ao = heightAO(m.height, w, h, { strength: 0.6 });
-  m.normalStrength = 1.4;
+  m.normalStrength = 0.48;
   return m;
 }
 
@@ -398,7 +398,7 @@ function genWood(w, h, seed, planks) {
   if (lat) roughTo(m.rough, invert(lat.mask), 0.95, 1);
   clampRough(m.rough);
   m.ao = heightAO(m.height, w, h, { strength: planks ? 1.1 : 0.8 });
-  m.normalStrength = planks ? 2.2 : 1.6;
+  m.normalStrength = planks ? 0.75 : 0.55;
   capSaturation(m.albedo, 0.45);
   return m;
 }
@@ -423,7 +423,7 @@ function genTile(w, h, seed) {
   roughTo(m.rough, wearF, 0.7, 0.5);
   clampRough(m.rough, 0.1);
   m.ao = heightAO(m.height, w, h, { strength: 1.2 });
-  m.normalStrength = 2.4;
+  m.normalStrength = 0.82;
   capSaturation(m.albedo, 0.3);
   return m;
 }
@@ -443,7 +443,7 @@ function genFabric(w, h, seed, kind) {
   roughJitter(m.rough, wv, 0.1);
   clampRough(m.rough, 0.5);
   m.ao = heightAO(m.height, w, h, { strength: 0.9 });
-  m.normalStrength = 2.0;
+  m.normalStrength = 0.68;
   capSaturation(m.albedo, 0.35);
   return m;
 }
@@ -465,7 +465,7 @@ function genFoliage(w, h, seed) {
   roughJitter(m.rough, leaf, 0.16);
   clampRough(m.rough);
   m.ao = null;
-  m.normalStrength = 1.4;
+  m.normalStrength = 0.48;
   capSaturation(m.albedo, 0.42);
   return m;
 }
@@ -514,8 +514,8 @@ export class Materials {
     this.onCreated = null;
     this.res = ctx.quality.tier >= 2 ? 512 : 256;
     this.detailNormal = null;
-    this.detailScale = 12;
-    this.detailStrength = 0.55;
+    this.detailScale = 48;
+    this.detailStrength = 0.32;
   }
 
   async init() {

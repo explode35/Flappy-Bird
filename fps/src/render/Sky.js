@@ -17,9 +17,9 @@ import { damp, clamp, smoothstep } from '../core/Contracts.js';
 const SUN_ELEVATION = 8.5;
 const SUN_AZIMUTH = 118;
 const SUN_COLOR = 0xffd2a1;
-const SUN_INTENSITY = 4.2;
+const SUN_INTENSITY = 2.75;
 const FILL_COLOR = 0x5c6a7a;
-const FILL_INTENSITY = 0.35;
+const FILL_INTENSITY = 0.22;
 const SHADOW_EXTENT = 55;      // metres covered by the sun's ortho frustum
 
 const _v = new THREE.Vector3();
@@ -81,7 +81,7 @@ export class Sky {
 
     const envRT = pmrem.fromScene(envScene, 0.02);
     scene.environment = envRT.texture;
-    scene.environmentIntensity = 1.15;
+    scene.environmentIntensity = 0.5;
     this.envRT = envRT;
     skyClone.geometry.dispose();
     skyClone.material.dispose();

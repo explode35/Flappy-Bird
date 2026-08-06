@@ -131,7 +131,7 @@ export class Engine {
 
     const output = new OutputPass();
     this.renderer.toneMapping = THREE.AgXToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.72;
     composer.addPass(output);
 
     if (this.quality.smaa) composer.addPass(new SMAAPass(w, h));

@@ -72,6 +72,7 @@ export class Physics {
   }
 
   build() {
+    if (this.bvh) return;              // idempotent: Level builds it early
     if (!this.statics.length) {
       console.warn('[physics] no static geometry registered');
       return;
