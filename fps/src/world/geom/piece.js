@@ -258,7 +258,7 @@ export class WorldBuilder {
         geo.computeBoundingSphere();
         const mesh = new THREE.Mesh(geo, this.matResolver(mat));
         mesh.name = `${name}:${mat}${decor ? ':decor' : ''}`;
-        mesh.castShadow = !decor;
+        mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.matrixAutoUpdate = false;
         mesh.updateMatrix();
@@ -293,7 +293,7 @@ export class WorldBuilder {
       for (const p of grp.piece.parts) {
         const im = new THREE.InstancedMesh(p.geo, this.matResolver(p.mat), n);
         im.name = `inst:${key}:${p.mat}`;
-        im.castShadow = !(grp.decor || p.decor);
+        im.castShadow = true;
         im.receiveShadow = true;
         im.instanceMatrix.setUsage(THREE.StaticDrawUsage);
         for (let i = 0; i < n; i++) {

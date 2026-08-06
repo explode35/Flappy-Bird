@@ -121,12 +121,12 @@ function genConcrete(w, h, seed, wall) {
   const m = G(w, h);
   const base = fbm(w, h, { period: wall ? 5 : 6, octaves: 6, seed, type: 'mix', warp: 0.25 });
   const grain = fbm(w, h, { period: 48, octaves: 3, seed: seed + 7 });
-  const pit = pits(w, h, { count: wall ? 220 : 420, seed: seed + 3, radius: 2.4, radVar: 1.8, strength: 0.9 });
-  const crk = cracks(w, h, { cells: wall ? 7 : 11, seed: seed + 11, width: 0.03, strength: 0.85, coverage: 0.5 });
-  const agg = worley(w, h, 26, seed + 5).f1;
+  const pit = pits(w, h, { count: wall ? 150 : 300, seed: seed + 3, radius: 1.3, radVar: 0.9, strength: 0.45 });
+  const crk = cracks(w, h, { cells: wall ? 5 : 7, seed: seed + 11, width: 0.012, strength: 0.35, coverage: 0.3 });
+  const agg = worley(w, h, 58, seed + 5).f1;
 
   for (let i = 0; i < m.height.length; i++) {
-    m.height[i] = base[i] * 0.55 + grain[i] * 0.12 + agg[i] * 0.2 - pit[i] * 0.5 - crk[i] * 0.6;
+    m.height[i] = base[i] * 0.5 + grain[i] * 0.14 + agg[i] * 0.12 - pit[i] * 0.25 - crk[i] * 0.35;
   }
   normalizeField(m.height);
 
@@ -138,7 +138,7 @@ function genConcrete(w, h, seed, wall) {
   if (wall) darken(m.albedo, streaks(w, h, { count: 34, seed: seed + 17, minLen: 0.12, maxLen: 0.55, width: 3 }), 0.3);
   const wear = edgeWear(m.height, w, h, { radius: 4, threshold: 0.02, amount: 0.8 });
   lighten(m.albedo, wear, 0.16);
-  darken(m.albedo, crk, 0.55);
+  darken(m.albedo, crk, 0.3);
 
   roughBase(m.rough, 0.88);
   roughJitter(m.rough, base, 0.2);
@@ -193,8 +193,8 @@ function genPlaster(w, h, seed) {
   const m = G(w, h);
   const base = fbm(w, h, { period: 4, octaves: 5, seed, type: 'mix', warp: 0.4 });
   const trowel = fbm(w, h, { period: 9, octaves: 3, seed: seed + 5, warp: 0.7, warpPeriod: 3 });
-  const crk = cracks(w, h, { cells: 14, seed: seed + 8, width: 0.026, strength: 1, coverage: 0.6 });
-  const spall = blotches(w, h, { period: 4, octaves: 4, seed: seed + 12, threshold: 0.62, softness: 0.1, warp: 1.2 });
+  const crk = cracks(w, h, { cells: 9, seed: seed + 8, width: 0.011, strength: 0.5, coverage: 0.35 });
+  const spall = blotches(w, h, { period: 4, octaves: 4, seed: seed + 12, threshold: 0.78, softness: 0.08, warp: 1.2 });
 
   for (let i = 0; i < m.height.length; i++) {
     m.height[i] = base[i] * 0.3 + trowel[i] * 0.4 - crk[i] * 0.7 - spall[i] * 0.5;
@@ -222,13 +222,13 @@ function genPlaster(w, h, seed) {
 
 function genAsphalt(w, h, seed) {
   const m = G(w, h);
-  const agg = worley(w, h, 40, seed).f1;
+  const agg = worley(w, h, 86, seed).f1;
   const base = fbm(w, h, { period: 5, octaves: 5, seed: seed + 2, type: 'mix' });
-  const crk = cracks(w, h, { cells: 8, seed: seed + 4, width: 0.045, strength: 1 });
+  const crk = cracks(w, h, { cells: 6, seed: seed + 4, width: 0.018, strength: 0.5 });
   const patch = blotches(w, h, { period: 3, octaves: 4, seed: seed + 6, threshold: 0.58, softness: 0.18, warp: 1.4 });
 
   for (let i = 0; i < m.height.length; i++) {
-    m.height[i] = agg[i] * 0.55 + base[i] * 0.3 - crk[i] * 0.8;
+    m.height[i] = agg[i] * 0.4 + base[i] * 0.3 - crk[i] * 0.45;
   }
   normalizeField(m.height);
   paintLUT(m.albedo, base, LUT.asphalt);
