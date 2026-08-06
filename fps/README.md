@@ -68,38 +68,32 @@ modern CoD ships thousands of person-years of authored art, photogrammetry,
 mocap, and a bespoke engine. This is procedural geometry and procedural
 textures in a browser.
 
-### Resolved: truncated frames were a headless-capture artifact
+### Resolved: page.screenshot() cannot capture the SwiftShader canvas
 
-Screenshots through `scripts/shoot.mjs` under SwiftShader come back with the
-world in a ~430 px strip down the left of a 1920 px frame and the rest black.
-The DOM HUD composites correctly on top. This is **not a bug in the game**.
+Harness captures were coming back black, or with the world in a strip and the
+rest black, while the DOM HUD composited fine. `scripts/probe-canvas.mjs`
+settled it by dumping both representations of the same frame side by side:
 
-`scripts/probe-gl.mjs` boots the real page and reads the GL state back. Every
-value is correct at full size:
+* `canvas.toDataURL()` -> a complete, correct 2.2 MB image
+* `page.screenshot()` -> 7 KB of black
+* `gl.readPixels` at screen centre -> `192,155,121` (a sunlit wall, i.e. the
+  GL buffer genuinely holds the frame)
+* `elementsFromPoint(centre)` -> `CANVAS`, and zero full-screen opaque nodes
+  under `#ui`, ruling out a DOM overlay
 
-| | value |
-|---|---|
-| canvas / drawing buffer | 1920 x 1080 |
-| GL viewport | `[0, 0, 1920, 1080]` |
-| scissor test | disabled |
-| composer render targets | 1920 x 1080 |
+So headless Chromium does not reliably composite the SwiftShader WebGL surface
+into a page screenshot. **The harness now reads the canvas back from inside the
+page** (`--hud` additionally saves a page screenshot for reviewing HUD layout,
+which composites fine). This needs `?capture=1` — the harness passes it — so
+that `preserveDrawingBuffer` keeps the buffer readable.
 
-So the renderer produces a full, correctly-configured frame; headless
-Chromium's capture of the SwiftShader surface is what is partial. Four other
-hypotheses were tested and eliminated along the way, each with evidence:
-
-* **Dynamic-resolution governor** — never fires at the Low tier, and the strip
-  was identical with and without an explicit composer resize. (That resize is
-  still correct and was kept.)
-* **Camera placement** — the same position renders fully in some runs.
-* **Partially-rasterised snapshot** — waiting eight settled rAF ticks before
-  capture produced an identical strip.
-* **Leaked `PMREMGenerator` viewport/scissor** — restoring viewport, scissor
-  and scissor-test around `fromScene` changed nothing (233 bytes of 849 KB,
-  drifting dust). That restore is correct practice and was also kept.
-
-Caveat worth stating: this rules the game out as the cause on the evidence
-above, but I have never run this on a real GPU. Verify there before trusting it.
+Six other hypotheses were tested and eliminated first, each with evidence:
+dynamic-resolution governor, camera placement, partially-rasterised snapshot,
+leaked `PMREMGenerator` viewport/scissor, canvas backing-store vs CSS size
+mismatch (all four probed values were correct at full size), and
+`preserveDrawingBuffer` alone. Two defensive fixes made while chasing it — an
+explicit composer resize in the governor, and viewport/scissor restore around
+PMREM — are correct on their own merits and were kept.
 
 Known weakest areas, in the order I would fix them:
 

@@ -24,6 +24,13 @@ const settleMs = Number(arg('wait', 2500));
 // Software GL cannot carry the High tier at 1080p. The harness judges art
 // direction, not performance, so drop the tier and keep the frames coming.
 const quality = arg('quality', 'low');
+// Viewport size. Headless SwiftShader truncates large captures (see README),
+// so the default is deliberately small enough to come back whole.
+const VW = Number(arg('width', 1280));
+const VH = Number(arg('height', 720));
+// Also save a page-level screenshot showing the DOM HUD over the (unreliable)
+// composited canvas. Useful only for reviewing HUD layout.
+const withHud = process.argv.includes('--hud');
 
 /**
  * Camera vantage points. `pos` is the eye, `look` the target.
@@ -61,14 +68,16 @@ const browser = await chromium.launch({
     '--force-device-scale-factor=1',
   ],
 });
-const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+const page = await browser.newPage({ viewport: { width: VW, height: VH } });
 page.setDefaultTimeout(120000);
 
 const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack || ''}`));
 
-await page.goto(`http://127.0.0.1:5199/?quality=${quality}`, { waitUntil: 'load' });
+// `capture` turns on preserveDrawingBuffer — without it page.screenshot()
+// reads an already-presented buffer and returns black.
+await page.goto(`http://127.0.0.1:5199/?quality=${quality}&capture=1`, { waitUntil: 'load' });
 
 // Wait for boot: either the game handle appears or a boot failure is rendered.
 const booted = await page
@@ -127,7 +136,20 @@ for (const s of shots) {
     for (let i = 0; i < 8; i++) await raf();
   });
   await page.waitForTimeout(400);
-  await page.screenshot({ path: resolve(outDir, `${s.id}.png`), animations: 'disabled', caret: 'hide' });
+
+  // Read the canvas back from inside the page instead of using
+  // page.screenshot(). Headless Chromium does not reliably composite the
+  // SwiftShader WebGL surface — page.screenshot() returns black or a partial
+  // strip while the canvas itself holds a perfect frame. Verified by dumping
+  // both side by side (scripts/probe-canvas.mjs). Requires ?capture=1, which
+  // turns on preserveDrawingBuffer so the buffer survives to be read.
+  const dataUrl = await page.evaluate(() => document.querySelector('canvas').toDataURL('image/png'));
+  writeFileSync(resolve(outDir, `${s.id}.png`), Buffer.from(dataUrl.split(',')[1], 'base64'));
+
+  // The DOM HUD composites fine, so grab it separately when asked for.
+  if (withHud) {
+    await page.screenshot({ path: resolve(outDir, `${s.id}_hud.png`), animations: 'disabled', caret: 'hide' });
+  }
   process.stdout.write(`shot ${s.id}\n`);
 }
 

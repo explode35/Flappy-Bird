@@ -53,6 +53,11 @@ export class Engine {
       stencil: false,
       depth: true,
       alpha: false,
+      // The WebGL back buffer is invalidated once it has been presented, so an
+      // out-of-frame reader (a screenshot tool, canvas.toDataURL) gets black or
+      // a stale partial tile. Opt in only when something is capturing: it
+      // forces an extra buffer copy every frame and is not free.
+      preserveDrawingBuffer: new URLSearchParams(location.search).has('capture'),
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality.dpr));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
