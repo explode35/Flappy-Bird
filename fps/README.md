@@ -51,6 +51,15 @@ problems in this project were actually found.
 table, material standard, and the eight-point checklist a shot has to pass. If
 something in the game contradicts it, the game is wrong.
 
+## A note on the review harness in this environment
+
+The harness renders through SwiftShader (software GL). That is fine for judging
+art direction on the static level — which is how the exposure, normal-strength
+and texture-scale problems in this project were found — but it cannot boot the
+full scene with AI, particles and post at an interactive rate. Pass
+`--quality=low` (the default) and expect minutes per run, or point
+`PW_CHROMIUM` at a browser with real GPU access.
+
 ## Honest status
 
 This is a substantial, working game with a coherent art direction, but it is not
