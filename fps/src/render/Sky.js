@@ -163,8 +163,8 @@ export class Sky {
       m.frustumCulled = false;
       return m;
     };
-    this.flareGlow = mk(glowSprite(128, 2.6, 0.25), 1.0, 0xffd9b0, 1);
-    this.flareStreak = mk(streakSprite(512, 64), 1.0, 0xffc48c, 0.55);
+    this.flareGlow = mk(glowSprite(128, 3.4, 0.0), 0.42, 0xffd9b0, 1);
+    this.flareStreak = mk(streakSprite(512, 64), 0.7, 0xffc48c, 0.30);
     this.flareStreak.scale.set(6, 0.5, 1);
     this.flareGhostA = mk(ghostSprite(128, 6), 0.22, 0x9ec4ff, 0.28);
     this.flareGhostB = mk(ghostSprite(128, 5), 0.14, 0xffb27a, 0.22);
@@ -248,14 +248,14 @@ export class Sky {
     this.flare.lookAt(0, 0, 0);
 
     const f = this._flare;
-    this.flareGlow.material.opacity = f * 0.9;
-    this.flareGlow.scale.setScalar(1.1 + f * 0.7);
-    this.flareStreak.material.opacity = f * 0.5;
+    this.flareGlow.material.opacity = f * 0.34;
+    this.flareGlow.scale.setScalar(0.9 + f * 0.4);
+    this.flareStreak.material.opacity = f * 0.18;
     // Ghosts sit on the opposite side of frame centre, as real lens ghosts do.
     this.flareGhostA.position.set(-this.flare.position.x * 0.06, -this.flare.position.y * 0.06, 0.02);
     this.flareGhostB.position.set(-this.flare.position.x * 0.11, -this.flare.position.y * 0.11, 0.03);
-    this.flareGhostA.material.opacity = f * 0.26;
-    this.flareGhostB.material.opacity = f * 0.2;
+    this.flareGhostA.material.opacity = f * 0.10;
+    this.flareGhostB.material.opacity = f * 0.08;
   }
 
   /** Level calls this after building so every new material gets fog. */

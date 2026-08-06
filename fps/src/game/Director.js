@@ -214,6 +214,7 @@ export class Director {
     this.toSpawn = 0;
     // Losing a wave costs you that wave, not the whole run.
     this.wave = Math.max(0, this.wave - 1);
+    this.ctx.hud?.death?.classList.remove('on');
     this.ctx.hud?.death?.classList.add('hidden');
     this.ctx.bus.emit('game:start', {});
   }

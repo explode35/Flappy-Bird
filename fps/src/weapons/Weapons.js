@@ -30,9 +30,9 @@ const _euler = new THREE.Euler();
 const _up = new THREE.Vector3(0, 1, 0);
 const _origin = new THREE.Vector3();
 
-const HIP_POS = new THREE.Vector3(0.118, -0.098, -0.235);
+const HIP_POS = new THREE.Vector3(0.086, -0.082, -0.335);
 const HIP_ROT = new THREE.Euler(0.026, -0.052, 0.014);
-const SPRINT_POS = new THREE.Vector3(0.155, -0.155, -0.190);
+const SPRINT_POS = new THREE.Vector3(0.118, -0.140, -0.300);
 const SPRINT_ROT = new THREE.Euler(-0.16, 0.55, 0.32);   // ~18deg cant
 
 /** Simple 2-octave drift, used for idle sway. */

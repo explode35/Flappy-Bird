@@ -155,8 +155,9 @@ export class HUD {
     R.appendChild(this.reload);
 
     // --- loading ------------------------------------------------------------
-    this.load = el('load');
-    const li = el('load__inner');
+    this.load = el('scr scr--solid load on');
+    this.load.appendChild(el('scr__bg'));
+    const li = el('load__inner scr__inner');
     li.append(
       el('load__t', 'div', 'OPERATION BLACKOUT'),
       el('load__sub', 'div', 'HARBOUR — 18:40 LOCAL')
@@ -171,7 +172,8 @@ export class HUD {
     R.appendChild(this.load);
 
     // --- pause / death / menus ----------------------------------------------
-    this.pause = el('pause hidden');
+    this.pause = el('scr pause hidden');
+    this.pause.appendChild(el('scr__bg'));
     this.pause.append(
       el('pause__h', 'div', 'PAUSED'),
       el('pause__t', 'div', 'Click to resume'),
@@ -179,7 +181,8 @@ export class HUD {
     );
     R.appendChild(this.pause);
 
-    this.death = el('death hidden');
+    this.death = el('scr scr--light death hidden');
+    this.death.appendChild(el('scr__bg'));
     this.deathT = el('death__t', 'div', 'YOU WERE KILLED');
     this.deathS = el('death__s', 'div', '');
     this.deathBar = el('death__bar');
@@ -191,6 +194,13 @@ export class HUD {
 
     // Everything except the loading screen is hidden until the game starts.
     this._setPlayVisible(false);
+  }
+
+  /** Fade the loading screen out, then take it out of the layout entirely. */
+  _hideLoad() {
+    if (this.load.classList.contains('hidden')) return;
+    this.load.classList.remove('on');
+    setTimeout(() => this.load.classList.add('hidden'), 320);
   }
 
   _setPlayVisible(v) {
@@ -239,16 +249,21 @@ export class HUD {
     bus.on('banner', (e) => this.showBanner(e));
     bus.on('score', (e) => this.pop(e.label));
     bus.on('game:start', () => {
-      this.load.classList.add('gone');
+      this._hideLoad();
       this._setPlayVisible(true);
       this.death.classList.add('hidden');
     });
     bus.on('explosion', () => { this._flash = 0.55; });
 
     bus.on('input:unlock', () => {
-      if (!this.ctx.player?.dead && this.ctx.engine.frame > 120) this.pause.classList.remove('hidden');
+      if (this.ctx.player?.dead || this.ctx.engine.frame < 120) return;
+      this.pause.classList.remove('hidden');
+      requestAnimationFrame(() => this.pause.classList.add('on'));
     });
-    bus.on('input:lock', () => this.pause.classList.add('hidden'));
+    bus.on('input:lock', () => {
+      this.pause.classList.remove('on');
+      this.pause.classList.add('hidden');
+    });
   }
 
   _set(node, text) {
@@ -321,6 +336,7 @@ export class HUD {
 
   showDeath() {
     this.death.classList.remove('hidden');
+    requestAnimationFrame(() => this.death.classList.add('on'));
     this._setPlayVisible(false);
   }
 
@@ -336,7 +352,7 @@ export class HUD {
     const ctx = this.ctx;
 
     // --- loading ------------------------------------------------------------
-    if (!this.load.classList.contains('gone')) {
+    if (!this.load.classList.contains('hidden')) {
       const mp = ctx.materials?.progress ?? 0;
       const lp = ctx.level?.progress ?? 0;
       const p = mp * 0.45 + lp * 0.55;
