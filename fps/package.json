@@ -1,0 +1,25 @@
+{
+  "name": "operation-blackout",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --host 127.0.0.1",
+    "check": "node scripts/check.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "three": "^0.185.1",
+    "three-mesh-bvh": "^0.9.14",
+    "vite": "^8.2.0"
+  },
+  "type": "module",
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "playwright": "^1.62.1"
+  }
+}
