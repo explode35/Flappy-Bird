@@ -204,6 +204,9 @@ export class Engine {
 
   /** Dynamic resolution: keeps frame time under budget on weak GPUs. */
   _governor() {
+    // Give the FPS average time to mean something before acting on it, and
+    // leave the resolution alone while paused — a menu is not a perf sample.
+    if (this.frame < 120 || this.paused) return;
     if (this.frame % 45 !== 0) return;
     const targetLo = 52, targetHi = 58;
     let s = this._dprScale;
@@ -211,8 +214,17 @@ export class Engine {
     else if (this._fpsAvg > targetHi && s < 1) s += 0.04;
     else return;
     this._dprScale = clamp(s, 0.62, 1);
+
+    const w = window.innerWidth, h = window.innerHeight;
     const dpr = Math.min(window.devicePixelRatio, this.quality.dpr) * this._dprScale;
     this.renderer.setPixelRatio(dpr);
+    this.renderer.setSize(w, h, false);
     this.composer.setPixelRatio(dpr);
+    // setPixelRatio alone leaves the composer's targets sized for the previous
+    // ratio for one frame, which renders the scene into a corner of an
+    // otherwise black buffer. Resize them explicitly.
+    this.composer.setSize(w, h);
+    if (this.gtao) this.gtao.setSize(w, h);
+    this.grade.uniforms.uResolution.value.set(w, h);
   }
 }
