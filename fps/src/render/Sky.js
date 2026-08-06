@@ -79,7 +79,21 @@ export class Sky {
     );
     envScene.add(ground);
 
+    // PMREMGenerator renders cube faces through its own viewport/scissor and
+    // does not reliably restore them. Snapshot and put them back afterwards —
+    // a leaked scissor rectangle silently truncates every subsequent frame.
+    const _vp = new THREE.Vector4();
+    const _sc = new THREE.Vector4();
+    ctx.renderer.getViewport(_vp);
+    ctx.renderer.getScissor(_sc);
+    const _scTest = ctx.renderer.getScissorTest();
+
     const envRT = pmrem.fromScene(envScene, 0.02);
+
+    ctx.renderer.setViewport(_vp);
+    ctx.renderer.setScissor(_sc);
+    ctx.renderer.setScissorTest(_scTest);
+    ctx.renderer.setRenderTarget(null);
     scene.environment = envRT.texture;
     scene.environmentIntensity = 0.5;
     this.envRT = envRT;

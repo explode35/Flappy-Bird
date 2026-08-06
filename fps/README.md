@@ -84,16 +84,21 @@ What I established:
   should be paired with an explicit resize — but it does not cause this.
 * It is **not** camera placement. The same camera position renders the full
   frame in some runs and a strip in others.
-* The strip is full-height with a hard vertical edge, and the width has been
-  stable at ~430 px across runs.
+* It is **not** a partially-rasterised snapshot. Making the harness wait eight
+  completed rAF ticks before capturing produced a byte-identical strip, so the
+  frame is fully settled and still truncated.
+* The strip is full-height with a hard vertical edge, and the width is stable
+  at ~430 px of 1920 across every run — it is deterministic, not a race.
 
-Untested leads, in the order I would try them: a viewport or scissor rectangle
-left set by `PMREMGenerator` during `Sky.init`; a canvas backing-store vs CSS
-size mismatch at first layout; or Playwright snapshotting a partially
-rasterised frame (the harness now waits eight rAF ticks before capturing,
-which did not get a chance to be verified). I have not reproduced it outside
-the software-GL harness, so it may not affect real GPU playback at all — but
-I have not confirmed that either.
+`Sky.init` now snapshots and restores the renderer viewport, scissor and
+scissor-test around `PMREMGenerator.fromScene`, which is correct practice
+regardless — PMREM renders cube faces through its own viewport and a leaked
+scissor rectangle would truncate every later frame exactly like this. Whether
+that is *this* bug is unverified; the confirming capture did not finish.
+
+The remaining untested lead is a canvas backing-store vs CSS size mismatch at
+first layout. I have not reproduced this outside the software-GL harness, so
+it may not affect real GPU playback — but I have not confirmed that either.
 
 Known weakest areas, in the order I would fix them:
 
