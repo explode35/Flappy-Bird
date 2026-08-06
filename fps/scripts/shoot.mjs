@@ -59,6 +59,7 @@ const browser = await chromium.launch({
   ],
 });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+page.setDefaultTimeout(120000);
 
 const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
@@ -92,6 +93,7 @@ await page.waitForFunction(() => {
 }, { timeout: 90000 }).catch(() => {});
 await page.waitForTimeout(settleMs);
 
+try {
 for (const s of shots) {
   await page.evaluate((shot) => {
     const { ctx, engine } = window.__game;
@@ -117,6 +119,14 @@ for (const s of shots) {
   await page.waitForTimeout(900);
   await page.screenshot({ path: resolve(outDir, `${s.id}.png`) });
   process.stdout.write(`shot ${s.id}\n`);
+}
+
+} catch (err) {
+  writeFileSync(resolve(outDir, "log.txt"), logs.join("\n") + "\n\nHARNESS ERROR: " + err.message);
+  console.log("HARNESS ERROR: " + err.message);
+  console.log(logs.slice(-30).join("\n"));
+  await browser.close(); await server.close();
+  process.exit(1);
 }
 
 const stats = await page.evaluate(() => {

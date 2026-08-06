@@ -125,9 +125,12 @@ export class Soldier {
     }
     this.mats = M;
 
-    const mesh = (geo, mat, parent, x, y, z) => {
+    // Only the big silhouette parts cast shadows. Pouches and straps add
+    // nothing to a shadow at any distance the player will ever see one, and
+    // 40 shadow casters per soldier is a frame-time cliff at squad strength.
+    const mesh = (geo, mat, parent, x, y, z, shadow = false) => {
       const m = new THREE.Mesh(geo, mat);
-      m.castShadow = true;
+      m.castShadow = shadow;
       m.receiveShadow = true;
       m.position.set(x || 0, y || 0, z || 0);
       parent.add(m);
@@ -142,11 +145,11 @@ export class Soldier {
 
     // Pelvis is the animation root; everything hangs off it.
     this.pelvis = node(root, 0, 0.94, 0);
-    mesh(G.hips, M.fatigue, this.pelvis, 0, 0, 0);
+    mesh(G.hips, M.fatigue, this.pelvis, 0, 0, 0, true);
 
     this.spine = node(this.pelvis, 0, 0.12, 0);
-    mesh(G.torso, M.fatigue, this.spine, 0, 0.19, 0);
-    mesh(G.carrier, M.carrier, this.spine, 0, 0.20, 0.01);
+    mesh(G.torso, M.fatigue, this.spine, 0, 0.19, 0, true);
+    mesh(G.carrier, M.carrier, this.spine, 0, 0.20, 0.01, true);
     mesh(G.pack, M.pouch, this.spine, 0, 0.19, -0.17);
     // Pouches across the front of the carrier — the read-at-distance detail.
     for (let i = 0; i < 3; i++) {
@@ -162,8 +165,8 @@ export class Soldier {
     this.neck = node(this.spine, 0, 0.40, 0);
     mesh(G.neck, M.skin, this.neck, 0, 0, 0);
     this.head = node(this.neck, 0, 0.11, 0);
-    mesh(G.head, M.skin, this.head, 0, 0, 0);
-    mesh(G.helmet, M.helmet, this.head, 0, 0.10, -0.005);
+    mesh(G.head, M.skin, this.head, 0, 0, 0, true);
+    mesh(G.helmet, M.helmet, this.head, 0, 0.10, -0.005, true);
     mesh(G.nvgMount, M.helmet, this.head, 0, 0.10, 0.10);
     // Shemagh / balaclava across the lower face
     mesh(chamferBox(0.175, 0.09, 0.195, { chamfer: 0.03, uvScale: 0.15 }), M.strap, this.head, 0, -0.05, 0.005);
@@ -173,9 +176,9 @@ export class Soldier {
     for (const side of ['l', 'r']) {
       const sx = side === 'l' ? -1 : 1;
       const shoulder = node(this.spine, sx * 0.215, 0.32, 0);
-      const upper = mesh(G.upperArm, M.fatigue, shoulder, 0, -0.135, 0);
+      const upper = mesh(G.upperArm, M.fatigue, shoulder, 0, -0.135, 0, true);
       const elbow = node(shoulder, 0, -0.27, 0);
-      const fore = mesh(G.foreArm, M.fatigue, elbow, 0, -0.125, 0);
+      const fore = mesh(G.foreArm, M.fatigue, elbow, 0, -0.125, 0, true);
       const wrist = node(elbow, 0, -0.25, 0);
       mesh(G.hand, M.glove, wrist, 0, -0.05, 0.01);
       this.arms[side] = { shoulder, elbow, wrist, upper, fore };
@@ -186,10 +189,10 @@ export class Soldier {
     for (const side of ['l', 'r']) {
       const sx = side === 'l' ? -1 : 1;
       const hip = node(this.pelvis, sx * 0.10, -0.10, 0);
-      mesh(G.thigh, M.fatigue, hip, 0, -0.21, 0);
+      mesh(G.thigh, M.fatigue, hip, 0, -0.21, 0, true);
       const knee = node(hip, 0, -0.42, 0);
       mesh(G.knee, M.carrier, knee, 0, 0, 0.045);
-      mesh(G.shin, M.fatigue, knee, 0, -0.20, 0);
+      mesh(G.shin, M.fatigue, knee, 0, -0.20, 0, true);
       const ankle = node(knee, 0, -0.40, 0);
       mesh(G.boot, M.boot, ankle, 0, -0.045, 0.045);
       this.legs[side] = { hip, knee, ankle };
@@ -197,7 +200,7 @@ export class Soldier {
 
     // Weapon, held in the right hand and steadied by the left.
     this.gun = node(this.arms.r.wrist, -0.02, -0.10, 0.14);
-    mesh(G.gunBody, M.gun, this.gun, 0, 0, 0);
+    mesh(G.gunBody, M.gun, this.gun, 0, 0, 0, true);
     mesh(G.gunMag, M.gun, this.gun, 0, -0.13, 0.02);
     mesh(G.gunStock, M.gun, this.gun, 0, -0.01, 0.36);
     this.muzzleNode = node(this.gun, 0, 0.02, -0.33);
