@@ -163,5 +163,3 @@ export const DEATH_EYE = 0.30;
 export const DEATH_ROLL = 72 * DEG;
 export const DEATH_PITCH = -18 * DEG;
 export const DEATH_LAMBDA = 3.2;
-</content>
-</invoke>

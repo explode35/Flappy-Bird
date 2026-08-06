@@ -100,7 +100,7 @@ export class Dust {
     this.count = count;
     this.radius = opts.radius ?? 22;
 
-    const rnd = (opts.rand || (() => Math.random))(0x0a7m0 | 0);
+    const rnd = (opts.rand || (() => Math.random))(0xd05741);
     const pos = new Float32Array(count * 3);
     const phase = new Float32Array(count);
     const scale = new Float32Array(count);
