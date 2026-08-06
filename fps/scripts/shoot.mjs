@@ -118,8 +118,15 @@ for (const s of shots) {
     if (shot.combat && ctx.director?.debugSpawnWave) ctx.director.debugSpawnWave(6);
   }, s);
 
-  // Several frames so shadow maps, TAA-ish accumulation and lazy loads resolve.
-  await page.waitForTimeout(900);
+  // Wait for whole frames to actually complete, not just for wall-clock time.
+  // Under SwiftShader a frame can take seconds, and screenshotting mid-raster
+  // captures a partial image — a sharp-edged vertical strip of finished scene
+  // with the rest black. Counting rAF ticks guarantees a settled frame.
+  await page.evaluate(async () => {
+    const raf = () => new Promise((r) => requestAnimationFrame(r));
+    for (let i = 0; i < 8; i++) await raf();
+  });
+  await page.waitForTimeout(400);
   await page.screenshot({ path: resolve(outDir, `${s.id}.png`), animations: 'disabled', caret: 'hide' });
   process.stdout.write(`shot ${s.id}\n`);
 }

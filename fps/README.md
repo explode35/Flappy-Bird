@@ -68,6 +68,33 @@ modern CoD ships thousands of person-years of authored art, photogrammetry,
 mocap, and a bespoke engine. This is procedural geometry and procedural
 textures in a browser.
 
+### Open bug: truncated frames in the review harness
+
+Screenshots taken through `scripts/shoot.mjs` under SwiftShader render the
+world into a vertical strip down the left of the frame (~430 px of 1920) with
+the rest black. The DOM HUD composites correctly on top, so it is the WebGL
+canvas that is truncated, not an overlay.
+
+What I established:
+
+* It is **not** the dynamic-resolution governor. At the Low tier the governor
+  never fires (`dpr` is already at its cap), and the strip is byte-identical
+  before and after I made the governor resize the composer targets explicitly.
+  That change is still correct — `setPixelRatio` on the renderer and composer
+  should be paired with an explicit resize — but it does not cause this.
+* It is **not** camera placement. The same camera position renders the full
+  frame in some runs and a strip in others.
+* The strip is full-height with a hard vertical edge, and the width has been
+  stable at ~430 px across runs.
+
+Untested leads, in the order I would try them: a viewport or scissor rectangle
+left set by `PMREMGenerator` during `Sky.init`; a canvas backing-store vs CSS
+size mismatch at first layout; or Playwright snapshotting a partially
+rasterised frame (the harness now waits eight rAF ticks before capturing,
+which did not get a chance to be verified). I have not reproduced it outside
+the software-GL harness, so it may not affect real GPU playback at all — but
+I have not confirmed that either.
+
 Known weakest areas, in the order I would fix them:
 
 1. **Building facades are under-detailed.** Windows are sparse and there is no
