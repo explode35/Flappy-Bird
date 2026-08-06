@@ -13,6 +13,14 @@ import { FinalGradeShader } from '../render/FinalGradeShader.js';
 
 /** Detect a sane quality tier from the GPU string + screen size. */
 function detectQuality() {
+  // Explicit override wins: ?quality=low|medium|high. Used by the screenshot
+  // harness (software GL cannot carry the High tier) and by anyone whose GPU
+  // the sniffing below gets wrong.
+  const forced = new URLSearchParams(location.search).get('quality');
+  if (forced) {
+    const i = ['low', 'medium', 'high'].indexOf(forced.toLowerCase());
+    if (i >= 0) return i;
+  }
   let tier = 2; // 0 low, 1 medium, 2 high
   try {
     const c = document.createElement('canvas');
