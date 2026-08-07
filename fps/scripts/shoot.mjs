@@ -54,10 +54,19 @@ const SHOTS = [
   { id: '04_harbour',      pos: [27, 1.68, 6],     look: [30, 2.0, -22],    fov: 80 },
   { id: '05_interior',     pos: [-14, 1.55, -6],   look: [-2, 1.5, -10],    fov: 80 },
   { id: '06_rooftop',      pos: [-18, 8.6, -14],   look: [4, 1.2, -4],      fov: 80 },
-  { id: '07_backlit',      pos: [-6, 1.68, -30],   look: [10, 6.0, 12],     fov: 80 },
+  // Was at (-6,-30), which is inside the three-storey block on the plaza's
+  // north side — the "backlit exterior" shot has been an interior all along.
+  { id: '07_backlit',      pos: [-4, 1.68, -16],   look: [20, 4.5, 8],      fov: 80 },
   { id: '08_closeup',      pos: [-9, 1.45, 3],     look: [-9.9, 1.3, 1.2],  fov: 62 },
   { id: '09_ads',          pos: [0, 1.68, 18],     look: [0, 1.7, -30],     fov: 62, ads: true },
   { id: '10_combat',       pos: [4, 1.68, 12],     look: [-6, 1.6, -14],    fov: 80, combat: true },
+  // Facade detail. The set above is all interiors and long lanes and points at
+  // none of the window/surround/quoin/cornice work, which is most of what the
+  // buildings are made of.
+  { id: '11_facade',       pos: [-2.0, 1.68, -10], look: [-7.5, 2.6, -10],  fov: 62 },
+  { id: '12_window',       pos: [-5.4, 1.75, -13.2], look: [-7.5, 1.75, -13.2], fov: 55 },
+  { id: '13_corner',       pos: [-4.5, 1.68, 0.5], look: [-7.5, 3.0, -1.6], fov: 62 },
+  { id: '14_cornice',      pos: [-2.0, 1.68, 18],  look: [-7.5, 3.4, 4],    fov: 70 },
 ];
 
 const wanted = arg('shots', '').split(',').filter(Boolean);
@@ -128,10 +137,11 @@ const aim = (s) => page.evaluate((shot) => {
   cam.lookAt(...shot.look);
   cam.updateProjectionMatrix();
   cam.updateMatrixWorld(true);
-  if (ctx.viewCamera) {
-    ctx.viewCamera.quaternion.copy(cam.quaternion);
-    ctx.viewCamera.updateMatrixWorld(true);
-  }
+  // Deliberately does NOT touch ctx.viewCamera. The viewmodel camera lives in
+  // view space and the weapon is authored against it; copying the world
+  // camera's rotation onto it double-applies the rotation, and every run that
+  // did so lost most of its frames to black. probe-view.mjs isolates it:
+  // 187 at 01_spawn without the copy, 0 with it.
   if (shot.ads && ctx.weapons?.forceADS) ctx.weapons.forceADS(true);
   else if (ctx.weapons?.forceADS) ctx.weapons.forceADS(false);
   if (shot.combat && ctx.director?.debugSpawnWave) ctx.director.debugSpawnWave(6);

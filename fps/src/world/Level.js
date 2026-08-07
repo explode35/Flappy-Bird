@@ -207,7 +207,23 @@ export class Level {
         y: (spec.y || 0) + o.y,
         z: spec.z - o.x * sin + o.z * cos,
       });
-      for (const l of lights) this.practicals.push({ ...toWorld(l), color: l.color, intensity: l.intensity, distance: l.distance });
+      // Room bounds, in world space, padded so the lamps come up as you reach
+      // the doorway rather than snapping on once you are through it. The pool
+      // only considers a fixture whose room contains the camera: these lights
+      // cast no shadows, so a pendant 2 m from an exterior wall would light
+      // that wall's *outside* face too, and a street full of buildings glowing
+      // from within is a worse artefact than a dark room.
+      const half = Math.max(spec.w, spec.d) * 0.5 + 2.5;
+      const room = {
+        x0: spec.x - half, x1: spec.x + half,
+        z0: spec.z - half, z1: spec.z + half,
+        y0: (spec.y || 0) - 1.5, y1: (spec.y || 0) + spec.storeys * 3.2 + 1.5,
+      };
+      for (const l of lights) {
+        this.practicals.push({
+          ...toWorld(l), color: l.color, intensity: l.intensity, distance: l.distance, room,
+        });
+      }
       for (const g of glows) glowSpecs.push({ ...g, ...toWorld(g), ry: (g.ry || 0) + ry });
     }
     this._buildGlows(glowSpecs);
@@ -650,9 +666,15 @@ export class Level {
     if ((this._practicalTimer = (this._practicalTimer + 1) % 15) !== 0) return;
 
     const cam = this.ctx.camera;
+    const p = cam.position;
     const list = this.practicals;
     for (const f of list) {
-      const dx = f.x - cam.position.x, dy = f.y - cam.position.y, dz = f.z - cam.position.z;
+      const r = f.room;
+      if (p.x < r.x0 || p.x > r.x1 || p.z < r.z0 || p.z > r.z1 || p.y < r.y0 || p.y > r.y1) {
+        f._d2 = Infinity;
+        continue;
+      }
+      const dx = f.x - p.x, dy = f.y - p.y, dz = f.z - p.z;
       f._d2 = dx * dx + dy * dy + dz * dz;
     }
     // Partial selection: pool.length is 3-8, so a linear scan per slot beats

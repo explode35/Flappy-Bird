@@ -34,9 +34,14 @@ import { STOREY } from '../geom/kit.js';
 const TH = 0.3;                     // wall thickness used by building()
 const _m = new THREE.Matrix4();
 
-/** Interior clear half-extents for a building of footprint w x d. */
+/**
+ * Interior clear half-extents for a building of footprint w x d. The walls are
+ * centred on the footprint line, so the inner face is half a wall thickness in,
+ * not a whole one — getting that wrong stands every wall-hugging item 15 cm
+ * off the wall it is meant to be against, which shows worst on the posters.
+ */
 function clear(w, d) {
-  return { hx: w * 0.5 - TH, hz: d * 0.5 - TH };
+  return { hx: w * 0.5 - TH * 0.5, hz: d * 0.5 - TH * 0.5 };
 }
 
 const rot = (ry, x, y, z) => _m.makeRotationY(ry).setPosition(x, y, z);

@@ -413,20 +413,31 @@ export function cornice(piece, mat, opts = {}) {
  */
 export function quoinRun(piece, mat, opts = {}) {
   const {
-    x = 0, y = 0, z = 0, height = 6.4, ox = 1, oz = 1,
-    big = 0.68, small = 0.46, course = 0.56, project = 0.05, rng = Math.random,
+    x = 0, y = 0, z = 0, height = 6.4, ox = 1, oz = 1, thick = 0.3,
+    big = 0.68, small = 0.46, course = 0.56, project = 0.06, rng = Math.random,
   } = opts;
+  // A real quoin is a dressed stone that shows on both faces of the corner.
+  // Modelling it as a cube of the face width put a 0.68 m block through a
+  // 0.3 m wall and left a third of a metre of it standing inside the room —
+  // the "column of alternating slabs" that kept showing up in interior shots.
+  // Two shallow slabs instead, each flush to its own exterior face.
   const n = Math.max(2, Math.floor(height / course));
+  const faceX = x + ox * thick * 0.5;
+  const faceZ = z + oz * thick * 0.5;
+  // Bury the back edge a little so there is no seam against the render.
+  const dep = project + 0.04;
   for (let i = 0; i < n; i++) {
     const s = (i % 2 === 0 ? big : small) * R(rng, 0.96, 1.04);
     const h = course * R(rng, 0.9, 0.99);
-    const g = chamferBox(s, h, s, { uvScale: 0.9, chamfer: 0.026 });
-    g.translate(
-      x - ox * (s * 0.5 - project),
-      y + course * i + h * 0.5 + course * 0.03,
-      z - oz * (s * 0.5 - project),
-    );
-    piece.add(mat, g, true);
+    const cy = y + course * i + h * 0.5 + course * 0.03;
+
+    const gx = chamferBox(dep, h, s, { uvScale: 0.9, chamfer: 0.026 });
+    gx.translate(faceX + ox * (dep * 0.5 - 0.04), cy, faceZ - oz * s * 0.5);
+    piece.add(mat, gx, true);
+
+    const gz = chamferBox(s, h, dep, { uvScale: 0.9, chamfer: 0.026 });
+    gz.translate(faceX - ox * s * 0.5, cy, faceZ + oz * (dep * 0.5 - 0.04));
+    piece.add(mat, gz, true);
   }
   return piece;
 }
@@ -765,6 +776,12 @@ export function building(opts = {}) {
     const y = s * H;
     if (s > 0) {
       floor(p, interiorFloor, { x: 0, y, z: 0, w: w - 0.5, d: d - 0.5, thick: 0.24, uvScale: 2 });
+      // Soffit: the room below sees the underside of this slab, and without a
+      // separate ceiling it sees the tile floor pattern upside down over its
+      // head. A tiled ceiling is a very hard thing to un-see once noticed.
+      const sof = chamferBox(w - TH, 0.05, d - TH, { uvScale: 2.2, chamfer: 0.02 });
+      sof.translate(0, y - 0.26, 0);
+      p.add('plaster', sof, true);
     } else {
       // The ground floor used to just expose the terrain underneath, which is
       // why interiors read as gravel yards: you were standing on the street
@@ -853,7 +870,7 @@ export function building(opts = {}) {
         // line, a 0.68 m quoin block half-buries itself in a 0.3 m wall and
         // pokes through into the room behind it.
         quoinRun(p, matTrim, {
-          x: ox * (w * 0.5 + TH * 0.5), y: 0, z: oz * (d * 0.5 + TH * 0.5),
+          x: ox * w * 0.5, y: 0, z: oz * d * 0.5, thick: TH,
           height: storeys * H, ox, oz, rng,
         });
       }
