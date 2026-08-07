@@ -68,42 +68,50 @@ modern CoD ships thousands of person-years of authored art, photogrammetry,
 mocap, and a bespoke engine. This is procedural geometry and procedural
 textures in a browser.
 
-### Resolved: page.screenshot() cannot capture the SwiftShader canvas
+### The review harness is unreliable in this container. The game is fine.
 
-Harness captures were coming back black, or with the world in a strip and the
-rest black, while the DOM HUD composited fine. `scripts/probe-canvas.mjs`
-settled it by dumping both representations of the same frame side by side:
+Captures come back black or truncated, intermittently and depending on
+viewport size, timing and which shot in the sequence they are. Do not trust a
+black PNG from `scripts/shoot.mjs` as evidence of anything.
 
-* `canvas.toDataURL()` -> a complete, correct 2.2 MB image
-* `page.screenshot()` -> 7 KB of black
-* `gl.readPixels` at screen centre -> `192,155,121` (a sunlit wall, i.e. the
-  GL buffer genuinely holds the frame)
-* `elementsFromPoint(centre)` -> `CANVAS`, and zero full-screen opaque nodes
-  under `#ui`, ruling out a DOM overlay
+What is actually established:
 
-So headless Chromium does not reliably composite the SwiftShader WebGL surface
-into a page screenshot. **The harness now reads the canvas back from inside the
-page** (`--hud` additionally saves a page screenshot for reviewing HUD layout,
-which composites fine). This needs `?capture=1` — the harness passes it — so
-that `preserveDrawingBuffer` keeps the buffer readable.
+* `page.screenshot()` cannot capture the SwiftShader WebGL surface at all —
+  it returns black while `canvas.toDataURL()` on the same frame returns a
+  complete 2.2 MB image. The harness therefore reads the canvas directly.
+* **The scene renders correctly.** `scripts/probe-black.mjs` samples GL pixels
+  at five screen points and reads a bright, correct frame
+  (`210,200,178` at centre) at the `01_spawn` camera — the exact camera the
+  harness reports as pure black. Fog and the grade pass were separately
+  neutralised and made no difference, so neither is implicated.
+* I previously concluded from the harness's own inline probe that GL was
+  genuinely black at those cameras, and went looking for a scene bug. **That
+  was wrong** — the harness probe is as unreliable as its capture. The
+  correction matters: there is no known camera-dependent rendering bug.
 
-Six other hypotheses were tested and eliminated first, each with evidence:
+Reliable way to look at the game here: `scripts/probe-black.mjs`, or
+`probe-canvas.mjs`, both of which sample immediately after a completed frame
+in a small viewport. Better still, run it on a real GPU.
+
+Six further hypotheses were tested and eliminated with evidence along the way:
 dynamic-resolution governor, camera placement, partially-rasterised snapshot,
 leaked `PMREMGenerator` viewport/scissor, canvas backing-store vs CSS size
-mismatch (all four probed values were correct at full size), and
-`preserveDrawingBuffer` alone. Two defensive fixes made while chasing it — an
-explicit composer resize in the governor, and viewport/scissor restore around
-PMREM — are correct on their own merits and were kept.
+mismatch, and `preserveDrawingBuffer` alone. Two defensive fixes made while
+chasing it — an explicit composer resize in the governor, and viewport/scissor
+restore around PMREM — are correct on their own merits and were kept.
 
 Known weakest areas, in the order I would fix them:
 
-1. **Building facades are under-detailed.** Windows are sparse and there is no
-   real architectural moulding. The kit supports it; the layout data does not
-   use it enough yet.
+1. **Interiors are still thin.** They now have their own floors, ceilings and
+   exposed beams rather than standing on the street with the roof slab as a
+   lid, but they have no authored lighting of their own and almost no
+   furniture. Stepping inside still makes the game look worse.
 2. **No skinned characters.** Soldiers are jointed rigid segments. It reads fine
    at 15 m+ and poorly up close.
-3. **Interiors are thin.** The four enterable spaces have furniture but no
-   authored lighting of their own, so they read flat compared to outdoors.
+3. **Facade detail is applied but unreviewed.** `building()` now drives window
+   rhythm, surrounds, glazing, shutters, balconettes, string courses, cornices,
+   quoins and shopfronts (265k tris, 50 draws, 914 ms build). Nobody has
+   actually looked at the result, because of the harness problem above.
 4. **No LOD or occlusion culling.** The whole map draws every frame. Fine at
    this scale, would not be at four times the size.
 5. **Weapon animation is procedural throughout.** Reloads read as a sequence of

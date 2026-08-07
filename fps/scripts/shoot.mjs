@@ -127,37 +127,24 @@ for (const s of shots) {
     if (shot.combat && ctx.director?.debugSpawnWave) ctx.director.debugSpawnWave(6);
   }, s);
 
-  // Wait for whole frames to actually complete, not just for wall-clock time.
-  // Under SwiftShader a frame can take seconds, and screenshotting mid-raster
-  // captures a partial image — a sharp-edged vertical strip of finished scene
-  // with the rest black. Counting rAF ticks guarantees a settled frame.
-  await page.evaluate(async () => {
+  // Capture in the SAME evaluate that waits out the frames. Reading the
+  // canvas even a few hundred ms later comes back black or partial: the
+  // buffer is only reliably intact in the tick right after a completed
+  // render. Verified with scripts/probe-black.mjs, where an immediate sample
+  // reads a bright frame at a camera that a delayed sample reported as pure
+  // black — which is what sent an earlier round of this investigation chasing
+  // a scene bug that did not exist.
+  const probe = await page.evaluate(async () => {
     const raf = () => new Promise((r) => requestAnimationFrame(r));
-    for (let i = 0; i < 8; i++) await raf();
-  });
-  await page.waitForTimeout(400);
-
-  // Read the canvas back from inside the page instead of using
-  // page.screenshot(). Headless Chromium does not reliably composite the
-  // SwiftShader WebGL surface — page.screenshot() returns black or a partial
-  // strip while the canvas itself holds a perfect frame. Verified by dumping
-  // both side by side (scripts/probe-canvas.mjs). Requires ?capture=1, which
-  // turns on preserveDrawingBuffer so the buffer survives to be read.
-  // Sample the GL buffer itself alongside the readback. If these disagree the
-  // problem is the capture; if both are black the frame genuinely rendered
-  // black and it is a scene bug at this camera.
-  const probe = await page.evaluate(() => {
+    for (let i = 0; i < 6; i++) await raf();
     const c = document.querySelector('canvas');
     const gl = window.__game.ctx.renderer.getContext();
-    const px = new Uint8Array(4 * 64);
-    gl.readPixels((c.width >> 1) - 4, (c.height >> 1) - 4, 8, 8, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    let sum = 0;
-    for (let i = 0; i < px.length; i += 4) sum += px[i] + px[i + 1] + px[i + 2];
-    return { mean: Math.round(sum / (px.length / 4) / 3), url: c.toDataURL('image/png') };
+    const px = new Uint8Array(4);
+    gl.readPixels(c.width >> 1, c.height >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return { mean: Math.round((px[0] + px[1] + px[2]) / 3), url: c.toDataURL('image/png') };
   });
-  const dataUrl = probe.url;
+  writeFileSync(resolve(outDir, `${s.id}.png`), Buffer.from(probe.url.split(',')[1], 'base64'));
   process.stdout.write(`  gl centre mean=${probe.mean}\n`);
-  writeFileSync(resolve(outDir, `${s.id}.png`), Buffer.from(dataUrl.split(',')[1], 'base64'));
 
   // The DOM HUD composites fine, so grab it separately when asked for.
   if (withHud) {
