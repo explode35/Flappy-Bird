@@ -151,19 +151,33 @@ for (const s of shots) {
   // One 1.2 MB base64 payload over CDP was enough to lose the page on this
   // container; 45-row slices are not.
   process.stdout.write('> readback\n');
-  const probe = await page.evaluate(async () => {
-    const raf = () => new Promise((r) => requestAnimationFrame(r));
-    for (let i = 0; i < 6; i++) await raf();
-    const c = document.querySelector('canvas');
-    const gl = window.__game.ctx.renderer.getContext();
-    const w = c.width, h = c.height;
-    const px = new Uint8Array(w * h * 4);
-    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    window.__frame = px;
-    let sum = 0;
-    for (let i = 0; i < px.length; i += 4 * 31) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
-    return { w, h, mean: Math.round(sum / Math.ceil(px.length / (4 * 31))) };
-  });
+  let probe = null;
+  for (let attempt = 0; attempt < 4 && (!probe || probe.mean === 0); attempt++) {
+    probe = await page.evaluate(async () => {
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      for (let i = 0; i < 6; i++) await raf();
+      const { ctx, engine } = window.__game;
+      // Drive one more composer pass ourselves, in the same JS task as the
+      // read. Reading a frame the engine's own rAF produced comes back black
+      // often enough to be useless — scripts/probe-diag.mjs, which renders and
+      // reads inside a single evaluate, has never once seen it, while every
+      // script that renders in one task and reads in the next has. Whatever
+      // the presentation-side cause is, not straddling the task boundary
+      // sidesteps it.
+      ctx.renderer.setRenderTarget(null);
+      engine.composer.render(1 / 60);
+      const c = document.querySelector('canvas');
+      const gl = ctx.renderer.getContext();
+      const w = c.width, h = c.height;
+      const px = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      window.__frame = px;
+      let sum = 0;
+      for (let i = 0; i < px.length; i += 4 * 31) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
+      return { w, h, mean: Math.round(sum / Math.ceil(px.length / (4 * 31))) };
+    });
+    if (probe.mean === 0) process.stdout.write(`  black frame, retry ${attempt + 1}\n`);
+  }
 
   process.stdout.write(`> banding ${probe.w}x${probe.h}\n`);
   const BAND = 45;

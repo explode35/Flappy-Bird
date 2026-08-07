@@ -435,7 +435,10 @@ function genWood(w, h, seed, planks) {
 
 function genTile(w, h, seed) {
   const m = G(w, h);
-  const lat = tileLattice(w, h, { n: 6, grout: 0.03, bevel: 0.02 });
+  // Grout was 3% of the tile wide and bevelled 2% deep, which at floor scale
+  // is a 1 cm gap in a 3 cm chamfer -- a moulded rubber gym mat, not a tiled
+  // floor. Real cement tile is butted much closer than that.
+  const lat = tileLattice(w, h, { n: 5, grout: 0.016, bevel: 0.01 });
   const speck = speckle(w, h, { seed, scale: 3, blur: 0.5, contrast: 1.5 });
   const wearF = fbm(w, h, { period: 4, octaves: 4, seed: seed + 3, type: 'mix' });
   for (let i = 0; i < m.height.length; i++) m.height[i] = lat.mask[i] * 0.8 + speck[i] * 0.08;
@@ -446,14 +449,14 @@ function genTile(w, h, seed) {
   const perTile = new Float32Array(w * h);
   for (let i = 0; i < perTile.length; i++) perTile[i] = ((Math.sin(lat.id[i] * 57.3) * 2718.3) % 1 + 1) % 1;
   modulate(m.albedo, perTile, 0.16);
-  tint(m.albedo, invert(lat.mask), 0x6e685e, 0.9);
+  tint(m.albedo, invert(lat.mask), 0x8c8478, 0.55);
   darken(m.albedo, cornerGrime(w, h, { strength: 0.8 }), 0.35);
   roughBase(m.rough, 0.34);
   roughTo(m.rough, invert(lat.mask), 0.95, 1);
   roughTo(m.rough, wearF, 0.7, 0.5);
   clampRough(m.rough, 0.1);
-  m.ao = heightAO(m.height, w, h, { strength: 1.2 });
-  m.normalStrength = 0.82;
+  m.ao = heightAO(m.height, w, h, { strength: 0.65 });
+  m.normalStrength = 0.38;
   capSaturation(m.albedo, 0.3);
   return m;
 }
@@ -591,10 +594,12 @@ export class Materials {
     albedoTex.anisotropy = normalTex.anisotropy = ormTex.anisotropy = aniso;
 
     const isFoliage = name === 'foliage';
-    // Glass is the one surface where the physical answer and the pretty answer
-    // agree: crank the environment reflection, drop the roughness floor, and
-    // let the IBL do the work. It stays opaque — a transparent pane would need
-    // sorting against every interior prop for no visible gain at these sizes.
+    // Glass: near-black albedo plus a strong environment reflection, and thin
+    // enough to see through. Opaque glass was worse than no glass at all —
+    // from inside a room a daylit window became a black rectangle, which is
+    // exactly the read you get from a hole in the wall. Alpha is low enough
+    // that the pane is mostly the reflection when you are outside looking in,
+    // and mostly the street when you are inside looking out.
     const isGlassy = name === 'glass';
 
     const mat = new THREE.MeshStandardMaterial({
@@ -607,9 +612,11 @@ export class Materials {
       aoMapIntensity: 1.0,
       roughness: 1,
       metalness: typeof m.metal === 'number' ? m.metal : 1,
-      side: isFoliage ? THREE.DoubleSide : THREE.FrontSide,
+      side: isFoliage || isGlassy ? THREE.DoubleSide : THREE.FrontSide,
       alphaTest: isFoliage ? 0.5 : 0,
-      transparent: false,
+      transparent: isGlassy,
+      opacity: isGlassy ? 0.34 : 1,
+      depthWrite: !isGlassy,
       vertexColors: true,           // Level bakes AO + per-instance tint here
       envMapIntensity: isGlassy ? 2.6 : 1.0,
       dithering: true,
