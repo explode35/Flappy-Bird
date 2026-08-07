@@ -1,0 +1,19 @@
+{
+  "name": "triangle-automation",
+  "version": "1.0.0",
+  "description": "Missed-call text-back service: Twilio webhooks + Claude conversation engine",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "express": "^4.21.0",
+    "twilio": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

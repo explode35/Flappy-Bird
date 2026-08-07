@@ -1,0 +1,336 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Triangle Automation — Live Demo</title>
+<style>
+  :root{
+    --stage:#0e1116; --stage-2:#161b22; --line:#242b35;
+    --label:#8b95a3; --bright:#f2f5f9; --accent:#e85d04; --good:#2e9e5b;
+    --phone-bezel:#1c1f26; --screen:#f5f5f7; --thread-head:#fbfbfd;
+    --in-bubble:#e9e9eb; --in-text:#111; --out-bubble:#0a84ff; --out-text:#fff;
+    --chip:#ffffff; --chip-border:#c9cdd4;
+  }
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%, #1a2230 0%, var(--stage) 60%);
+    color:var(--bright);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    padding:20px 14px 40px;min-height:100vh;
+  }
+  .kicker{
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--label);
+    margin-bottom:6px;
+  }
+  h1{font-size:clamp(20px,4vw,28px);font-weight:800;letter-spacing:-.02em;text-align:center}
+  h1 .hl{color:var(--accent)}
+  .sub{color:var(--label);font-size:14px;margin-top:6px;text-align:center;max-width:34em}
+
+  .counter{
+    margin:18px 0 14px;display:flex;gap:26px;justify-content:center;flex-wrap:wrap;
+  }
+  .stat{text-align:center}
+  .stat b{
+    display:block;font-size:26px;font-variant-numeric:tabular-nums;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:-.01em;
+  }
+  .stat span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--label)}
+  #revenue{color:var(--good)}
+
+  .phone{
+    width:min(390px,100%);background:var(--phone-bezel);border-radius:44px;padding:12px;
+    box-shadow:0 30px 80px rgba(0,0,0,.55), inset 0 0 0 2px #2a2f39;
+  }
+  .screen{
+    background:var(--screen);border-radius:34px;overflow:hidden;display:flex;flex-direction:column;
+    height:640px;max-height:74vh;
+  }
+  .statusbar{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 22px 4px;background:var(--thread-head);
+    font-size:13px;font-weight:600;color:#111;
+  }
+  .thread-head{
+    background:var(--thread-head);border-bottom:1px solid #e3e3e8;
+    padding:6px 14px 10px;text-align:center;
+  }
+  .avatar{
+    width:40px;height:40px;border-radius:50%;background:linear-gradient(160deg,#ff8f3c,#e85d04);
+    color:#fff;font-weight:700;font-size:15px;display:inline-flex;align-items:center;justify-content:center;
+  }
+  .thread-head .name{font-size:12px;color:#111;margin-top:3px;font-weight:500}
+  .thread{
+    flex:1;overflow-y:auto;padding:14px 12px 8px;display:flex;flex-direction:column;gap:8px;
+    background:var(--screen);
+  }
+  .sysline{
+    align-self:center;font-size:11px;color:#8a8a90;background:#e8e8ec;border-radius:10px;
+    padding:4px 10px;text-align:center;max-width:90%;
+  }
+  .sysline.missed{color:#d33;background:#fdeaea;font-weight:600}
+  .bubble{
+    max-width:78%;padding:9px 13px;border-radius:18px;font-size:15px;line-height:1.35;
+    white-space:pre-line;animation:pop .18s ease-out;
+  }
+  @keyframes pop{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion: reduce){.bubble{animation:none}}
+  .in{align-self:flex-start;background:var(--in-bubble);color:var(--in-text);border-bottom-left-radius:5px}
+  .out{align-self:flex-end;background:var(--out-bubble);color:var(--out-text);border-bottom-right-radius:5px}
+  .stamp{align-self:flex-start;font-size:10px;color:#9a9aa0;margin:-4px 0 0 8px}
+  .typing{align-self:flex-start;background:var(--in-bubble);border-radius:18px;border-bottom-left-radius:5px;
+    padding:12px 14px;display:flex;gap:4px}
+  .typing i{width:7px;height:7px;border-radius:50%;background:#9a9aa0;animation:blink 1s infinite}
+  .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
+
+  .composer{
+    background:var(--thread-head);border-top:1px solid #e3e3e8;padding:8px 10px 14px;
+  }
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .chips:empty{display:none}
+  .chip{
+    background:var(--chip);border:1px solid var(--chip-border);border-radius:16px;
+    padding:7px 12px;font-size:13px;color:#0a84ff;cursor:pointer;font-family:inherit;
+  }
+  .chip:hover{background:#f0f6ff}
+  .chip:focus-visible{outline:2px solid #0a84ff;outline-offset:2px}
+  .inputrow{display:flex;gap:8px}
+  .inputrow input{
+    flex:1;border:1px solid #c9cdd4;border-radius:18px;padding:9px 14px;font-size:15px;
+    font-family:inherit;background:#fff;color:#111;
+  }
+  .inputrow input:focus-visible{outline:2px solid #0a84ff}
+  .inputrow button{
+    border:0;background:var(--out-bubble);color:#fff;border-radius:50%;width:38px;height:38px;
+    font-size:17px;cursor:pointer;flex:0 0 auto;
+  }
+  .inputrow button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+  .controls{margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  .btn{
+    font-family:inherit;font-size:15px;font-weight:700;border-radius:12px;padding:13px 22px;
+    cursor:pointer;border:1px solid transparent;
+  }
+  .btn:focus-visible{outline:2px solid var(--bright);outline-offset:2px}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 8px 24px rgba(232,93,4,.35)}
+  .btn-primary:hover{background:#f96b0f}
+  .btn-ghost{background:transparent;color:var(--label);border-color:var(--line)}
+  .btn-ghost:hover{color:var(--bright)}
+  .note{
+    margin-top:16px;max-width:44em;text-align:center;color:var(--label);font-size:13px;line-height:1.55;
+  }
+  .note b{color:var(--bright)}
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(80px);
+    background:var(--good);color:#fff;font-weight:700;font-size:14px;
+    padding:12px 20px;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.4);
+    transition:transform .3s ease;max-width:92vw;text-align:center;
+  }
+  .toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+
+<div class="kicker">Triangle Automation &middot; Live demo &middot; Apex Heating &amp; Air (sample client)</div>
+<h1>Miss the call. <span class="hl">Keep the job.</span></h1>
+<p class="sub">This is what your customer sees, seconds after your team couldn't pick up. Try it — tap a reply or type anything.</p>
+
+<div class="counter" aria-live="polite">
+  <div class="stat"><b id="calls">0</b><span>Missed calls</span></div>
+  <div class="stat"><b id="booked">0</b><span>Jobs booked</span></div>
+  <div class="stat"><b id="revenue">$0</b><span>Revenue recovered</span></div>
+</div>
+
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"><span id="clock">9:41</span><span>&#9679;&#9679;&#9679;&#9679; &#128246;</span></div>
+    <div class="thread-head">
+      <span class="avatar">A</span>
+      <div class="name">Apex Heating &amp; Air</div>
+    </div>
+    <div class="thread" id="thread" aria-live="polite"></div>
+    <div class="composer">
+      <div class="chips" id="chips"></div>
+      <div class="inputrow">
+        <input id="msg" type="text" placeholder="Text message" autocomplete="off" aria-label="Type a message">
+        <button id="send" aria-label="Send">&#8593;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="btn btn-primary" id="callBtn">&#128222; Simulate a missed call</button>
+  <button class="btn btn-ghost" id="resetBtn">Reset demo</button>
+</div>
+
+<p class="note"><b>The pitch in one line:</b> 62% of calls to home-service companies go unanswered, and 85% of those callers never call back — they call your competitor. Triangle Automation texts them back in under 10 seconds, answers their questions, and books the job while your techs stay on the tools.</p>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  var thread = document.getElementById('thread');
+  var chipsEl = document.getElementById('chips');
+  var input = document.getElementById('msg');
+  var stats = { calls:0, booked:0, revenue:0 };
+  var state = 'idle';           // idle -> greeted -> qualified -> slotOffered -> booked
+  var branch = null;            // emergency | quote | question
+  var busy = false;
+
+  var now = new Date();
+  document.getElementById('clock').textContent =
+    now.getHours() % 12 || 12; // keep it simple: hour only would look odd; format below
+  document.getElementById('clock').textContent =
+    (now.getHours()%12||12) + ':' + String(now.getMinutes()).padStart(2,'0');
+
+  function scroll(){ thread.scrollTop = thread.scrollHeight; }
+  function el(cls, text){
+    var d = document.createElement('div');
+    d.className = cls; d.textContent = text;
+    thread.appendChild(d); scroll(); return d;
+  }
+  function toast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 3800);
+  }
+  function updateStats(){
+    document.getElementById('calls').textContent = stats.calls;
+    document.getElementById('booked').textContent = stats.booked;
+    document.getElementById('revenue').textContent = '$' + stats.revenue.toLocaleString();
+  }
+  function setChips(list){
+    chipsEl.innerHTML = '';
+    list.forEach(function(c){
+      var b = document.createElement('button');
+      b.className = 'chip'; b.textContent = c; b.type = 'button';
+      b.addEventListener('click', function(){ handleUser(c); });
+      chipsEl.appendChild(b);
+    });
+  }
+  function aiSay(text, then){
+    busy = true;
+    var t = document.createElement('div');
+    t.className = 'typing'; t.innerHTML = '<i></i><i></i><i></i>';
+    thread.appendChild(t); scroll();
+    setTimeout(function(){
+      t.remove(); el('bubble in', text); busy = false;
+      if (then) then();
+    }, 700 + Math.min(text.length * 12, 1400));
+  }
+
+  function startCall(){
+    if (state !== 'idle' && state !== 'booked') return;
+    thread.innerHTML = ''; chipsEl.innerHTML = '';
+    state = 'calling'; branch = null;
+    stats.calls++; updateStats();
+    el('sysline', 'Outgoing call — Apex Heating & Air');
+    setTimeout(function(){
+      el('sysline missed', 'Call not answered');
+      setTimeout(function(){
+        aiSay("Hi, this is Apex Heating & Air — so sorry we missed your call! We're out on jobs right now, but I can help you right here. What's going on today?", function(){
+          state = 'greeted';
+          setChips([
+            "My AC just died and it's 95° out",
+            "Need a quote on a new furnace",
+            "Just have a quick question"
+          ]);
+        });
+      }, 900);
+    }, 1100);
+  }
+
+  function classify(text){
+    var t = text.toLowerCase();
+    if (/(ac|a\/c|air|heat|furnace).*(died|dead|broke|down|stopped|not work)|no (heat|air|ac)|emergency|leak|95|hot|freezing/.test(t)) return 'emergency';
+    if (/quote|estimate|price|cost|new (furnace|ac|unit|system)|replace|install/.test(t)) return 'quote';
+    return 'question';
+  }
+
+  function offerSlots(intro){
+    aiSay(intro + "\n\nI can get a technician out to you:\n• Today, 4:00–6:00 PM\n• Tomorrow, 8:00–10:00 AM\n\nWhich works better?", function(){
+      state = 'slotOffered';
+      setChips(["Today 4–6 PM", "Tomorrow 8–10 AM"]);
+    });
+  }
+
+  function book(slot){
+    var value = branch === 'quote' ? 4800 : 450;
+    aiSay("Perfect — you're booked for " + slot + ". ✅\n\nYou'll get a text when the tech is 30 minutes out. His name is Marcus, and the visit is covered by our free-estimate policy. Anything else I can help with?", function(){
+      state = 'booked';
+      stats.booked++; stats.revenue += value; updateStats();
+      el('sysline', 'Appointment synced to Apex dispatch calendar');
+      toast(branch === 'quote'
+        ? 'Job captured: replacement estimate — avg ticket $4,800'
+        : 'Job captured: service call $450 — before your competitor even rang back');
+      setChips(["\u{1F4DE} Simulate another missed call"]);
+    });
+  }
+
+  function handleUser(text){
+    if (busy) return;
+    if (/simulate another/i.test(text)) { state='idle'; startCall(); return; }
+    if (state === 'idle' || state === 'calling') { toast('Tap "Simulate a missed call" to start'); return; }
+    chipsEl.innerHTML = '';
+    el('bubble out', text);
+
+    if (state === 'greeted'){
+      branch = classify(text);
+      if (branch === 'emergency'){
+        offerSlots("Oh no — no AC in this heat is rough. Let's get that fixed fast.");
+      } else if (branch === 'quote'){
+        offerSlots("Happy to help with that! Estimates are free and take about 30 minutes on site.");
+      } else {
+        aiSay("Great question — I can help with hours, pricing, service areas, or anything else. And if it's easier, I can just have a tech swing by. Want me to set that up?", function(){
+          state = 'qualifying';
+          setChips(["Sure, book a visit", "What are your hours?"]);
+        });
+      }
+      return;
+    }
+    if (state === 'qualifying'){
+      if (/hour|open|close/i.test(text)){
+        aiSay("We're open 7 AM–7 PM Mon–Sat, with 24/7 emergency service. Want me to get you on the schedule?", function(){
+          setChips(["Yes, book me in", "Not right now"]);
+        });
+        return;
+      }
+      if (/not right now|no thanks/i.test(text)){
+        aiSay("No problem at all! I'll text you our current specials, and we're here whenever you need us. Stay cool! \u{1F44B}", function(){
+          state = 'booked';
+          el('sysline', 'Lead saved to follow-up list — nurture text scheduled for Thursday');
+          toast('Lead captured for follow-up — most agencies would have lost this one entirely');
+          setChips(["\u{1F4DE} Simulate another missed call"]);
+        });
+        return;
+      }
+      branch = branch === 'question' ? 'emergency' : branch;
+      offerSlots("You got it.");
+      return;
+    }
+    if (state === 'slotOffered'){
+      var slot = /tomorrow|8/i.test(text) ? 'tomorrow, 8:00–10:00 AM' : 'today, 4:00–6:00 PM';
+      book(slot);
+      return;
+    }
+    if (state === 'booked'){
+      aiSay("All set on my end! See you soon — and thanks for choosing Apex. \u{1F527}");
+      return;
+    }
+  }
+
+  function reset(){
+    thread.innerHTML = ''; chipsEl.innerHTML = '';
+    state = 'idle'; branch = null;
+    stats = { calls:0, booked:0, revenue:0 }; updateStats();
+  }
+
+  document.getElementById('callBtn').addEventListener('click', function(){ state='idle'; startCall(); });
+  document.getElementById('resetBtn').addEventListener('click', reset);
+  document.getElementById('send').addEventListener('click', function(){
+    var v = input.value.trim(); if (!v) return; input.value=''; handleUser(v);
+  });
+  input.addEventListener('keydown', function(e){
+    if (e.key === 'Enter'){ var v = input.value.trim(); if (!v) return; input.value=''; handleUser(v); }
+  });
+})();
+</script>
