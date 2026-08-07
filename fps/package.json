@@ -20,6 +20,7 @@
   "type": "module",
   "devDependencies": {
     "esbuild": "^0.28.1",
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "pngjs": "^7.0.0"
   }
 }

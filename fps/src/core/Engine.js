@@ -39,9 +39,9 @@ const QUALITY = [
   // textures is a one-off CPU cost paid behind the loading screen, not a
   // per-frame GPU cost. Only genuinely memory-constrained machines want 256,
   // and at 256 every surface degenerates into the same coarse speckle.
-  { name: 'Low',    shadowSize: 1024, shadows: true,  ssao: false, bloom: true,  smaa: false, dpr: 1.0,  decals: 48,  particles: 0.4, motionBlur: false, sssShadow: false, texRes: 384 },
-  { name: 'Medium', shadowSize: 2048, shadows: true,  ssao: true,  bloom: true,  smaa: true,  dpr: 1.25, decals: 96,  particles: 0.7, motionBlur: true,  sssShadow: false, texRes: 512 },
-  { name: 'High',   shadowSize: 4096, shadows: true,  ssao: true,  bloom: true,  smaa: true,  dpr: 1.5,  decals: 192, particles: 1.0, motionBlur: true,  sssShadow: true,  texRes: 512 },
+  { name: 'Low',    shadowSize: 1024, shadows: true,  ssao: false, bloom: true,  smaa: false, dpr: 1.0,  decals: 48,  particles: 0.4, motionBlur: false, sssShadow: false, texRes: 384, practicals: 3 },
+  { name: 'Medium', shadowSize: 2048, shadows: true,  ssao: true,  bloom: true,  smaa: true,  dpr: 1.25, decals: 96,  particles: 0.7, motionBlur: true,  sssShadow: false, texRes: 512, practicals: 5 },
+  { name: 'High',   shadowSize: 4096, shadows: true,  ssao: true,  bloom: true,  smaa: true,  dpr: 1.5,  decals: 192, particles: 1.0, motionBlur: true,  sssShadow: true,  texRes: 512, practicals: 8 },
 ];
 
 export class Engine {

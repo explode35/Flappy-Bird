@@ -7,6 +7,7 @@ import {
 } from './geom/kit.js';
 import * as P from './props/props.js';
 import { LAYOUT } from './geom/layout.js';
+import { fitout } from './interior/fitout.js';
 
 /**
  * HARBOUR — a Mediterranean coastal town block at dusk.
@@ -40,6 +41,10 @@ export class Level {
     this.coverPoints = [];
     this.navGrid = null;
     this.group = null;
+    // The practical-light pool has to keep tracking the camera while the game
+    // is paused — pause menus and the screenshot harness both freeze the
+    // simulation and would otherwise leave interiors dark.
+    this.alwaysUpdate = true;
   }
 
   async init() {
@@ -52,6 +57,7 @@ export class Level {
 
     this._ground(b);            await yieldTick(0.1);
     this._buildings(b);         await yieldTick(0.35);
+    this._interiors(b);         await yieldTick(0.45);
     this._market(b);            await yieldTick(0.5);
     this._plaza(b);             await yieldTick(0.62);
     this._harbour(b);           await yieldTick(0.74);
@@ -73,6 +79,8 @@ export class Level {
     this.ctx.physics.build();
 
     this.ctx.sky?.patchFog?.(this.ctx.scene);
+
+    this._buildPracticals();
 
     await yieldTick(0.95);
     this._buildNav(b);
@@ -165,6 +173,90 @@ export class Level {
         b.place(bp, _m);
       }
     }
+  }
+
+  /**
+   * Furnish the ground floor of every building, and collect the practical
+   * lights and emissive fixtures the fitouts ask for.
+   *
+   * The lights are not created here. Seven furnished rooms want eighteen
+   * point lights between them, and a forward renderer pays for every one of
+   * them on every lit fragment in the scene whether the player can see the
+   * room or not. `_buildPracticals` keeps a small fixed pool instead and
+   * re-points it at whichever fixtures are nearest the camera — the light
+   * count in the shader never changes, so nothing recompiles.
+   */
+  _interiors(b) {
+    this.practicals = [];
+    const glowSpecs = [];
+    for (const spec of LAYOUT.buildings) {
+      if (!spec.role) continue;
+      const { piece, lights, glows } = fitout({
+        role: spec.role, w: spec.w, d: spec.d, storeys: spec.storeys, rng: this.rng,
+      });
+      const ry = spec.ry || 0;
+      _m.makeRotationY(ry);
+      _m.setPosition(spec.x, spec.y || 0, spec.z);
+      b.place(piece, _m);
+
+      // Fixture positions come back in building-local space.
+      const cos = Math.cos(ry), sin = Math.sin(ry);
+      const toWorld = (o) => ({
+        x: spec.x + o.x * cos + o.z * sin,
+        y: (spec.y || 0) + o.y,
+        z: spec.z - o.x * sin + o.z * cos,
+      });
+      for (const l of lights) this.practicals.push({ ...toWorld(l), color: l.color, intensity: l.intensity, distance: l.distance });
+      for (const g of glows) glowSpecs.push({ ...g, ...toWorld(g), ry: (g.ry || 0) + ry });
+    }
+    this._buildGlows(glowSpecs);
+  }
+
+  /**
+   * The bulbs themselves. Small emissive blobs, one InstancedMesh, no lighting
+   * — their whole job is to be the bright thing bloom blooms and to make the
+   * pool lights read as coming from a fixture rather than from nowhere.
+   */
+  _buildGlows(specs) {
+    if (!specs.length) return;
+    const geo = new THREE.SphereGeometry(1, 8, 6);
+    const mat = new THREE.MeshBasicMaterial({ toneMapped: true, fog: true });
+    const mesh = new THREE.InstancedMesh(geo, mat, specs.length);
+    mesh.name = 'practicalGlows';
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    // Per-instance colour written straight into the buffer: setColorAt() goes
+    // through THREE.Color, which clamps to 1 and would cost us the overbright
+    // that makes these bloom.
+    const col = new Float32Array(specs.length * 3);
+    for (let i = 0; i < specs.length; i++) {
+      const s = specs[i];
+      _m.makeRotationY(s.ry || 0);
+      _m.scale(_v.set(s.sx ?? s.r, s.r, s.sz ?? s.r));
+      _m.setPosition(s.x, s.y, s.z);
+      mesh.setMatrixAt(i, _m);
+      const c = new THREE.Color(s.color);
+      col[i * 3] = c.r * 2.6; col[i * 3 + 1] = c.g * 2.6; col[i * 3 + 2] = c.b * 2.6;
+    }
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(col, 3);
+    mesh.instanceColor.needsUpdate = true;
+    mesh.instanceMatrix.needsUpdate = true;
+    this.ctx.scene.add(mesh);
+    this.glowMesh = mesh;
+  }
+
+  /** Fixed pool of point lights, re-pointed at the nearest fixtures. */
+  _buildPracticals() {
+    const n = this.ctx.quality.practicals ?? 4;
+    this.lightPool = [];
+    for (let i = 0; i < n; i++) {
+      const l = new THREE.PointLight(0xffffff, 0, 8, 2);
+      l.castShadow = false;
+      l.visible = false;
+      this.ctx.scene.add(l);
+      this.lightPool.push(l);
+    }
+    this._practicalTimer = 0;
   }
 
   _market(b) {
@@ -544,5 +636,47 @@ export class Level {
     return g.walkable(i, j);
   }
 
-  update() { /* the level is static */ }
+  /**
+   * The geometry is static; only the practical-light pool moves. Runs even
+   * while paused (`alwaysUpdate`) so a paused camera in a screenshot harness
+   * still gets the room lit.
+   */
+  update() {
+    const pool = this.lightPool;
+    if (!pool || !this.practicals?.length) return;
+    // Re-sorting every frame is pointless at walking speed, and the pool is
+    // tiny; a quarter-second cadence is invisible and free.
+    if ((this._practicalTimer = (this._practicalTimer + 1) % 15) !== 0) return;
+
+    const cam = this.ctx.camera;
+    const list = this.practicals;
+    for (const f of list) {
+      const dx = f.x - cam.position.x, dy = f.y - cam.position.y, dz = f.z - cam.position.z;
+      f._d2 = dx * dx + dy * dy + dz * dz;
+    }
+    // Partial selection: pool.length is 3-8, so a linear scan per slot beats
+    // sorting the whole fixture list.
+    const taken = new Set();
+    for (let s = 0; s < pool.length; s++) {
+      let best = -1, bd = Infinity;
+      for (let i = 0; i < list.length; i++) {
+        if (taken.has(i) || list[i]._d2 >= bd) continue;
+        best = i; bd = list[i]._d2;
+      }
+      const l = pool[s];
+      // 26 m is comfortably past the point where a 9 W bulb contributes
+      // anything, and it keeps the pool from flickering at the threshold.
+      if (best < 0 || bd > 26 * 26) { l.visible = false; l.intensity = 0; continue; }
+      taken.add(best);
+      const f = list[best];
+      l.position.set(f.x, f.y, f.z);
+      l.color.setHex(f.color);
+      l.distance = f.distance;
+      // Fade the last few metres of range so a fixture entering the pool does
+      // not pop the room's brightness.
+      const t = Math.min(1, (26 * 26 - bd) / (10 * 10));
+      l.intensity = f.intensity * t;
+      l.visible = true;
+    }
+  }
 }

@@ -10,9 +10,19 @@
  */
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
+import { PNG } from 'pngjs';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/** GL hands back bottom-up RGBA; PNG wants top-down. */
+function encodePng({ w, h, b64 }) {
+  const src = Buffer.from(b64, 'base64');
+  const png = new PNG({ width: w, height: h });
+  const stride = w * 4;
+  for (let y = 0; y < h; y++) src.copy(png.data, y * stride, (h - 1 - y) * stride, (h - y) * stride);
+  return PNG.sync.write(png);
+}
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = resolve(process.argv[2] || resolve(root, '../.review/latest'));
@@ -26,8 +36,8 @@ const settleMs = Number(arg('wait', 2500));
 const quality = arg('quality', 'low');
 // Viewport size. Headless SwiftShader truncates large captures (see README),
 // so the default is deliberately small enough to come back whole.
-const VW = Number(arg('width', 1280));
-const VH = Number(arg('height', 720));
+const VW = Number(arg('width', 640));
+const VH = Number(arg('height', 360));
 // Also save a page-level screenshot showing the DOM HUD over the (unreliable)
 // composited canvas. Useful only for reviewing HUD layout.
 const withHud = process.argv.includes('--hud');
@@ -127,24 +137,32 @@ for (const s of shots) {
     if (shot.combat && ctx.director?.debugSpawnWave) ctx.director.debugSpawnWave(6);
   }, s);
 
-  // Capture in the SAME evaluate that waits out the frames. Reading the
-  // canvas even a few hundred ms later comes back black or partial: the
-  // buffer is only reliably intact in the tick right after a completed
-  // render. Verified with scripts/probe-black.mjs, where an immediate sample
-  // reads a bright frame at a camera that a delayed sample reported as pure
-  // black — which is what sent an earlier round of this investigation chasing
-  // a scene bug that did not exist.
+  // Capture by reading the GL back buffer directly and encoding the PNG in
+  // Node. Everything that goes through the canvas element — page.screenshot(),
+  // canvas.toDataURL(), drawImage() into a 2D context — comes back black on
+  // this container's SwiftShader some of the time, deterministically enough to
+  // have cost a day of chasing a scene bug that did not exist. A whole-buffer
+  // gl.readPixels in the tick right after a completed render is the one path
+  // that has never lied: scripts/probe-diag.mjs got a plausible image mean out
+  // of it at four cameras that the toDataURL path called pure black.
   const probe = await page.evaluate(async () => {
     const raf = () => new Promise((r) => requestAnimationFrame(r));
     for (let i = 0; i < 6; i++) await raf();
     const c = document.querySelector('canvas');
     const gl = window.__game.ctx.renderer.getContext();
-    const px = new Uint8Array(4);
-    gl.readPixels(c.width >> 1, c.height >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    return { mean: Math.round((px[0] + px[1] + px[2]) / 3), url: c.toDataURL('image/png') };
+    const w = c.width, h = c.height;
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let sum = 0;
+    for (let i = 0; i < px.length; i += 4 * 31) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
+    // btoa over a megabyte needs chunking; apply() blows the stack past ~64k.
+    let bin = '';
+    const CH = 0x8000;
+    for (let i = 0; i < px.length; i += CH) bin += String.fromCharCode.apply(null, px.subarray(i, i + CH));
+    return { w, h, mean: Math.round(sum / Math.ceil(px.length / (4 * 31))), b64: btoa(bin) };
   });
-  writeFileSync(resolve(outDir, `${s.id}.png`), Buffer.from(probe.url.split(',')[1], 'base64'));
-  process.stdout.write(`  gl centre mean=${probe.mean}\n`);
+  writeFileSync(resolve(outDir, `${s.id}.png`), encodePng(probe));
+  process.stdout.write(`  image mean=${probe.mean}\n`);
 
   // The DOM HUD composites fine, so grab it separately when asked for.
   if (withHud) {
