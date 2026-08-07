@@ -736,7 +736,7 @@ export function doorway(piece, mats, opts = {}) {
  * layout data is why the buildings previously read as slabs with a few holes.
  * Explicit `windows` entries for a side always win over the generated rhythm.
  */
-function windowRhythm(len, storey, rng, spacing = 3.15) {
+function windowRhythm(len, storey, rng, spacing = 4.2) {
   const n = Math.max(1, Math.round((len - 1.6) / spacing));
   if (n < 1) return [];
   const out = [];
@@ -816,9 +816,9 @@ export function building(opts = {}) {
         windowSurround(p, matTrim, g);
         glazing(p, 'glass', matTrim, g);
         // Not every window is shuttered, and a fully shuttered row looks fake.
-        if (rng() < 0.62) shutters(p, 'wood', { ...g, rng });
+        if (rng() < 0.38) shutters(p, 'wood', { ...g, rng });
         // Balconettes only upstairs — one at ground level would block the street.
-        if (s > 0 && rng() < 0.34) balconette(p, matTrim, 'gunmetal', { ...g, rng });
+        if (s > 0 && rng() < 0.20) balconette(p, matTrim, 'gunmetal', { ...g, rng });
       }
 
       for (const o of myDoors) {
