@@ -371,6 +371,34 @@ function genPolymer(w, h, seed) {
   return m;
 }
 
+/**
+ * Window glass. Dark, near-mirror, with the things that actually make glass
+ * read at a distance: dust and rain-streak grime running down from the top,
+ * a faint pane distortion in the normal so the reflection is not a perfect
+ * mirror, and enough roughness variation that the sun does not hit the whole
+ * facade at exactly the same intensity.
+ */
+function genGlass(w, h, seed) {
+  const m = G(w, h);
+  const wobble = fbm(w, h, { period: 34, octaves: 3, seed });
+  const grime = grimeGradient(w, h, { direction: 'down', strength: 0.85, seed: seed + 3 });
+  const streaks = scratches(w, h, { count: 26, seed: seed + 5, length: 0.7, width: 1 });
+  for (let i = 0; i < m.height.length; i++) m.height[i] = wobble[i] * 0.45 + streaks[i] * 0.12;
+  normalizeField(m.height);
+  // Almost black: what you see in a window is the reflection, not the pane.
+  fillRgb(m.albedo, 0x0b1116);
+  lighten(m.albedo, grime, 0.16);
+  lighten(m.albedo, streaks, 0.1);
+  roughBase(m.rough, 0.05);
+  roughTo(m.rough, grime, 0.34, 0.9);
+  roughJitter(m.rough, wobble, 0.05);
+  clampRough(m.rough);
+  m.metal = 0.0;
+  m.ao = null;
+  m.normalStrength = 0.12;
+  return m;
+}
+
 function genWood(w, h, seed, planks) {
   const m = G(w, h);
   const grain = woodGrain(w, h, { rings: planks ? 12 : 20, seed, wobble: 0.32, ringSharp: 2.6 });
@@ -502,6 +530,7 @@ const RECIPES = {
   canvasTarp:  { gen: (w, h) => genFabric(w, h, 109, 'tarp'), surface: 'dirt' },
   sandbag:     { gen: (w, h) => genFabric(w, h, 113, 'sandbag'), surface: 'sand' },
   foliage:     { gen: (w, h) => genFoliage(w, h, 127),        surface: 'foliage' },
+  glass:       { gen: (w, h) => genGlass(w, h, 131),          surface: 'glass' },
 };
 
 // ---------------------------------------------------------------------------
@@ -562,7 +591,11 @@ export class Materials {
     albedoTex.anisotropy = normalTex.anisotropy = ormTex.anisotropy = aniso;
 
     const isFoliage = name === 'foliage';
-    const isGlassy = false;
+    // Glass is the one surface where the physical answer and the pretty answer
+    // agree: crank the environment reflection, drop the roughness floor, and
+    // let the IBL do the work. It stays opaque — a transparent pane would need
+    // sorting against every interior prop for no visible gain at these sizes.
+    const isGlassy = name === 'glass';
 
     const mat = new THREE.MeshStandardMaterial({
       map: albedoTex,
@@ -578,7 +611,7 @@ export class Materials {
       alphaTest: isFoliage ? 0.5 : 0,
       transparent: false,
       vertexColors: true,           // Level bakes AO + per-instance tint here
-      envMapIntensity: 1.0,
+      envMapIntensity: isGlassy ? 2.6 : 1.0,
       dithering: true,
     });
     mat.name = name;

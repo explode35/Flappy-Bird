@@ -192,7 +192,8 @@ export class Level {
     for (const spec of LAYOUT.buildings) {
       if (!spec.role) continue;
       const { piece, lights, glows } = fitout({
-        role: spec.role, w: spec.w, d: spec.d, storeys: spec.storeys, rng: this.rng,
+        role: spec.role, w: spec.w, d: spec.d, storeys: spec.storeys,
+        doors: spec.doors || [], rng: this.rng,
       });
       const ry = spec.ry || 0;
       _m.makeRotationY(ry);

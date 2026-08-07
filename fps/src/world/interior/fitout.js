@@ -261,13 +261,33 @@ function sconce() {
  * @param {function} o.rng
  * @returns {{piece: Piece, lights: object[], glows: object[]}}
  */
-export function fitout({ role = 'shop', w = 12, d = 12, storeys = 1, rng = Math.random }) {
+export function fitout({ role = 'shop', w = 12, d = 12, storeys = 1, doors = [], rng = Math.random }) {
   const p = new Piece();
   const lights = [];
   const glows = [];
   const { hx, hz } = clear(w, d);
   const r = (a, b) => a + rng() * (b - a);
-  const put = (piece, x, y, z, ry = 0) => p.stamp(piece, rot(ry, x, y, z));
+
+  // Keep the doorways clear. A shelving run that happens to land across the
+  // only entrance is both an obvious authoring mistake and a way to seal a
+  // room the AI is pathing into, so every placement is tested against a
+  // threshold disc in front of each ground-floor door.
+  const blocked = [];
+  for (const o of doors) {
+    if ((o.storey ?? 0) !== 0) continue;
+    const t = o.at ?? 0.5;
+    if (o.side === 'n') blocked.push([(t - 0.5) * w, -hz + 0.9]);
+    else if (o.side === 's') blocked.push([(t - 0.5) * w, hz - 0.9]);
+    else if (o.side === 'w') blocked.push([-hx + 0.9, (t - 0.5) * d]);
+    else blocked.push([hx - 0.9, (t - 0.5) * d]);
+  }
+  const clearOf = (x, z, rad = 1.5) =>
+    !blocked.some(([bx, bz]) => (x - bx) ** 2 + (z - bz) ** 2 < rad * rad);
+
+  const put = (piece, x, y, z, ry = 0, rad) => {
+    if (!clearOf(x, z, rad)) return p;
+    return p.stamp(piece, rot(ry, x, y, z));
+  };
 
   // Ceiling height available on the ground floor. The top storey's ceiling
   // panel hangs 0.32 m below the slab; intermediate floors are the slab.

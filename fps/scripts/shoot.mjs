@@ -16,8 +16,8 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** GL hands back bottom-up RGBA; PNG wants top-down. */
-function encodePng({ w, h, b64 }) {
-  const src = Buffer.from(b64, 'base64');
+function encodePng({ w, h, bands }) {
+  const src = Buffer.concat(bands.map((b) => Buffer.from(b, 'base64')));
   const png = new PNG({ width: w, height: h });
   const stride = w * 4;
   for (let y = 0; y < h; y++) src.copy(png.data, y * stride, (h - 1 - y) * stride, (h - y) * stride);
@@ -84,6 +84,7 @@ page.setDefaultTimeout(120000);
 const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack || ''}`));
+page.on('crash', () => { logs.push('[crash] renderer process died'); console.log('[crash] renderer process died'); });
 
 // `capture` turns on preserveDrawingBuffer — without it page.screenshot()
 // reads an already-presented buffer and returns black.
@@ -117,6 +118,7 @@ await page.waitForTimeout(settleMs);
 
 try {
 for (const s of shots) {
+  process.stdout.write(`> ${s.id} setup\n`);
   await page.evaluate((shot) => {
     const { ctx, engine } = window.__game;
     // Freeze gameplay systems so the camera stays where we put it.
@@ -145,6 +147,10 @@ for (const s of shots) {
   // gl.readPixels in the tick right after a completed render is the one path
   // that has never lied: scripts/probe-diag.mjs got a plausible image mean out
   // of it at four cameras that the toDataURL path called pure black.
+  // Read the frame once into a page-side buffer, then ship it out in bands.
+  // One 1.2 MB base64 payload over CDP was enough to lose the page on this
+  // container; 45-row slices are not.
+  process.stdout.write('> readback\n');
   const probe = await page.evaluate(async () => {
     const raf = () => new Promise((r) => requestAnimationFrame(r));
     for (let i = 0; i < 6; i++) await raf();
@@ -153,15 +159,29 @@ for (const s of shots) {
     const w = c.width, h = c.height;
     const px = new Uint8Array(w * h * 4);
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    window.__frame = px;
     let sum = 0;
     for (let i = 0; i < px.length; i += 4 * 31) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
-    // btoa over a megabyte needs chunking; apply() blows the stack past ~64k.
-    let bin = '';
-    const CH = 0x8000;
-    for (let i = 0; i < px.length; i += CH) bin += String.fromCharCode.apply(null, px.subarray(i, i + CH));
-    return { w, h, mean: Math.round(sum / Math.ceil(px.length / (4 * 31))), b64: btoa(bin) };
+    return { w, h, mean: Math.round(sum / Math.ceil(px.length / (4 * 31))) };
   });
-  writeFileSync(resolve(outDir, `${s.id}.png`), encodePng(probe));
+
+  process.stdout.write(`> banding ${probe.w}x${probe.h}\n`);
+  const BAND = 45;
+  const bands = [];
+  for (let y0 = 0; y0 < probe.h; y0 += BAND) {
+    bands.push(await page.evaluate(({ y0, band, w, h }) => {
+      const px = window.__frame;
+      const rows = Math.min(band, h - y0);
+      const slice = px.subarray(y0 * w * 4, (y0 + rows) * w * 4);
+      let bin = '';
+      const CH = 0x8000;
+      for (let i = 0; i < slice.length; i += CH) bin += String.fromCharCode.apply(null, slice.subarray(i, i + CH));
+      return btoa(bin);
+    }, { y0, band: BAND, w: probe.w, h: probe.h }));
+  }
+  await page.evaluate(() => { window.__frame = null; });
+
+  writeFileSync(resolve(outDir, `${s.id}.png`), encodePng({ ...probe, bands }));
   process.stdout.write(`  image mean=${probe.mean}\n`);
 
   // The DOM HUD composites fine, so grab it separately when asked for.
