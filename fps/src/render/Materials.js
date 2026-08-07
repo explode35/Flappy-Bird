@@ -514,7 +514,7 @@ export class Materials {
     this.surfaceByUUID = new Map();
     this.progress = 0;
     this.onCreated = null;
-    this.res = ctx.quality.tier >= 2 ? 512 : 256;
+    this.res = ctx.quality.texRes ?? 384;
     this.detailNormal = null;
     this.detailScale = 48;
     this.detailStrength = 0.32;
