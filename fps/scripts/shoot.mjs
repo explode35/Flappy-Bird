@@ -143,7 +143,20 @@ for (const s of shots) {
   // strip while the canvas itself holds a perfect frame. Verified by dumping
   // both side by side (scripts/probe-canvas.mjs). Requires ?capture=1, which
   // turns on preserveDrawingBuffer so the buffer survives to be read.
-  const dataUrl = await page.evaluate(() => document.querySelector('canvas').toDataURL('image/png'));
+  // Sample the GL buffer itself alongside the readback. If these disagree the
+  // problem is the capture; if both are black the frame genuinely rendered
+  // black and it is a scene bug at this camera.
+  const probe = await page.evaluate(() => {
+    const c = document.querySelector('canvas');
+    const gl = window.__game.ctx.renderer.getContext();
+    const px = new Uint8Array(4 * 64);
+    gl.readPixels((c.width >> 1) - 4, (c.height >> 1) - 4, 8, 8, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let sum = 0;
+    for (let i = 0; i < px.length; i += 4) sum += px[i] + px[i + 1] + px[i + 2];
+    return { mean: Math.round(sum / (px.length / 4) / 3), url: c.toDataURL('image/png') };
+  });
+  const dataUrl = probe.url;
+  process.stdout.write(`  gl centre mean=${probe.mean}\n`);
   writeFileSync(resolve(outDir, `${s.id}.png`), Buffer.from(dataUrl.split(',')[1], 'base64'));
 
   // The DOM HUD composites fine, so grab it separately when asked for.

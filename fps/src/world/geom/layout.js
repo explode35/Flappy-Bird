@@ -32,7 +32,7 @@ export const LAYOUT = {
   // side: 'n' = -Z face, 's' = +Z, 'w' = -X, 'e' = +X. `at` is 0..1 along it.
   buildings: [
     // Market row, west side of Lane A
-    { x: -37, z: 14,  w: 12, d: 14, storeys: 2, wall: 'plaster',
+    { x: -37, z: 14,  w: 12, d: 14, storeys: 2, wall: 'plaster', commercial: true,
       doors: [{ side: 'e', at: 0.5 }], windows: [
         { side: 'e', at: 0.2 }, { side: 'e', at: 0.8 },
         { side: 'e', at: 0.3, storey: 1 }, { side: 'e', at: 0.7, storey: 1 },
@@ -43,7 +43,7 @@ export const LAYOUT = {
 
     // Market row, east side (backs onto the plaza) — this is the two-storey
     // apartment with the balcony over the plaza.
-    { x: -14, z: 10, w: 13, d: 18, storeys: 2, wall: 'plaster', floor: 'tileFloor',
+    { x: -14, z: 10, w: 13, d: 18, storeys: 2, wall: 'plaster', floor: 'tileFloor', commercial: true,
       roofStair: { x: -8.0, z: 19.5, ry: 0 },
       balconies: [{ x: -7.2, y: S, z: 4.0, w: 4.2, ry: 0 }],
       doors: [{ side: 'w', at: 0.5 }, { side: 'e', at: 0.6 }],
@@ -53,7 +53,7 @@ export const LAYOUT = {
         { side: 's', at: 0.5 }, { side: 'n', at: 0.5, storey: 1 }] },
 
     // Café on the plaza's west edge (interior shot 05 lives here)
-    { x: -14, z: -10, w: 13, d: 16, storeys: 1, wall: 'plaster', floor: 'tileFloor',
+    { x: -14, z: -10, w: 13, d: 16, storeys: 1, wall: 'plaster', floor: 'tileFloor', commercial: true,
       doors: [{ side: 'e', at: 0.5 }, { side: 'n', at: 0.5 }],
       windows: [{ side: 'e', at: 0.18, w: 1.8, h: 1.6, sill: 0.85 },
                 { side: 'e', at: 0.82, w: 1.8, h: 1.6, sill: 0.85 },

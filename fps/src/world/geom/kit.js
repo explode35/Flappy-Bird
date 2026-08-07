@@ -730,19 +730,50 @@ export function doorway(piece, mats, opts = {}) {
  * partition or two, a roof slab and a parapet. This is the workhorse — the
  * whole map is a handful of these plus street dressing.
  */
+/**
+ * Fill a wall with a regular window rhythm. Real Mediterranean facades put an
+ * opening roughly every 3 m per storey; hand-listing them per side in the
+ * layout data is why the buildings previously read as slabs with a few holes.
+ * Explicit `windows` entries for a side always win over the generated rhythm.
+ */
+function windowRhythm(len, storey, rng, spacing = 3.15) {
+  const n = Math.max(1, Math.round((len - 1.6) / spacing));
+  if (n < 1) return [];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const frac = (i + 0.5) / n;
+    // Ground floor gets taller openings; upper floors are squarer.
+    const w = storey === 0 ? 1.25 : 1.05;
+    const h = storey === 0 ? 1.55 : 1.25;
+    out.push({ at: frac, w, h, sill: storey === 0 ? 0.85 : 0.98 });
+  }
+  return out;
+}
+
 export function building(opts = {}) {
   const {
     w = 10, d = 8, storeys = 2, matWall = 'plaster', matFloor = 'concrete',
     matRoof = 'concrete', matTrim = 'concrete', rng = Math.random,
     doors = [], windows = [], openRoof = true, interiorFloor = 'tileFloor',
+    detail = true, commercial = false,
   } = opts;
   const p = new Piece();
   const H = STOREY;
+  const TH = 0.3;
 
   for (let s = 0; s < storeys; s++) {
     const y = s * H;
-    // Slab (the ground floor sits on the terrain, so skip it there).
-    if (s > 0) floor(p, interiorFloor, { x: 0, y, z: 0, w: w - 0.5, d: d - 0.5, thick: 0.24, uvScale: 2 });
+    if (s > 0) {
+      floor(p, interiorFloor, { x: 0, y, z: 0, w: w - 0.5, d: d - 0.5, thick: 0.24, uvScale: 2 });
+    } else {
+      // The ground floor used to just expose the terrain underneath, which is
+      // why interiors read as gravel yards: you were standing on the street
+      // material with a roof over it. Lay a real floor 2 cm proud of the
+      // terrain instead.
+      floor(p, interiorFloor, {
+        x: 0, y: 0.02, z: 0, w: w - TH * 2, d: d - TH * 2, thick: 0.12, uvScale: 2,
+      });
+    }
 
     // Four walls. Openings are supplied per side as fractions of the length.
     const sides = [
@@ -753,25 +784,98 @@ export function building(opts = {}) {
     ];
     for (const sd of sides) {
       const openings = [];
-      for (const o of doors) {
-        if (o.side !== sd.side || (o.storey ?? 0) !== s) continue;
+      const myDoors = doors.filter((o) => o.side === sd.side && (o.storey ?? 0) === s);
+      for (const o of myDoors) {
         openings.push({ x: o.at * sd.len - DOOR_W * 0.5, y: 0, w: DOOR_W, h: DOOR_H });
       }
-      for (const o of windows) {
-        if (o.side !== sd.side || (o.storey ?? 0) !== s) continue;
+
+      let myWindows = windows.filter((o) => o.side === sd.side && (o.storey ?? 0) === s);
+      if (detail && !myWindows.length) {
+        myWindows = windowRhythm(sd.len, s, rng)
+          // Do not drop a window on top of a door.
+          .filter((o) => !myDoors.some((dr) => Math.abs(dr.at - o.at) * sd.len < 1.5));
+      }
+      for (const o of myWindows) {
         const ww = o.w ?? 1.1, wh = o.h ?? 1.25;
         openings.push({ x: o.at * sd.len - ww * 0.5, y: o.sill ?? 0.95, w: ww, h: wh });
       }
+
       wall(p, matWall, {
-        x: sd.cx, y, z: sd.cz, len: sd.len, height: H, thick: 0.3, ry: sd.ry,
+        x: sd.cx, y, z: sd.cz, len: sd.len, height: H, thick: TH, ry: sd.ry,
         openings, uvScale: 2.4,
       });
+
+      if (!detail) continue;
+      const frame = { x: sd.cx, y, z: sd.cz, ry: sd.ry, thick: TH };
+
+      // --- per-opening dressing -------------------------------------------
+      for (const o of myWindows) {
+        const ww = o.w ?? 1.1, wh = o.h ?? 1.25, sill = o.sill ?? 0.95;
+        const at = o.at * sd.len - sd.len * 0.5;
+        const g = { ...frame, at, sill, w: ww, h: wh };
+        windowSurround(p, matTrim, g);
+        glazing(p, 'glass', matTrim, g);
+        // Not every window is shuttered, and a fully shuttered row looks fake.
+        if (rng() < 0.62) shutters(p, 'wood', { ...g, rng });
+        // Balconettes only upstairs — one at ground level would block the street.
+        if (s > 0 && rng() < 0.34) balconette(p, matTrim, 'gunmetal', { ...g, rng });
+      }
+
+      for (const o of myDoors) {
+        const at = o.at * sd.len - sd.len * 0.5;
+        if (commercial && s === 0) {
+          shopfront(p, { stone: matTrim, frame: 'wood', shutter: 'corrugated', glass: 'glass' },
+            { ...frame, at, w: 3.0, rng });
+        } else {
+          doorway(p, { stone: matTrim, frame: 'wood', iron: 'gunmetal' }, { ...frame, at, rng });
+        }
+      }
+
+      // --- horizontal banding ----------------------------------------------
+      // A string course on every floor line, and a cornice under the parapet.
+      if (s > 0) {
+        stringCourse(p, matTrim, { ...frame, y, len: sd.len, project: 0.085 });
+      }
+      if (s === storeys - 1) {
+        cornice(p, matTrim, {
+          x: sd.cx, y: y + H, z: sd.cz, ry: sd.ry, thick: TH,
+          len: sd.len, project: 0.26, dentils: storeys >= 3,
+        });
+      }
+    }
+  }
+
+  // Quoins bind the corners together and stop the box reading as an extrusion.
+  if (detail) {
+    for (const ox of [-1, 1]) {
+      for (const oz of [-1, 1]) {
+        quoinRun(p, matTrim, {
+          x: ox * w * 0.5, y: 0, z: oz * d * 0.5,
+          height: storeys * H, ox, oz, rng,
+        });
+      }
     }
   }
 
   // Roof
   const topY = storeys * H;
   floor(p, matRoof, { x: 0, y: topY, z: 0, w, d, thick: 0.28, uvScale: 2.5 });
+  // Ceiling below it. Without this the top-floor "ceiling" is the underside of
+  // the roof slab in exterior concrete, which is the other half of why
+  // interiors looked like yards with lids on.
+  if (detail) {
+    const ceil = chamferBox(w - TH * 2, 0.06, d - TH * 2, { uvScale: 2.2, chamfer: 0.02 });
+    ceil.translate(0, topY - 0.32, 0);
+    p.add('plaster', ceil, true);
+    // Exposed beams break up the slab and give the light something to catch.
+    const nb = Math.max(2, Math.round((d - TH * 2) / 1.15));
+    for (let i = 0; i < nb; i++) {
+      const bz = -(d - TH * 2) * 0.5 + ((i + 0.5) * (d - TH * 2)) / nb;
+      const beam = chamferBox(w - TH * 2, 0.17, 0.13, { uvScale: 0.8, chamfer: 0.014 });
+      beam.translate(0, topY - 0.44, bz);
+      p.add('wood', beam, true);
+    }
+  }
   if (openRoof) {
     for (const [cx, cz, len, ry] of [
       [0, -d * 0.5 + 0.12, w, 0], [0, d * 0.5 - 0.12, w, 0],

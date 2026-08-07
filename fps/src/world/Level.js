@@ -129,6 +129,7 @@ export class Level {
         matRoof: 'concrete', matTrim: 'concrete',
         interiorFloor: spec.floor || 'tileFloor',
         doors: spec.doors || [], windows: spec.windows || [],
+        commercial: !!spec.commercial,
         rng,
       });
       _m.makeRotationY(spec.ry || 0);
