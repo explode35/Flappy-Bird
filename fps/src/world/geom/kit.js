@@ -849,8 +849,11 @@ export function building(opts = {}) {
   if (detail) {
     for (const ox of [-1, 1]) {
       for (const oz of [-1, 1]) {
+        // Push the run out onto the exterior faces. Centred on the corner
+        // line, a 0.68 m quoin block half-buries itself in a 0.3 m wall and
+        // pokes through into the room behind it.
         quoinRun(p, matTrim, {
-          x: ox * w * 0.5, y: 0, z: oz * d * 0.5,
+          x: ox * (w * 0.5 + TH * 0.5), y: 0, z: oz * (d * 0.5 + TH * 0.5),
           height: storeys * H, ox, oz, rng,
         });
       }
