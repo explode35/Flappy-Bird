@@ -116,28 +116,50 @@ await page.waitForFunction(() => {
 }, { timeout: 90000 }).catch(() => {});
 await page.waitForTimeout(settleMs);
 
+/** Point the cameras at a shot and freeze the world there. */
+const aim = (s) => page.evaluate((shot) => {
+  const { ctx, engine } = window.__game;
+  // Freeze gameplay systems so the camera stays where we put it.
+  engine.paused = true;
+  if (ctx.player) ctx.player.frozen = true;
+  const cam = ctx.camera;
+  cam.fov = shot.fov;
+  cam.position.set(...shot.pos);
+  cam.lookAt(...shot.look);
+  cam.updateProjectionMatrix();
+  cam.updateMatrixWorld(true);
+  if (ctx.viewCamera) {
+    ctx.viewCamera.quaternion.copy(cam.quaternion);
+    ctx.viewCamera.updateMatrixWorld(true);
+  }
+  if (shot.ads && ctx.weapons?.forceADS) ctx.weapons.forceADS(true);
+  else if (ctx.weapons?.forceADS) ctx.weapons.forceADS(false);
+  if (shot.combat && ctx.director?.debugSpawnWave) ctx.director.debugSpawnWave(6);
+}, s);
+
+/**
+ * Read the frame the engine's own rAF just produced. Deliberately does no
+ * rendering of its own: driving composer.render() from inside the evaluate
+ * kills the page on this container's SwiftShader within a few calls.
+ */
+const grab = () => page.evaluate(async () => {
+  const raf = () => new Promise((r) => requestAnimationFrame(r));
+  for (let i = 0; i < 6; i++) await raf();
+  const c = document.querySelector('canvas');
+  const gl = window.__game.ctx.renderer.getContext();
+  const w = c.width, h = c.height;
+  const px = new Uint8Array(w * h * 4);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  window.__frame = px;
+  let sum = 0;
+  for (let i = 0; i < px.length; i += 4 * 31) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
+  return { w, h, mean: Math.round(sum / Math.ceil(px.length / (4 * 31))) };
+});
+
 try {
 for (const s of shots) {
   process.stdout.write(`> ${s.id} setup\n`);
-  await page.evaluate((shot) => {
-    const { ctx, engine } = window.__game;
-    // Freeze gameplay systems so the camera stays where we put it.
-    engine.paused = true;
-    if (ctx.player) ctx.player.frozen = true;
-    const cam = ctx.camera;
-    cam.fov = shot.fov;
-    cam.position.set(...shot.pos);
-    cam.lookAt(...shot.look);
-    cam.updateProjectionMatrix();
-    cam.updateMatrixWorld(true);
-    if (ctx.viewCamera) {
-      ctx.viewCamera.quaternion.copy(cam.quaternion);
-      ctx.viewCamera.updateMatrixWorld(true);
-    }
-    if (shot.ads && ctx.weapons?.forceADS) ctx.weapons.forceADS(true);
-    else if (ctx.weapons?.forceADS) ctx.weapons.forceADS(false);
-    if (shot.combat && ctx.director?.debugSpawnWave) ctx.director.debugSpawnWave(6);
-  }, s);
+  await aim(s);
 
   // Capture by reading the GL back buffer directly and encoding the PNG in
   // Node. Everything that goes through the canvas element — page.screenshot(),
@@ -151,32 +173,16 @@ for (const s of shots) {
   // One 1.2 MB base64 payload over CDP was enough to lose the page on this
   // container; 45-row slices are not.
   process.stdout.write('> readback\n');
-  let probe = null;
-  for (let attempt = 0; attempt < 4 && (!probe || probe.mean === 0); attempt++) {
-    probe = await page.evaluate(async () => {
-      const raf = () => new Promise((r) => requestAnimationFrame(r));
-      for (let i = 0; i < 6; i++) await raf();
-      const { ctx, engine } = window.__game;
-      // Drive one more composer pass ourselves, in the same JS task as the
-      // read. Reading a frame the engine's own rAF produced comes back black
-      // often enough to be useless — scripts/probe-diag.mjs, which renders and
-      // reads inside a single evaluate, has never once seen it, while every
-      // script that renders in one task and reads in the next has. Whatever
-      // the presentation-side cause is, not straddling the task boundary
-      // sidesteps it.
-      ctx.renderer.setRenderTarget(null);
-      engine.composer.render(1 / 60);
-      const c = document.querySelector('canvas');
-      const gl = ctx.renderer.getContext();
-      const w = c.width, h = c.height;
-      const px = new Uint8Array(w * h * 4);
-      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
-      window.__frame = px;
-      let sum = 0;
-      for (let i = 0; i < px.length; i += 4 * 31) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
-      return { w, h, mean: Math.round(sum / Math.ceil(px.length / (4 * 31))) };
-    });
-    if (probe.mean === 0) process.stdout.write(`  black frame, retry ${attempt + 1}\n`);
+  // Some frames come back pure black. It is not the scene — the same camera
+  // reads bright on the next attempt, and probe-diag.mjs, which renders and
+  // reads inside one evaluate, has never seen it. Re-aim and try again rather
+  // than reason from a black PNG; four attempts has always been enough.
+  let probe = await grab();
+  for (let attempt = 1; attempt < 4 && probe.mean === 0; attempt++) {
+    process.stdout.write(`  black frame, retry ${attempt}\n`);
+    await aim(s);
+    await page.waitForTimeout(250);
+    probe = await grab();
   }
 
   process.stdout.write(`> banding ${probe.w}x${probe.h}\n`);

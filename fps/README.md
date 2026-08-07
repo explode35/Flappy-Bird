@@ -68,30 +68,36 @@ modern CoD ships thousands of person-years of authored art, photogrammetry,
 mocap, and a bespoke engine. This is procedural geometry and procedural
 textures in a browser.
 
-### The review harness is unreliable in this container. The game is fine.
+### The capture problem, and what it actually was
 
-Captures come back black or truncated, intermittently and depending on
-viewport size, timing and which shot in the sequence they are. Do not trust a
-black PNG from `scripts/shoot.mjs` as evidence of anything.
+Captures came back black or truncated for a long time, and a lot of work was
+done, undone and redone on the strength of black PNGs. It was two separate
+faults stacked on each other, and both are now fixed in `scripts/shoot.mjs`.
 
-What is actually established:
+**Fault one: the canvas element.** `page.screenshot()` cannot capture the
+SwiftShader WebGL surface at all — it returns black. `canvas.toDataURL()` and
+`drawImage()` into a 2D context are better but still return black some of the
+time. The harness now does a whole-buffer `gl.readPixels` and encodes the PNG
+in Node with `pngjs`, touching the canvas element only to read its dimensions.
 
-* `page.screenshot()` cannot capture the SwiftShader WebGL surface at all —
-  it returns black while `canvas.toDataURL()` on the same frame returns a
-  complete 2.2 MB image. The harness therefore reads the canvas directly.
-* **The scene renders correctly.** `scripts/probe-black.mjs` samples GL pixels
-  at five screen points and reads a bright, correct frame
-  (`210,200,178` at centre) at the `01_spawn` camera — the exact camera the
-  harness reports as pure black. Fog and the grade pass were separately
-  neutralised and made no difference, so neither is implicated.
-* I previously concluded from the harness's own inline probe that GL was
-  genuinely black at those cameras, and went looking for a scene bug. **That
-  was wrong** — the harness probe is as unreliable as its capture. The
-  correction matters: there is no known camera-dependent rendering bug.
+**Fault two: the task boundary.** Rendering in one JS task and reading the
+pixels in the next produces black frames. `scripts/probe-diag.mjs`, which
+renders and reads inside a single `page.evaluate`, has never produced one;
+every script that split the two has. The harness now re-aims and re-grabs when
+a frame reads as pure black, which clears it within a couple of attempts.
+Driving `composer.render()` from inside the evaluate also clears it, but kills
+the page within a few calls, so retries it is.
 
-Reliable way to look at the game here: `scripts/probe-black.mjs`, or
-`probe-canvas.mjs`, both of which sample immediately after a completed frame
-in a small viewport. Better still, run it on a real GPU.
+**And a third thing that looked like the same bug but was not:** shipping the
+frame out as one 1.2 MB base64 payload over CDP loses the page outright. It
+goes out in 45-row bands now.
+
+Two corrections I owe the record. I claimed at one point that GL was genuinely
+black at certain cameras and went looking for a scene bug; `probe-black.mjs`
+read `210,200,178` at that exact camera and disproved it. Then I claimed the
+scene was simply fine and the probes were reliable; that was also too strong —
+the black is real in the buffer, it is just produced by the read path rather
+than by the scene. There is still no known camera-dependent rendering bug.
 
 Six further hypotheses were tested and eliminated with evidence along the way:
 dynamic-resolution governor, camera placement, partially-rasterised snapshot,
@@ -102,16 +108,16 @@ restore around PMREM — are correct on their own merits and were kept.
 
 Known weakest areas, in the order I would fix them:
 
-1. **Interiors are still thin.** They now have their own floors, ceilings and
-   exposed beams rather than standing on the street with the roof slab as a
-   lid, but they have no authored lighting of their own and almost no
-   furniture. Stepping inside still makes the game look worse.
-2. **No skinned characters.** Soldiers are jointed rigid segments. It reads fine
-   at 15 m+ and poorly up close.
-3. **Facade detail is applied but unreviewed.** `building()` now drives window
-   rhythm, surrounds, glazing, shutters, balconettes, string courses, cornices,
-   quoins and shopfronts (265k tris, 50 draws, 914 ms build). Nobody has
-   actually looked at the result, because of the harness problem above.
+1. **No skinned characters.** Soldiers are jointed rigid segments. It reads
+   fine at 15 m+ and poorly up close. This is now the largest single gap.
+2. **Interior lighting is one bounce short.** Rooms are furnished now
+   (`src/world/interior/fitout.js`) and carry their own practicals from a
+   pooled set of point lights, but there is no GI, so wall faces away from a
+   window or a bulb fall off to near-black in a way real rooms do not.
+3. **Facade detail is applied and only partly reviewed.** `building()` drives
+   window rhythm, surrounds, glazing, shutters, balconettes, string courses,
+   cornices, quoins and shopfronts. Only the interior shots have been looked
+   at against it so far.
 4. **No LOD or occlusion culling.** The whole map draws every frame. Fine at
    this scale, would not be at four times the size.
 5. **Weapon animation is procedural throughout.** Reloads read as a sequence of
