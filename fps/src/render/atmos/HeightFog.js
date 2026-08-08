@@ -134,12 +134,12 @@ export class HeightFog {
 
     // Art bible values, kept in one place so setFogParams() can round-trip them.
     this.params = {
-      density: 0.0055,
+      density: 0.0105,
       heightFalloff: 0.055,
       baseHeight: 0.0,
       maxOpacity: 1.0,
       sunColor: 0xc9b9a4,
-      awayColor: 0x8fa3b8,
+      awayColor: 0x7d95af,
       sunGain: 0.85,     // multiplies the sun-side colour (HDR lift)
       awayGain: 0.92,
       glowGain: 0.3,

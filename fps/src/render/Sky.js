@@ -17,9 +17,17 @@ import { damp, clamp, smoothstep } from '../core/Contracts.js';
 const SUN_ELEVATION = 8.5;
 const SUN_AZIMUTH = 118;
 const SUN_COLOR = 0xffd2a1;
-const SUN_INTENSITY = 2.75;
+// The art bible asks for 4.2. Running at 2.75 with the ambient unchanged is
+// most of why nothing in the map reads as being in shadow: a surface in the
+// shade of a cornice still receives the whole sky dome, so the shadow term is
+// drowned rather than missing.
+const SUN_INTENSITY = 4.2;
 const FILL_COLOR = 0x5c6a7a;
-const FILL_INTENSITY = 0.22;
+// The fill was 12x weaker than the sun, which left every shaded face lit by
+// the environment alone — and the environment's lower hemisphere is warm
+// brown, so shade came out warm grey instead of the bible's cool #5c6a7a.
+// Fill up, environment down: same brightness in shade, correct hue.
+const FILL_INTENSITY = 0.95;
 const SHADOW_EXTENT = 55;      // metres covered by the sun's ortho frustum
 
 const _v = new THREE.Vector3();
@@ -75,7 +83,7 @@ export class Sky {
     // without it, everything below the horizon line loses its bounce light.
     const ground = new THREE.Mesh(
       new THREE.SphereGeometry(90, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0x4a4237, side: THREE.BackSide })
+      new THREE.MeshBasicMaterial({ color: 0x3d4652, side: THREE.BackSide })
     );
     envScene.add(ground);
 
@@ -95,7 +103,7 @@ export class Sky {
     ctx.renderer.setScissorTest(_scTest);
     ctx.renderer.setRenderTarget(null);
     scene.environment = envRT.texture;
-    scene.environmentIntensity = 0.5;
+    scene.environmentIntensity = 0.26;
     this.envRT = envRT;
     skyClone.geometry.dispose();
     skyClone.material.dispose();

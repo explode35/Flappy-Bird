@@ -761,11 +761,16 @@ function windowRhythm(len, storey, rng, spacing = 4.2) {
   if (n < 1) return [];
   const out = [];
   for (let i = 0; i < n; i++) {
-    const frac = (i + 0.5) / n;
-    // Ground floor gets taller openings; upper floors are squarer.
-    const w = storey === 0 ? 1.25 : 1.05;
-    const h = storey === 0 ? 1.55 : 1.25;
-    out.push({ at: frac, w, h, sill: storey === 0 ? 0.85 : 0.98 });
+    // Perfectly even spacing with identical openings is what turned a long
+    // frontage into a rank of identical fins — an extrude with an array
+    // modifier on it. Real frontages are built plot by plot: the bays drift,
+    // the openings are not all the same window, and the sills step.
+    const frac = (i + 0.5) / n + (rng() - 0.5) * (0.9 / n) * 0.34;
+    const wide = rng() < 0.22;
+    const w = (storey === 0 ? 1.25 : 1.05) * (wide ? R(rng, 1.25, 1.5) : R(rng, 0.88, 1.1));
+    const h = (storey === 0 ? 1.55 : 1.25) * R(rng, 0.9, 1.12);
+    const sill = (storey === 0 ? 0.85 : 0.98) + (rng() - 0.5) * 0.14;
+    out.push({ at: Math.min(0.94, Math.max(0.06, frac)), w, h, sill });
   }
   return out;
 }

@@ -111,7 +111,7 @@ const LUT = {
   metal:    rampLUT([[0, 0x54565a], [0.5, 0x6e6f72], [1, 0x8b8d90]]),
   rust:     rampLUT([[0, 0x4a2412], [0.4, 0x7a3d18], [0.75, 0xa15426], [1, 0xc4763a]]),
   gun:      rampLUT([[0, 0x1d1f22], [0.5, 0x2b2e33], [1, 0x3d4147]]),
-  foliage:  rampLUT([[0, 0x3c4726], [0.45, 0x4a5734], [0.8, 0x6b7b4a], [1, 0x869160]]),
+  foliage:  rampLUT([[0, 0x36402a], [0.45, 0x475233], [0.8, 0x6b7b4a], [1, 0x7c8558]]),
   tarp:     rampLUT([[0, 0x5a5344], [0.5, 0x7a7160], [1, 0x968b76]]),
 };
 
@@ -133,7 +133,10 @@ function genConcrete(w, h, seed, wall) {
   paintLUT(m.albedo, base, LUT.concrete);
   modulate(m.albedo, grain, 0.22);
   tint(m.albedo, agg, 0xc9c3b6, 0.18);
-  const grime = grimeGradient(w, h, { direction: wall ? 'down' : 'none', strength: wall ? 0.75 : 0.3, seed: seed + 13 });
+  // 'none' on the wall variant too: a downward gradient inside a tiling
+  // texture is a value step at every tile boundary. The world-Y term in
+  // Materials._patch does the real job now.
+  const grime = grimeGradient(w, h, { direction: 'none', strength: wall ? 0.5 : 0.3, seed: seed + 13 });
   darken(m.albedo, grime, 0.42);
   if (wall) darken(m.albedo, streaks(w, h, { count: 34, seed: seed + 17, minLen: 0.12, maxLen: 0.55, width: 3 }), 0.3);
   const wear = edgeWear(m.height, w, h, { radius: 4, threshold: 0.02, amount: 0.8 });
@@ -174,7 +177,7 @@ function genBrick(w, h, seed) {
   paintLUT(m.albedo, perBrick, LUT.brick);
   modulate(m.albedo, rough, 0.24);
   tint(m.albedo, invert(lat.mask), 0xa79c8a, 0.92);      // mortar
-  darken(m.albedo, grimeGradient(w, h, { direction: 'down', strength: 0.6, seed: seed + 9 }), 0.4);
+  darken(m.albedo, grimeGradient(w, h, { direction: 'none', strength: 0.5, seed: seed + 9 }), 0.34);
   lighten(m.albedo, edgeWear(m.height, w, h, { radius: 3, threshold: 0.03 }), 0.2);
   darken(m.albedo, chip, 0.3);
 
@@ -210,9 +213,7 @@ function genPlaster(w, h, seed) {
   // Spalled patches expose the brick behind.
   tintLUT(m.albedo, spall, base, LUT.brick, 0.85);
   darken(m.albedo, crk, 0.5);
-  darken(m.albedo, grimeGradient(w, h, { direction: 'down', strength: 0.85, seed: seed + 3 }), 0.45);
   darken(m.albedo, streaks(w, h, { count: 26, seed: seed + 21, minLen: 0.15, maxLen: 0.7, width: 4 }), 0.26);
-  darken(m.albedo, cornerGrime(w, h, { strength: 0.7 }), 0.3);
 
   roughBase(m.rough, 0.82);
   roughJitter(m.rough, trowel, 0.18);
@@ -672,6 +673,27 @@ export class Materials {
             #include <normal_fragment_maps>
           #endif
         `);
+      // Base grime, driven by world height instead of by the texture's own V.
+      // grimeGradient() and cornerGrime() are correct for a uniquely-unwrapped
+      // asset and wrong for a tiling one: keyed to V they say "put a value step
+      // at every tile boundary", which is exactly the ruled horizontal seam
+      // that ran across every plaster wall in the map every 2.4 m. Splash dirt
+      // is a property of the world, not of the texture, so it belongs here.
+      // vHFWorldPos comes from the height-fog chunk, which every world material
+      // compiles.
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <lights_fragment_begin>',
+        `
+        #ifdef USE_FOG
+          float obG = 1.0 - smoothstep( 0.0, 1.7, vHFWorldPos.y );
+          // Vertical faces only — a floor is not the base of a wall.
+          obG = obG * obG * 0.38 * ( 1.0 - abs( normal.y ) );
+          material.diffuseColor.rgb *= 1.0 - obG;
+          material.roughness = min( 1.0, material.roughness + obG * 0.25 );
+        #endif
+        #include <lights_fragment_begin>`
+      );
+
       if (isFoliage || isFabric) {
         // Wrap term. A leaf and a cotton sheet have the same problem: they are
         // thin, and the sun behind them comes through. Without this, washing

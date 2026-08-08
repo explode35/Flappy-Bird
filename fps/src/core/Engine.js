@@ -141,7 +141,12 @@ export class Engine {
     composer.addPass(viewPass);
 
     if (this.quality.bloom) {
-      const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.62, 0.92);
+      // Threshold was 0.92 against a physical sky whose near-sun radiance is
+      // enormous, so any view within ~50 degrees of the sun pushed most of the
+      // frame over the line and the mip chain smeared it into a cream veil —
+      // it brightened ground three metres from the camera, where there is no
+      // fog to speak of. Higher threshold, less strength, tighter radius.
+      const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.26, 0.4, 1.5);
       composer.addPass(bloom);
       this.bloom = bloom;
     }
