@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Piece } from '../geom/piece.js';
-import { chamferBox, chamferCyl, clothSheet, extrudeProfile, boxBetween, normalizeGeometry } from '../geom/chamfer.js';
+import { chamferBox, chamferCyl, clothSheet, extrudeProfile, boxBetween } from '../geom/chamfer.js';
 
 /**
  * Prop library. Every prop is a Piece built once and stamped many times by the
@@ -545,6 +545,17 @@ const LAUNDRY_TINTS = [
   { r: 1.30, g: 1.24, b: 1.12 },   // linen
 ];
 
+/** Multiply a tint into a geometry's existing vertex colours. */
+function tintGeometry(geo, t) {
+  const c = geo.attributes.color;
+  if (!c) return geo;
+  for (let i = 0; i < c.count; i++) {
+    c.setXYZ(i, c.getX(i) * t.r, c.getY(i) * t.g, c.getZ(i) * t.b);
+  }
+  c.needsUpdate = true;
+  return geo;
+}
+
 export function laundry(rng = Math.random, len = 4) {
   const p = new Piece();
   const r = T(rng);
@@ -560,7 +571,9 @@ export function laundry(rng = Math.random, len = 4) {
     cloth.rotateY(r(-0.35, 0.35));
     cloth.rotateZ(r(-0.06, 0.06));
     cloth.translate(x + w * 0.5, -h * 0.5 - 0.03, r(-0.06, 0.06));
-    normalizeGeometry(cloth, { uvScale: 0, tint: LAUNDRY_TINTS[(rng() * LAUNDRY_TINTS.length) | 0] });
+    // clothSheet already emits a colour attribute, so normalizeGeometry would
+    // skip the tint entirely. Multiply it in instead.
+    tintGeometry(cloth, LAUNDRY_TINTS[(rng() * LAUNDRY_TINTS.length) | 0]);
     p.add('canvasTarp', cloth, true);
     // Pegs, and a gap before the next item.
     for (const px of [x + 0.05, x + w - 0.05]) {

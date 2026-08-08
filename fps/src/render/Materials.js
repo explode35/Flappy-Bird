@@ -627,7 +627,7 @@ export class Materials {
     });
     mat.name = name;
 
-    this._patch(mat, isFoliage);
+    this._patch(mat, isFoliage, name === 'canvasTarp');
     this.cache.set(name, mat);
     this.surfaceByUUID.set(mat.uuid, recipe.surface);
     if (this.onCreated) this.onCreated(mat, name);
@@ -638,7 +638,7 @@ export class Materials {
    * Inject the shared detail normal (reoriented-normal blend) and, for foliage,
    * a wrap-lighting term that fakes the light bleeding through a leaf.
    */
-  _patch(mat, isFoliage) {
+  _patch(mat, isFoliage, isFabric = false) {
     const detail = this.detailNormal;
     const scale = this.detailScale;
     const strength = this.detailStrength;
@@ -672,17 +672,23 @@ export class Materials {
             #include <normal_fragment_maps>
           #endif
         `);
-      if (isFoliage) {
+      if (isFoliage || isFabric) {
+        // Wrap term. A leaf and a cotton sheet have the same problem: they are
+        // thin, and the sun behind them comes through. Without this, washing
+        // hung across a lane with the sun on the far side is a row of black
+        // rectangles, which is exactly how it read.
+        const k = isFoliage ? 0.22 : 0.34;
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <lights_fragment_end>',
           `#include <lights_fragment_end>
-           reflectedLight.indirectDiffuse += diffuseColor.rgb * 0.22;`
+           reflectedLight.indirectDiffuse += diffuseColor.rgb * ${k.toFixed(2)};`
         );
       }
       mat.userData.shader = shader;
     };
     // Distinct cache key so three doesn't share a program with unpatched mats.
-    mat.customProgramCacheKey = () => 'ob-detail-' + (isFoliage ? 'f' : 'w');
+    const kind = isFoliage ? 'f' : isFabric ? 'c' : 'w';
+    mat.customProgramCacheKey = () => 'ob-detail-' + kind;
   }
 
   get(name) {
