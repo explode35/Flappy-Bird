@@ -106,6 +106,43 @@ mismatch, and `preserveDrawingBuffer` alone. Two defensive fixes made while
 chasing it — an explicit composer resize in the governor, and viewport/scissor
 restore around PMREM — are correct on their own merits and were kept.
 
+## Independent art-direction review
+
+An outside reviewer went through fourteen frames at Medium against
+ART_DIRECTION §8 and ranked what it found. Its one-day list is done (light
+ratio, bloom threshold, the tiling seam, window-rhythm jitter, fog density,
+foliage hue). What it found that is still open, worst first:
+
+1. **No cast shadows outdoors.** Six exterior frames, an 8.5° sun, 6–10 m
+   buildings that should be laying 40 m shadows down the plaza, and every
+   ground plane lit uniformly to the horizon. `scripts/probe-shadow.mjs`
+   measures whether the shadow term reaches the frame at all, so this gets
+   settled by measurement rather than by looking.
+2. **Nothing is grounded.** GTAO is on at Medium and contributes nothing
+   visible at any junction — table legs, crate stacks, window reveals, the
+   wall/floor line. Same perceptual failure as (1) at a smaller scale.
+3. **No macro variation on walls.** The ground has vertex-colour drift now;
+   facades do not. 13–30 m of plaster at one value.
+4. **Texel density is inconsistent and under spec.** Walls run 213 px/m
+   against §5's 512 for hero surfaces, while trim runs 8× finer than the wall
+   beside it. The detail normal is at 48× base UV against §5's 8–16×.
+5. **The map is one hue.** Fixed at the light level; still asset-side, because
+   every piece of cloth in the map is the one `canvasTarp` grey-brown.
+6. **The backdrop hurts.** 46 untextured boxes with flat tops at 150–280 m.
+7. **Interiors are under-furnished by roughly 4×,** the three-storey block has
+   no role at all, and there is nothing behind the shopfront glass now that
+   you can see through it.
+8. **Sun does not cast through openings.** A window-shaped pool with mullion
+   shadows on the café tile is the strongest image available in this map and
+   is currently a bloom blob.
+9. **Doors are decor.** `doorway()` fills the aperture with a leaf that has no
+   collision; the player and the AI walk through it.
+
+Its answer on the blind comparison against a Modern Warfare dusk frame: not
+close, different decades, and the gap is contact shadow, colour separation,
+silhouette density, unique-vs-tiling detail, and material response — in that
+order.
+
 Known weakest areas, in the order I would fix them:
 
 1. **No skinned characters.** Soldiers are jointed rigid segments. It reads

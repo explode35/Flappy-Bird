@@ -142,7 +142,7 @@ export class HeightFog {
       awayColor: 0x7d95af,
       sunGain: 0.85,     // multiplies the sun-side colour (HDR lift)
       awayGain: 0.92,
-      glowGain: 0.3,
+      glowGain: 0.17,
       glowExponent: 9.0,
       phaseMix: 2.2,
       startDistance: 1.5,

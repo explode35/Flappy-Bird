@@ -24,10 +24,17 @@ const SUN_COLOR = 0xffd2a1;
 const SUN_INTENSITY = 4.2;
 const FILL_COLOR = 0x5c6a7a;
 // The fill was 12x weaker than the sun, which left every shaded face lit by
-// the environment alone — and the environment's lower hemisphere is warm
+// the environment alone — and the environment's lower hemisphere was warm
 // brown, so shade came out warm grey instead of the bible's cool #5c6a7a.
-// Fill up, environment down: same brightness in shade, correct hue.
-const FILL_INTENSITY = 0.95;
+//
+// 0.95 fixed the hue and cost the shadows: the fill comes from above as well
+// as from the anti-sun side, so it lands on upward-facing surfaces, which is
+// exactly where a cast shadow needs to be dark. scripts/probe-shadow.mjs
+// measures the trade — at the 14_cornice camera, killing all ambient takes
+// the ground from 53% to 77% of pixels below the dark threshold. 0.5 keeps
+// most of the colour separation (it is still 2.3x the old value) and gives
+// the shadow term room to read.
+const FILL_INTENSITY = 0.5;
 const SHADOW_EXTENT = 55;      // metres covered by the sun's ortho frustum
 
 const _v = new THREE.Vector3();
@@ -103,7 +110,7 @@ export class Sky {
     ctx.renderer.setScissorTest(_scTest);
     ctx.renderer.setRenderTarget(null);
     scene.environment = envRT.texture;
-    scene.environmentIntensity = 0.26;
+    scene.environmentIntensity = 0.17;
     this.envRT = envRT;
     skyClone.geometry.dispose();
     skyClone.material.dispose();
