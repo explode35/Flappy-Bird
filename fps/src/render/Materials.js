@@ -442,7 +442,7 @@ function genTile(w, h, seed) {
   // Grout was 3% of the tile wide and bevelled 2% deep, which at floor scale
   // is a 1 cm gap in a 3 cm chamfer -- a moulded rubber gym mat, not a tiled
   // floor. Real cement tile is butted much closer than that.
-  const lat = tileLattice(w, h, { n: 5, grout: 0.016, bevel: 0.01 });
+  const lat = tileLattice(w, h, { n: 4, grout: 0.011, bevel: 0.007 });
   const speck = speckle(w, h, { seed, scale: 3, blur: 0.5, contrast: 1.5 });
   const wearF = fbm(w, h, { period: 4, octaves: 4, seed: seed + 3, type: 'mix' });
   for (let i = 0; i < m.height.length; i++) m.height[i] = lat.mask[i] * 0.8 + speck[i] * 0.08;
@@ -453,14 +453,14 @@ function genTile(w, h, seed) {
   const perTile = new Float32Array(w * h);
   for (let i = 0; i < perTile.length; i++) perTile[i] = ((Math.sin(lat.id[i] * 57.3) * 2718.3) % 1 + 1) % 1;
   modulate(m.albedo, perTile, 0.16);
-  tint(m.albedo, invert(lat.mask), 0x8c8478, 0.55);
+  tint(m.albedo, invert(lat.mask), 0x958d80, 0.4);
   darken(m.albedo, cornerGrime(w, h, { strength: 0.8 }), 0.35);
   roughBase(m.rough, 0.34);
   roughTo(m.rough, invert(lat.mask), 0.95, 1);
   roughTo(m.rough, wearF, 0.7, 0.5);
   clampRough(m.rough, 0.1);
-  m.ao = heightAO(m.height, w, h, { strength: 0.65 });
-  m.normalStrength = 0.38;
+  m.ao = heightAO(m.height, w, h, { strength: 0.42 });
+  m.normalStrength = 0.26;
   capSaturation(m.albedo, 0.3);
   return m;
 }

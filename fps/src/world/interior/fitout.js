@@ -444,5 +444,16 @@ export function fitout({ role = 'shop', w = 12, d = 12, storeys = 1, doors = [],
     }
   }
 
+  // Bounce fill. There is no GI, so an interior wall facing away from the
+  // window and away from the bulbs falls off to a flat cold grey that no real
+  // room does -- all the light in a room like this has hit the floor first and
+  // come back up warm. One dim, wide, warm light near the middle of the room
+  // stands in for that. It is room-gated like the rest of the pool, so it
+  // never touches the street.
+  lights.push({
+    x: 0, y: ceilY * 0.5, z: 0,
+    color: 0xffcda3, intensity: 11, distance: Math.max(hx, hz) * 2.4,
+  });
+
   return { piece: p, lights, glows };
 }
