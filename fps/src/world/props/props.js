@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Piece } from '../geom/piece.js';
-import { chamferBox, chamferCyl, clothSheet, extrudeProfile, boxBetween } from '../geom/chamfer.js';
+import { chamferBox, chamferCyl, clothSheet, extrudeProfile, boxBetween, normalizeGeometry } from '../geom/chamfer.js';
 
 /**
  * Prop library. Every prop is a Piece built once and stamped many times by the
@@ -527,16 +527,48 @@ export function shelf(rng = Math.random) {
 }
 
 /** Hanging laundry line with cloth. */
+/**
+ * Washing on a line. Every cloth used to be the same dark tarp at the same
+ * size on the same spacing, which from the lane read as a row of identical
+ * cardboard squares floating in the air. Real washing is the most colourful
+ * thing in a street like this: whites, a faded blue, an ochre, one red towel.
+ * The tint goes above 1 deliberately — the tarp albedo is mid-dark and a
+ * multiply can only ever darken it.
+ */
+const LAUNDRY_TINTS = [
+  { r: 1.75, g: 1.72, b: 1.62 },   // bleached white
+  { r: 1.62, g: 1.66, b: 1.70 },   // grey-white
+  { r: 1.05, g: 1.28, b: 1.55 },   // faded blue
+  { r: 1.60, g: 1.30, b: 0.80 },   // ochre
+  { r: 1.45, g: 0.78, b: 0.62 },   // terracotta
+  { r: 0.92, g: 1.18, b: 0.98 },   // washed green
+  { r: 1.30, g: 1.24, b: 1.12 },   // linen
+];
+
 export function laundry(rng = Math.random, len = 4) {
   const p = new Piece();
   const r = T(rng);
-  const n = Math.max(2, Math.floor(len / 0.9));
-  for (let i = 0; i < n; i++) {
-    const w = r(0.5, 0.8), h = r(0.6, 1.1);
-    const cloth = clothSheet(w, h, { sag: 0.06, nx: 4, ny: 4, uvScale: 0.8, rng, ripple: 0.05 });
-    cloth.rotateY(r(-0.2, 0.2));
-    cloth.translate(-len * 0.5 + (len * (i + 0.5)) / n, -h * 0.5 - 0.04, 0);
+  const n = Math.max(2, Math.floor(len / 0.78));
+  let x = -len * 0.5 + r(0.1, 0.3);
+  for (let i = 0; i < n && x < len * 0.5 - 0.2; i++) {
+    // Sizes spread much wider than they were: a sheet next to a shirt next to
+    // a towel is what makes a line read as washing rather than as bunting.
+    const big = rng() < 0.28;
+    const w = big ? r(0.95, 1.5) : r(0.34, 0.8);
+    const h = big ? r(1.1, 1.9) : r(0.45, 1.0);
+    const cloth = clothSheet(w, h, { sag: r(0.1, 0.22), nx: 5, ny: 6, uvScale: 0.8, rng, ripple: r(0.05, 0.12) });
+    cloth.rotateY(r(-0.35, 0.35));
+    cloth.rotateZ(r(-0.06, 0.06));
+    cloth.translate(x + w * 0.5, -h * 0.5 - 0.03, r(-0.06, 0.06));
+    normalizeGeometry(cloth, { uvScale: 0, tint: LAUNDRY_TINTS[(rng() * LAUNDRY_TINTS.length) | 0] });
     p.add('canvasTarp', cloth, true);
+    // Pegs, and a gap before the next item.
+    for (const px of [x + 0.05, x + w - 0.05]) {
+      const peg = chamferBox(0.03, 0.075, 0.028, { uvScale: 0.1, chamfer: 0.006 });
+      peg.translate(px, -0.02, 0);
+      p.add('polymer', peg, true);
+    }
+    x += w + r(0.06, 0.3);
   }
   return p;
 }

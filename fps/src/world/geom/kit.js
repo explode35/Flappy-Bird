@@ -541,11 +541,14 @@ export function shutters(piece, mat, opts = {}) {
   const {
     x = 0, y = 0, z = 0, ry = 0, thick = 0.3,
     at = 0, sill = 0.95, w = 1.1, h = 1.25,
-    slats = 3, rng = Math.random, both = true,
+    slats = 7, rng = Math.random, both = true,
   } = opts;
   const f = { x, y, z, ry };
   const zOut = -thick * 0.5;
-  const lw = w * 0.53, lt = 0.042;
+  // The louvre bands used to stand 5.5 cm proud of a 4.2 cm leaf, so they
+  // read as separate boxes stuck to a panel rather than as slats cut into
+  // one. Thicker leaf, shallower slats, more of them.
+  const lw = w * 0.53, lt = 0.055;
 
   for (const s of [-1, 1]) {
     if (!both && s < 0) continue;
@@ -561,9 +564,15 @@ export function shutters(piece, mat, opts = {}) {
     parts.push([mat, plainBox(lw, h - 0.03, lt, { uvScale: 0.55 }), -s * lw * 0.5, (h - 0.03) * 0.5, 0]);
     // Louvre bands, raised proud of the leaf so they catch the raking light.
     for (let i = 0; i < slats; i++) {
-      const bh = (h / slats) * 0.58;
-      parts.push([mat, plainBox(lw - 0.055, bh, 0.055, { uvScale: 0.3 }),
-        -s * lw * 0.5, (h / slats) * (i + 0.5), -0.026]);
+      const bh = (h / slats) * 0.62;
+      parts.push([mat, plainBox(lw - 0.07, bh, 0.022, { uvScale: 0.3 }),
+        -s * lw * 0.5, (h / slats) * (i + 0.5), -0.032]);
+    }
+    // Top and bottom rails, and a middle one: without them the slats float in
+    // a rectangle instead of sitting in a frame.
+    for (const ry2 of [0.045, h * 0.5, h - 0.06]) {
+      parts.push([mat, plainBox(lw, 0.075, 0.026, { uvScale: 0.25 }),
+        -s * lw * 0.5, ry2, -0.033]);
     }
     for (const [m, g, px, py, pz] of parts) {
       g.translate(px, py, pz);

@@ -98,11 +98,41 @@ export class Level {
   //  Terrain
   // -------------------------------------------------------------------------
 
+  /**
+   * Low-frequency tonal drift painted into a ground slab's vertex colours.
+   *
+   * The ground is half of every exterior frame and it was one texture tiling
+   * every 2-3 m, which at a standing eye height reads as a single flat sheet
+   * of noise no matter how good the texture is. Real paving is patched,
+   * stained, wet in places and bleached in others, and almost all of that
+   * variation is at a scale far larger than one tile. Three octaves of cheap
+   * trig against world position, ±14%, is enough to break the sheet up.
+   */
+  _macroVary(geo, amp = 0.14) {
+    const pos = geo.attributes.position;
+    const col = geo.attributes.color;
+    if (!col) return geo;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      const n =
+        Math.sin(x * 0.083 + 1.7) * Math.cos(z * 0.071 - 0.4) * 0.55 +
+        Math.sin(x * 0.211 - 2.3) * Math.cos(z * 0.187 + 1.1) * 0.3 +
+        Math.sin((x + z) * 0.041 + 0.9) * 0.15;
+      const s = 1 + n * amp;
+      // Damp warmth slightly where it darkens: shade on paving goes cool.
+      col.setXYZ(i, col.getX(i) * s, col.getY(i) * s, col.getZ(i) * (1 + n * amp * 0.72));
+    }
+    col.needsUpdate = true;
+    return geo;
+  }
+
   _ground(b) {
     // Plaza asphalt, market paving, harbour concrete, and the sea.
     for (const g of LAYOUT.ground) {
       const geo = chamferBox(g.w, 0.4, g.d, { uvScale: g.uv ?? 2, chamfer: 0.05 });
       geo.translate(g.x, (g.y ?? 0) - 0.2, g.z);
+      // chamferBox emits a colour attribute already, so tint it in place.
+      this._macroVary(geo);
       b.push(g.mat, geo);
       b.solid(g.x, (g.y ?? 0) - 0.2, g.z, g.w * 0.5, 0.2, g.d * 0.5, g.mat);
     }

@@ -122,7 +122,7 @@ function genConcrete(w, h, seed, wall) {
   const base = fbm(w, h, { period: wall ? 5 : 6, octaves: 6, seed, type: 'mix', warp: 0.25 });
   const grain = fbm(w, h, { period: 48, octaves: 3, seed: seed + 7 });
   const pit = pits(w, h, { count: wall ? 150 : 300, seed: seed + 3, radius: 1.3, radVar: 0.9, strength: 0.45 });
-  const crk = cracks(w, h, { cells: wall ? 5 : 7, seed: seed + 11, width: 0.012, strength: 0.35, coverage: 0.3 });
+  const crk = cracks(w, h, { cells: wall ? 5 : 7, seed: seed + 11, width: 0.03, strength: 0.4, coverage: 0.24 });
   const agg = worley(w, h, 58, seed + 5).f1;
 
   for (let i = 0; i < m.height.length; i++) {
@@ -193,11 +193,15 @@ function genPlaster(w, h, seed) {
   const m = G(w, h);
   const base = fbm(w, h, { period: 4, octaves: 5, seed, type: 'mix', warp: 0.4 });
   const trowel = fbm(w, h, { period: 9, octaves: 3, seed: seed + 5, warp: 0.7, warpPeriod: 3 });
-  const crk = cracks(w, h, { cells: 9, seed: seed + 8, width: 0.011, strength: 0.5, coverage: 0.35 });
+  const crk = cracks(w, h, { cells: 9, seed: seed + 8, width: 0.032, strength: 0.55, coverage: 0.26 });
   const spall = blotches(w, h, { period: 4, octaves: 4, seed: seed + 12, threshold: 0.78, softness: 0.08, warp: 1.2 });
 
+  // Close up, a plaster wall is mostly trowel: long shallow sweeps with a
+  // fine stipple over them. Weighting the base noise as heavily as the trowel
+  // left the wall reading as a flat card at 2 m.
+  const stipple = speckle(w, h, { seed: seed + 31, scale: 2, blur: 0.45, contrast: 1.35 });
   for (let i = 0; i < m.height.length; i++) {
-    m.height[i] = base[i] * 0.3 + trowel[i] * 0.4 - crk[i] * 0.7 - spall[i] * 0.5;
+    m.height[i] = base[i] * 0.24 + trowel[i] * 0.52 + stipple[i] * 0.1 - crk[i] * 0.7 - spall[i] * 0.5;
   }
   normalizeField(m.height);
 
@@ -215,7 +219,7 @@ function genPlaster(w, h, seed) {
   roughTo(m.rough, spall, 0.95, 0.8);
   clampRough(m.rough);
   m.ao = heightAO(m.height, w, h, { strength: 0.85 });
-  m.normalStrength = 0.51;
+  m.normalStrength = 0.62;
   capSaturation(m.albedo, 0.38);
   return m;
 }

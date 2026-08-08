@@ -282,13 +282,26 @@ export function cracks(w, h, opts = {}) {
     jitter = 1, warpAmt = 0.02, coverage = 0.55, warpPeriod = 7,
   } = opts;
   const { f1, f2, id } = worley(w, h, cells, seed, jitter);
+  // Two things used to go wrong here and they compounded. Uncracked borders
+  // were still drawn at 0.15 rather than skipped, so every cell edge in the
+  // texture showed; and the edge profile was a hard clamp on a sub-texel
+  // width, so each of those edges aliased into a dotted line. The result on a
+  // plaster wall at 2 m was a field of dotted polygon outlines — crazy paving
+  // sketched in pen. Borders are now either cracked or they are not, the
+  // profile is smooth so it antialiases, and an fbm along the crack breaks it
+  // up the way a real one fades in and out.
+  const along = fbm(w, h, { period: Math.max(3, cells * 2), octaves: 3, seed: seed + 13 });
   const raw = new Float32Array(w * h);
   for (let i = 0; i < raw.length; i++) {
-    const d = f2[i] - f1[i];
-    // Only some cell borders crack, chosen by cell id — a fully cracked
-    // network reads as a fishnet, which no real surface does.
-    const gate = id[i] < coverage ? 1 : 0.15;
-    raw[i] = clamp01(1 - d / width) * gate;
+    // Hash the cell id so cracked cells are scattered. Thresholding the id
+    // directly cracks one contiguous region of the texture and leaves the
+    // rest clean.
+    const key = ((Math.sin(id[i] * 127.1) * 43758.5453) % 1 + 1) % 1;
+    if (key > coverage) continue;
+    const d = (f2[i] - f1[i]) / width;
+    if (d >= 1) continue;
+    const e = 1 - d;
+    raw[i] = e * e * (3 - 2 * e) * clamp01((along[i] - 0.3) * 2.4);
   }
   if (warpAmt > 0) {
     const dx = signed(perlinNoise(w, h, warpPeriod, seed + 51));
