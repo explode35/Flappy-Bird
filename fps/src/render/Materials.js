@@ -685,11 +685,15 @@ export class Materials {
         '#include <lights_fragment_begin>',
         `
         #ifdef USE_FOG
-          float obG = 1.0 - smoothstep( 0.0, 1.7, vHFWorldPos.y );
+          // 1.1 m and 0.22, not 1.7 m and 0.38: the taller, stronger version
+          // read correctly as splash dirt on a street facade and wrongly as a
+          // dark band across every interior wall at exactly eye height, since
+          // the shader cannot tell inside from outside.
+          float obG = 1.0 - smoothstep( 0.0, 1.1, vHFWorldPos.y );
           // Vertical faces only — a floor is not the base of a wall.
-          obG = obG * obG * 0.38 * ( 1.0 - abs( normal.y ) );
+          obG = obG * obG * 0.22 * ( 1.0 - abs( normal.y ) );
           material.diffuseColor.rgb *= 1.0 - obG;
-          material.roughness = min( 1.0, material.roughness + obG * 0.25 );
+          material.roughness = min( 1.0, material.roughness + obG * 0.2 );
         #endif
         #include <lights_fragment_begin>`
       );

@@ -67,6 +67,11 @@ const SHOTS = [
   { id: '12_window',       pos: [-5.4, 1.75, -13.2], look: [-7.5, 1.75, -13.2], fov: 55 },
   { id: '13_corner',       pos: [-4.5, 1.68, 0.5], look: [-7.5, 3.0, -1.6], fov: 62 },
   { id: '14_cornice',      pos: [-2.0, 1.68, 18],  look: [-7.5, 3.4, 4],    fov: 70 },
+  // Square on to the run of vertical fins that shows along the ground floor of
+  // this frontage in 02 and 14. At an oblique angle they are unidentifiable;
+  // this is close enough and flat enough to name them.
+  { id: '15_finrun',       pos: [-4.5, 1.60, 12],  look: [-7.5, 1.60, 12],  fov: 70 },
+  { id: '16_finrun_wide',  pos: [-3.0, 2.40, 12],  look: [-7.5, 1.60, 6],   fov: 80 },
 ];
 
 const wanted = arg('shots', '').split(',').filter(Boolean);

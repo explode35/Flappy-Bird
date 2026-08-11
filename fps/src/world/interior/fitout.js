@@ -452,7 +452,7 @@ export function fitout({ role = 'shop', w = 12, d = 12, storeys = 1, doors = [],
   // never touches the street.
   lights.push({
     x: 0, y: ceilY * 0.5, z: 0,
-    color: 0xffcda3, intensity: 11, distance: Math.max(hx, hz) * 2.4,
+    color: 0xffcda3, intensity: 19, distance: Math.max(hx, hz) * 2.6,
   });
 
   return { piece: p, lights, glows };
