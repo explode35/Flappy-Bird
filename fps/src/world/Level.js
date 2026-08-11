@@ -288,6 +288,10 @@ export class Level {
     mesh.instanceColor = new THREE.InstancedBufferAttribute(col, 3);
     mesh.instanceColor.needsUpdate = true;
     mesh.instanceMatrix.needsUpdate = true;
+    // Without this the bounding sphere is the unit sphere the geometry was
+    // built from, sitting at the world origin, so the whole set of fixtures
+    // frustum-culls together the moment the origin leaves view.
+    mesh.computeBoundingSphere();
     this.ctx.scene.add(mesh);
     this.glowMesh = mesh;
   }

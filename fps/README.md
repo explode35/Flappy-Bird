@@ -135,7 +135,11 @@ foliage hue). What it found that is still open, worst first:
 8. **Sun does not cast through openings.** A window-shaped pool with mullion
    shadows on the café tile is the strongest image available in this map and
    is currently a bloom blob.
-9. **Doors are decor.** `doorway()` fills the aperture with a leaf that has no
+9. **A small opaque black quad** sits at ground level near the plaza props in
+   several frames (`10_combat`, `14_cornice`, the 960x540 `16_finrun_wide`).
+   Not identified yet; it is not any of the additive FX quads and not the
+   emissive fixture instances, both of which were ruled out by inspection.
+10. **Doors are decor.** `doorway()` fills the aperture with a leaf that has no
    collision; the player and the AI walk through it.
 
 Its answer on the blind comparison against a Modern Warfare dusk frame: not
