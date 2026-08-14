@@ -154,7 +154,29 @@ for (let slot = 0; slot < 3; slot++) {
 
   const probe = await grab();
   writeFileSync(resolve(outDir, `${slot + 1}_${info.id}.png`), encodePng({ ...probe, bands: await bands(probe) }));
-  if (probe.mean === 0) console.log('  !! still black after retries — this one is real');
+  if (probe.mean === 0) {
+    console.log('  !! still black after retries — this one is real');
+    // Decisive: is the weapon covering the lens, or is the black coming from
+    // somewhere else entirely? Hide the rig and look again.
+    const noRig = await page.evaluate(async () => {
+      const { ctx } = window.__game;
+      ctx.weapons.rig.visible = false;
+      for (let i = 0; i < 8; i++) await new Promise((r) => requestAnimationFrame(r));
+      const c = document.querySelector('canvas');
+      const gl = ctx.renderer.getContext();
+      const px = new Uint8Array(c.width * c.height * 4);
+      gl.readPixels(0, 0, c.width, c.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      let sum = 0, n = 0;
+      for (let i = 0; i < px.length; i += 4 * 31, n++) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
+      ctx.weapons.rig.visible = true;
+      const info = ctx.renderer.info.render;
+      return { mean: Math.round(sum / n), calls: info.calls, tris: info.triangles };
+    });
+    console.log(`     with rig hidden: mean=${noRig.mean}  (calls=${noRig.calls} tris=${noRig.tris})`);
+    console.log(noRig.mean > 0
+      ? '     => the viewmodel is what is blacking the frame'
+      : '     => NOT the viewmodel; the world pass itself is black here');
+  }
   console.log(
     `${slot + 1}     ${info.name.padEnd(7)} ${info.size.join(' x ').padEnd(22)} ` +
     `(${info.centre.join(', ')})`.padEnd(28) +
