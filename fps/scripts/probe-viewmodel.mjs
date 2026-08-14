@@ -213,6 +213,44 @@ for (let slot = 0; slot < 3; slot++) {
         return { total: meshes.length, found };
       });
       console.log(`     bisect: ${culprit.total} visible nodes tested`);
+      if (culprit.found.length === 1) {
+        // Name it, then look inside it. A mesh covering 9% of the frame cannot
+        // black the frame by being in the way, so the answer is in its data.
+        const d = await page.evaluate((name) => {
+          const { ctx } = window.__game;
+          let target = null;
+          ctx.weapons.rig.traverse((o) => { if ((o.name || o.parent?.name) === name && o.isMesh) target = o; });
+          if (!target) return null;
+          const g = target.geometry, m = target.material;
+          const pos = g.attributes.position;
+          let bad = 0, maxAbs = 0;
+          for (let i = 0; i < pos.count * pos.itemSize; i++) {
+            const v = pos.array[i];
+            if (!Number.isFinite(v)) bad++;
+            else maxAbs = Math.max(maxAbs, Math.abs(v));
+          }
+          g.computeBoundingSphere();
+          return {
+            verts: pos.count,
+            itemSize: pos.itemSize,
+            nonFinite: bad,
+            maxAbs: +maxAbs.toFixed(3),
+            sphere: g.boundingSphere ? +g.boundingSphere.radius.toFixed(3) : null,
+            sphereFinite: g.boundingSphere ? Number.isFinite(g.boundingSphere.radius) : null,
+            attrs: Object.keys(g.attributes).join(','),
+            hasIndex: !!g.index,
+            matType: m.type,
+            matKeys: ['transmission', 'anisotropy', 'clearcoat', 'iridescence', 'sheen', 'transparent', 'depthWrite', 'side', 'flatShading']
+              .filter((k) => m[k] !== undefined && m[k] !== 0 && m[k] !== false)
+              .map((k) => `${k}=${m[k]}`).join(' '),
+          };
+        }, culprit.found[0].name);
+        if (d) {
+          console.log(`     geometry: ${d.verts} verts, attrs=${d.attrs}, indexed=${d.hasIndex}`);
+          console.log(`               nonFinite floats=${d.nonFinite}, maxAbs=${d.maxAbs}, boundingSphere r=${d.sphere} finite=${d.sphereFinite}`);
+          console.log(`     material: ${d.matType}  ${d.matKeys}`);
+        }
+      }
       if (!culprit.found.length) {
         console.log('       no single node is responsible — it is cumulative or state');
       } else {
