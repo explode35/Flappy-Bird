@@ -5,7 +5,7 @@
  * so the weapon shares the world's procedural PBR maps, then upgraded to
  * MeshPhysicalMaterial where the viewmodel needs response the world doesn't:
  * anisotropic brushed-metal highlights on machined aluminium, clearcoat on
- * parkerised steel, real transmission on the optic glass.
+ * parkerised steel, and a coated optic glass.
  *
  * The gun is a third of the screen at all times — it gets the good materials.
  */
@@ -128,22 +128,26 @@ export function buildGunMaterials(ctx) {
   inheritMaps(optic, gunmetalSrc, [6, 6]);
   optic.name = 'vm_optic';
 
-  // --- Optic glass: physical transmission with the classic red-dot AR coat
+  // --- Optic glass ------------------------------------------------------
+  //
+  // Deliberately NOT a transmissive material. transmission > 0 makes three.js
+  // run its own render-to-target pass inside renderer.render() so the glass
+  // has something to refract, and doing that from inside an EffectComposer
+  // chain leaves the composer's target unbound for the rest of the frame —
+  // the whole frame comes back black. On a 2.7 cm disc, a tinted transparent
+  // coat with a strong environment reflection is indistinguishable from real
+  // transmission anyway.
   const glass = new THREE.MeshPhysicalMaterial({
-    color: 0xbcd6e8,
+    color: 0x9fc4dc,
     roughness: 0.045,
     metalness: 0.0,
-    transmission: 0.92,
-    thickness: 0.004,
-    ior: 1.52,
     transparent: true,
-    opacity: 1.0,
+    opacity: 0.26,
+    ior: 1.52,
     clearcoat: 1.0,
     clearcoatRoughness: 0.02,
     envMapIntensity: 1.6,
     specularIntensity: 1.0,
-    attenuationColor: new THREE.Color(0x6fa4c8),
-    attenuationDistance: 0.05,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
