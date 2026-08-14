@@ -913,3 +913,109 @@ input[type=range]::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   #ui * { transition-duration: .01s !important; }
 }
+
+/* ==========================================================================
+   Start menu and the control list
+   --------------------------------------------------------------------------
+   The game shipped with no statement of its controls anywhere, which is a
+   fair reason for a player to say they do not know how to shoot. This is the
+   first thing after the loading screen, and the same list appears on pause,
+   which is where people look for it once they are already playing.
+   ========================================================================== */
+.menu {
+  align-items: center; justify-content: center;
+}
+.menu .scr__bg {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 42%, rgba(var(--gold), .10), transparent 70%),
+    #06090c;
+}
+.menu__inner { align-items: center; text-align: center; }
+.menu__k {
+  font-size: calc(13 * var(--px));
+  letter-spacing: calc(7 * var(--px));
+  color: rgba(var(--warn), .78);
+  margin-bottom: calc(10 * var(--px));
+}
+.menu__t {
+  font-size: calc(72 * var(--px));
+  font-weight: 700;
+  letter-spacing: calc(10 * var(--px));
+  color: var(--fg-hot);
+  line-height: 1;
+}
+.menu__s {
+  font-size: calc(13 * var(--px));
+  letter-spacing: calc(3.4 * var(--px));
+  color: var(--fg-dim);
+  margin-top: calc(12 * var(--px));
+}
+
+.keys {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: calc(9 * var(--px)) calc(22 * var(--px));
+  margin-top: calc(34 * var(--px));
+  text-align: left;
+}
+.keys__r { display: contents; }
+.keys__k { display: flex; align-items: center; gap: calc(4 * var(--px)); justify-content: flex-end; }
+.keys__cap {
+  font-family: inherit;
+  font-size: calc(12 * var(--px));
+  letter-spacing: calc(1.6 * var(--px));
+  color: var(--fg-hot);
+  padding: calc(3 * var(--px)) calc(7 * var(--px));
+  border: 1px solid rgba(var(--base), .26);
+  background: rgba(var(--base), .06);
+}
+.keys__or { font-size: calc(11 * var(--px)); color: var(--fg-mute); }
+.keys__w {
+  font-size: calc(13 * var(--px));
+  letter-spacing: calc(1.6 * var(--px));
+  color: var(--fg);
+  align-self: center;
+}
+.keys--sm { gap: calc(6 * var(--px)) calc(18 * var(--px)); margin-top: calc(22 * var(--px)); }
+.keys--sm .keys__cap { font-size: calc(10 * var(--px)); }
+.keys--sm .keys__w { font-size: calc(11 * var(--px)); }
+
+.menu__go {
+  margin-top: calc(40 * var(--px));
+  font-size: calc(16 * var(--px));
+  letter-spacing: calc(5 * var(--px));
+  color: rgba(var(--warn), .95);
+  animation: menuPulse 1.9s ease-in-out infinite;
+}
+@keyframes menuPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+.pause__inner { align-items: center; text-align: center; margin: auto; }
+
+/* ==========================================================================
+   Weapon readout
+   --------------------------------------------------------------------------
+   Was a four-character model number in 42%-opacity grey, which is unreadable
+   against a bright sky and tells a new player nothing anyway. Silhouette,
+   brighter type, and a backing shadow so it survives any background.
+   ========================================================================== */
+.ammo__icon {
+  display: block;
+  width: calc(96 * var(--px));
+  margin: 0 0 calc(4 * var(--px)) auto;
+  opacity: .9;
+}
+.ammo__icon svg { display: block; width: 100%; height: auto; }
+.ammo__icon svg path { fill: rgba(var(--base), .78); }
+.ammo.low .ammo__icon svg path { fill: rgba(var(--danger), .8); }
+
+.ammo__name { color: var(--fg) !important; font-weight: 700; }
+.ammo, .ammo__mag, .ammo__name {
+  text-shadow: 0 calc(1 * var(--px)) calc(3 * var(--px)) rgba(var(--ink), .85);
+}
+
+/* Swap flash: a short lift so changing weapon is visible in peripheral view. */
+.ammo.swap .ammo__icon, .ammo.swap .ammo__name { animation: wswap .38s ease-out; }
+@keyframes wswap {
+  0%   { opacity: 0; transform: translateX(calc(10 * var(--px))); }
+  100% { opacity: .9; transform: none; }
+}

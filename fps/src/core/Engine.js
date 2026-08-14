@@ -153,7 +153,9 @@ export class Engine {
 
     const output = new OutputPass();
     this.renderer.toneMapping = THREE.AgXToneMapping;
-    this.renderer.toneMappingExposure = 0.72;
+    // 0.72 was set against a much dimmer sun (2.75). At the bible's 4.2 it
+    // clips the top end, and AgX cannot recover what arrives already white.
+    this.renderer.toneMappingExposure = 0.58;
     composer.addPass(output);
 
     if (this.quality.smaa) composer.addPass(new SMAAPass(w, h));

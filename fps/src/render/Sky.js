@@ -63,10 +63,15 @@ export class Sky {
     sky.scale.setScalar(6000);
     sky.name = 'sky';
     const u = sky.material.uniforms;
-    u.turbidity.value = 5.5;
-    u.rayleigh.value = 2.2;
-    u.mieCoefficient.value = 0.007;
-    u.mieDirectionalG.value = 0.86;
+    // The Mie terms are the whole of the "looking at the sun destroys the
+    // frame" problem. mieDirectionalG 0.86 is a very tight forward-scatter
+    // lobe and 0.007 is a lot of aerosol to put behind it, so the aureole
+    // around an 8.5-degree sun covered a third of the screen at a radiance no
+    // tonemap can bring back. Smaller lobe, less of it.
+    u.turbidity.value = 4.2;
+    u.rayleigh.value = 2.4;
+    u.mieCoefficient.value = 0.0032;
+    u.mieDirectionalG.value = 0.74;
     _sunPos.copy(this.sunDirection).multiplyScalar(1000);
     u.sunPosition.value.copy(_sunPos);
     scene.add(sky);

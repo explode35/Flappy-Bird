@@ -54,6 +54,14 @@ export class Director {
 
   update(dt, time) {
     if (dt <= 0) return;
+    // Nothing spawns until the player has actually taken control. Waves used
+    // to start on the loading screen finishing, so by the time someone had
+    // read the banner and clicked in, soldiers were already shooting at them
+    // from across the plaza.
+    if (!this._playerReady) {
+      if (this.ctx.input?.locked) this._playerReady = true;
+      else if (this.state !== 'boot') return;
+    }
     this.stateTimer += dt;
 
     switch (this.state) {

@@ -36,6 +36,43 @@ const TIPS = [
   'Aiming down sights tightens your spread and slows your movement.',
 ];
 
+/**
+ * Weapon silhouettes for the readout. A player glancing at the bottom-right
+ * corner should know what is in their hands without reading a four-character
+ * model number in dim grey — which was the entire readout before.
+ */
+const WEAPON_ICON = {
+  m4: '<svg viewBox="0 0 120 40" aria-hidden="true">'
+    + '<path d="M8 18h58v5H8zM66 16h30v8H66zM96 18h16v4H96zM30 23h6v9h-6zM46 23h13v11H46z'
+    + 'M12 12h10v6H12zM70 10h12v6H70z"/></svg>',
+  mp5: '<svg viewBox="0 0 120 40" aria-hidden="true">'
+    + '<path d="M18 17h48v6H18zM66 15h22v9H66zM88 18h10v4H88zM34 23h6v12h-6zM52 23h11v9H52z'
+    + 'M24 11h9v6h-9z"/></svg>',
+  m1911: '<svg viewBox="0 0 120 40" aria-hidden="true">'
+    + '<path d="M40 14h44v7H40zM84 16h8v4h-8zM44 21h10v15l-6 2-6-3z"/></svg>',
+};
+const ICON_BY_NAME = { M4A1: 'm4', 'MP5A3': 'mp5', MP5: 'mp5', M1911: 'm1911' };
+
+/**
+ * The control list, in the order a new player needs it: move, then look and
+ * shoot, then everything else. Shown on the start menu and again on pause.
+ */
+const CONTROLS = [
+  ['W A S D', 'Move'],
+  ['MOUSE', 'Look'],
+  ['LEFT-CLICK', 'Fire'],
+  ['RIGHT-CLICK', 'Aim down sights'],
+  ['R', 'Reload'],
+  ['1 / 2 / 3', 'Rifle / SMG / pistol'],
+  ['SHIFT', 'Sprint  (double-tap to run flat out)'],
+  ['CTRL / C', 'Crouch  (sprint + crouch to slide)'],
+  ['SPACE', 'Jump and mantle'],
+  ['G', 'Grenade  (hold to cook)'],
+  ['Q / E', 'Lean'],
+  ['F', 'Inspect weapon'],
+  ['ESC', 'Pause'],
+];
+
 export class HUD {
   constructor(ctx) {
     this.ctx = ctx;
@@ -94,6 +131,8 @@ export class HUD {
 
     // --- ammo ---------------------------------------------------------------
     this.ammo = el('ammo');
+    this.ammoIcon = el('ammo__icon');
+    this.ammoIcon.innerHTML = WEAPON_ICON.m4;
     this.ammoName = el('ammo__name', 'div', 'M4A1');
     const row = el('ammo__row');
     this.ammoMag = el('ammo__mag', 'div', '30');
@@ -110,7 +149,7 @@ export class HUD {
     this.grenadeCount = el('grp__h', 'div', '3');
     this.grenades.appendChild(this.grenadeCount);
     foot.append(this.fm, this.grenades);
-    this.ammo.append(this.ammoName, el('ammo__rule'), row, foot);
+    this.ammo.append(this.ammoIcon, this.ammoName, el('ammo__rule'), row, foot);
     R.appendChild(this.ammo);
 
     // --- compass ------------------------------------------------------------
@@ -171,14 +210,60 @@ export class HUD {
     this.load.appendChild(li);
     R.appendChild(this.load);
 
+    // --- start menu ---------------------------------------------------------
+    // The game used to drop you straight into a locked-pointer FPS with no
+    // statement of the controls anywhere. "I am not sure how to shoot" is a
+    // fair thing for a player to say about that.
+    this.menu = el('scr scr--solid menu hidden');
+    this.menu.appendChild(el('scr__bg'));
+    const mi = el('menu__inner scr__inner');
+    mi.append(
+      el('menu__k', 'div', 'OPERATION BLACKOUT'),
+      el('menu__t', 'div', 'HARBOUR'),
+      el('menu__s', 'div', 'WAVE SURVIVAL — HOLD THE HARBOUR DISTRICT')
+    );
+    const keys = el('keys');
+    for (const [k, what] of CONTROLS) {
+      const rowEl = el('keys__r');
+      const kEl = el('keys__k');
+      // A control can need more than one key: "1 / 2 / 3".
+      for (const cap of k.split(' ')) {
+        if (cap === '/') { kEl.appendChild(el('keys__or', 'span', '/')); continue; }
+        kEl.appendChild(el('keys__cap', 'kbd', cap));
+      }
+      rowEl.append(kEl, el('keys__w', 'div', what));
+      keys.appendChild(rowEl);
+    }
+    mi.appendChild(keys);
+    this.menuGo = el('menu__go', 'div', 'CLICK ANYWHERE TO PLAY');
+    mi.appendChild(this.menuGo);
+    this.menu.appendChild(mi);
+    R.appendChild(this.menu);
+
     // --- pause / death / menus ----------------------------------------------
     this.pause = el('scr pause hidden');
     this.pause.appendChild(el('scr__bg'));
-    this.pause.append(
+    const pi = el('pause__inner scr__inner');
+    pi.append(
       el('pause__h', 'div', 'PAUSED'),
-      el('pause__t', 'div', 'Click to resume'),
-      el('pause__s', 'div', 'CLICK — resume    R — restart')
+      el('pause__t', 'div', 'Click to resume')
     );
+    // Same control list as the menu — this is where people actually look for
+    // it once they are already playing.
+    const pkeys = el('keys keys--sm');
+    for (const [k, what] of CONTROLS) {
+      const rowEl = el('keys__r');
+      const kEl = el('keys__k');
+      for (const cap of k.split(' ')) {
+        if (cap === '/') { kEl.appendChild(el('keys__or', 'span', '/')); continue; }
+        kEl.appendChild(el('keys__cap', 'kbd', cap));
+      }
+      rowEl.append(kEl, el('keys__w', 'div', what));
+      pkeys.appendChild(rowEl);
+    }
+    pi.appendChild(pkeys);
+    pi.appendChild(el('pause__s', 'div', 'CLICK — resume     R — restart'));
+    this.pause.appendChild(pi);
     R.appendChild(this.pause);
 
     this.death = el('scr scr--light death hidden');
@@ -227,6 +312,12 @@ export class HUD {
 
     bus.on('weapon:changed', (e) => {
       this._set(this.ammoName, e.name);
+      const icon = WEAPON_ICON[e.id] || WEAPON_ICON[ICON_BY_NAME[e.name]] || WEAPON_ICON.m4;
+      if (this.ammoIcon.innerHTML !== icon) this.ammoIcon.innerHTML = icon;
+      // Flash the whole readout on a swap so the change is impossible to miss.
+      this.ammo.classList.remove('swap');
+      void this.ammo.offsetWidth;
+      this.ammo.classList.add('swap');
       this._set(this.fmLabel, e.auto ? 'AUTO' : 'SEMI');
       for (let i = 0; i < 3; i++) this.fmDots[i].classList.toggle('on', e.auto || i === 0);
     });
@@ -252,17 +343,29 @@ export class HUD {
       this._hideLoad();
       this._setPlayVisible(true);
       this.death.classList.add('hidden');
+      // First time only: the start menu stands between the loading screen and
+      // the game. After that a restart goes straight back into play.
+      if (!this._everStarted) {
+        this.menu.classList.remove('hidden');
+        requestAnimationFrame(() => this.menu.classList.add('on'));
+      }
     });
     bus.on('explosion', () => { this._flash = 0.55; });
 
     bus.on('input:unlock', () => {
-      if (this.ctx.player?.dead || this.ctx.engine.frame < 120) return;
+      // Before the player has ever taken control the start menu owns the
+      // screen; putting the pause screen over it as well would stack two
+      // dialogs on a player who has not begun.
+      if (!this._everStarted || this.ctx.player?.dead) return;
       this.pause.classList.remove('hidden');
       requestAnimationFrame(() => this.pause.classList.add('on'));
     });
     bus.on('input:lock', () => {
+      this._everStarted = true;
       this.pause.classList.remove('on');
       this.pause.classList.add('hidden');
+      this.menu.classList.remove('on');
+      this.menu.classList.add('hidden');
     });
   }
 

@@ -165,7 +165,7 @@ export class Weapons {
     this._computeAdsPose();
     this._emitAmmo();
     this.ctx.bus.emit('weapon:changed', {
-      name: this.def.name, icon: this.def.icon,
+      id: this.slots[this.index], name: this.def.name, icon: this.def.icon,
       mag: this.ammo.mag, reserve: this.ammo.reserve, auto: this.def.auto,
     });
   }

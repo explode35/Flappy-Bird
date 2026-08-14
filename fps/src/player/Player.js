@@ -304,6 +304,18 @@ export class Player {
     else { this.capsule.start.add(_tmp); this.capsule.end.add(_tmp); }
 
     this.isGrounded = _moveOut.grounded;
+
+    // Fall guard. There is no floor under the sea and none past the map edge,
+    // so walking off the quay drops you forever: the screen goes black, the
+    // fog fades out, and nothing ever brings you back. Catch it and put the
+    // player on the spawn pad.
+    const floorY = (this.ctx.level?.bounds?.min.y ?? -2) - 6;
+    if (this.capsule.start.y < floorY || !Number.isFinite(this.capsule.start.y)) {
+      const s = this.ctx.level?.spawnPoint;
+      if (s) this.teleport(s.x, s.y, s.z);
+      this.velocity.set(0, 0, 0);
+      this.ctx.bus.emit('banner', { kicker: '', title: '', sub: 'RECOVERED — STAY INSIDE THE DISTRICT' });
+    }
     if (this.isGrounded) {
       if (!wasGrounded) this._land(fallSpeed);
       this.velocity.y = Math.max(this.velocity.y, -T.GROUND_STICK);
