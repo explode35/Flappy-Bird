@@ -661,7 +661,7 @@ function buildTable() {
   /* ---------------------------------------------------------- pop bumpers */
   T.bumpers = [
     { x: 92, y: 300, r: 16, flash: 0, lit: true },
-    { x: 140, y: 266, r: 16, flash: 0, lit: true },
+    { x: 130, y: 284, r: 16, flash: 0, lit: true },
     { x: 112, y: 358, r: 16, flash: 0, lit: true }
   ];
   T.bumpers.forEach((b, i) => {
@@ -697,24 +697,35 @@ function buildTable() {
   }
 
   /* --------------------------------------------------------------- gate ---
-     Two panels that slide apart, revealing the lock sockets behind.       */
+     Two panels guarding the lock sockets.  Shut, the pair lies on ONE
+     unbroken slope running down to the left, and that detail is the whole
+     point: a tent would have a crest, and rolling friction turns any crest
+     into a small flat spot a ball can sit on indefinitely.  A single ramp has
+     no local high point at all, so anything that lands up here is walked off
+     the low end and into the pop bumpers, which cannot hold a ball.  Nothing
+     frames the low end either — a post beside a slope is a wedge, and a wedge
+     is where balls go to die.  Opening swings each panel up to near-vertical,
+     where the pair reads as a funnel into the lock mouth. */
   T.gate = { open: 0, state: 'closed', t: 0, flash: 0 };
   T.gatePanels = [];
   for (let i = 0; i < 2; i++) {
     const c = seg(0, 238, 0, 238, MAT.metal, { r: 4, tag: 'gate', idx: i });
     T.gatePanels.push(c); push(c);
   }
+  /* [outer-end, inner-end] shut, and the same two ends swung open */
+  const GATE_L = { shut: [148, 246, 216, 227], open: [156, 254, 166, 202] };
+  const GATE_R = { shut: [284, 214, 216, 227], open: [276, 254, 266, 202] };
   T.setGate = function (o) {
     T.gate.open = o;
-    const l = T.gatePanels[0], r = T.gatePanels[1];
-    const slide = o * 64;
-    l.ax = 152 - slide; l.ay = 243; l.bx = 216 - slide; l.by = 233; colAABB(l);
-    r.ax = 216 + slide; r.ay = 233; r.bx = 280 + slide; r.by = 243; colAABB(r);
+    const put = (c, g) => {
+      c.ax = lerp(g.shut[0], g.open[0], o); c.ay = lerp(g.shut[1], g.open[1], o);
+      c.bx = lerp(g.shut[2], g.open[2], o); c.by = lerp(g.shut[3], g.open[3], o);
+      colAABB(c);
+    };
+    put(T.gatePanels[0], GATE_L);
+    put(T.gatePanels[1], GATE_R);
   };
   T.setGate(0);
-  /* posts that frame the gate mouth */
-  push(cir(146, 238, 5, MAT.post, { tag: 'post' }));
-  push(cir(286, 238, 5, MAT.post, { tag: 'post' }));
 
   /* ------------------------------------------------------- lock sockets --- */
   T.sockets = [
@@ -1542,10 +1553,13 @@ function drainCheck(dt) {
       if (G.balls.length === 1 && G.mbActive) endMultiball();
       if (G.balls.length === 0) ballDrained();
     }
-    /* stuck-ball search: never let a ball die in a corner */
+    /* Stuck-ball search: never let a ball die in a corner.  A pitched
+       playfield sheds a ball this slow inside a second, so two and a half
+       seconds of stillness is already abnormal — the shorter fuse means the
+       balance point on top of any post is a blink, not a wait. */
     if (Math.hypot(b.vx, b.vy) < 48 && !onAnyFlipper(b)) {
       b.stuckT += dt;
-      if (b.stuckT > 3.5) {
+      if (b.stuckT > 2.5) {
         b.vx += rndR(-420, 420); b.vy -= rndR(220, 460);
         b.stuckT = 0; sfx('search'); shake(3);
         say('BALL SEARCH', '', 1.2);
@@ -2104,7 +2118,7 @@ function drawLamps(c, t) {
   /* gate lamp cluster */
   const gateReady = T.grid.every(g => g.down);
   for (let i = 0; i < 5; i++)
-    L.push([160 + i * 30, 258, gateReady ? PAL.lime : PAL.blue, gateReady ? (blink(10, i) ? 1 : 0.15) : 0.22]);
+    L.push([160 + i * 30, 266, gateReady ? PAL.lime : PAL.blue, gateReady ? (blink(10, i) ? 1 : 0.15) : 0.22]);
   /* mode lamp */
   L.push([340, 292, G.mode2 ? PAL.lilac : PAL.navy, G.mode2 ? (blink(8) ? 1 : 0.3) : 0.2]);
   for (const l of L) glow(c, l[0], l[1], 7, l[2], l[3]);
@@ -2113,10 +2127,21 @@ function drawLamps(c, t) {
 /* ------------------------------------------------------------------- gate */
 function drawGate(c, t) {
   const T = G.T;
-  /* housing */
-  c.fillStyle = PAL.ink; c.fillRect(140, 228, 152, 20);
-  c.fillStyle = PAL.bark; c.fillRect(142, 230, 148, 16);
-  ditherRectV(c, 142, 230, 148, 16, PAL.bark, PAL.sand, 0, 0.8);
+  /* The alcove the panels shut over.  Its floor follows the closed gate line,
+     so shut the recess is sealed and open it reads as a lit chamber rather
+     than a hole punched in the playfield. */
+  const alcove = (inset) => {
+    c.beginPath();
+    c.moveTo(146 + inset, 164 + inset); c.lineTo(286 - inset, 164 + inset);
+    c.lineTo(286 - inset, 210 - inset); c.lineTo(146 + inset, 242 - inset);
+    c.closePath();
+  };
+  c.fillStyle = PAL.ink; alcove(0); c.fill();
+  c.save(); alcove(3); c.clip();
+  c.fillStyle = PAL.bark; c.fillRect(146, 164, 140, 80);
+  ditherRectV(c, 146, 164, 140, 80, PAL.bark, PAL.sand, 0, 0.8);
+  c.fillStyle = PAL.ink; c.fillRect(146, 164, 140, 3);
+  c.restore();
   /* the two sliding panels */
   for (let i = 0; i < 2; i++) {
     const g = T.gatePanels[i];
@@ -2135,8 +2160,7 @@ function drawGate(c, t) {
   }
   if (T.gate.state === 'open' || T.gate.state === 'opening') {
     const o = T.gate.open;
-    c.fillStyle = PAL.ink; c.fillRect(152 + (1 - o) * 0, 232, 0, 0);
-    glow(c, 222, 238, 30 * o + 6, PAL.cyan, 0.5 + 0.3 * Math.sin(t * 6));
+    glow(c, 216, 224, 30 * o + 6, PAL.cyan, 0.5 + 0.3 * Math.sin(t * 6));
   }
 }
 
