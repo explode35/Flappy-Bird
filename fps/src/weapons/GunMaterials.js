@@ -254,6 +254,33 @@ export function buildGunMaterials(ctx) {
     glove, gloveGrip, sleeve, olive, safetyRed, paint, tritium,
   };
   mats._all = Object.values(mats).filter((m) => m && m.isMaterial);
+  return guardAnisotropy(mats);
+}
+
+/**
+ * Anisotropy without a normal map does not compile.
+ *
+ * three.js builds the tangent frame anisotropy needs out of the normal map's
+ * UV set — `getTangentFrame(-vViewPosition, normal, vNormalMapUv)` — and
+ * `vNormalMapUv` only exists when USE_NORMALMAP is defined. A material with
+ * `anisotropy > 0`, no `normalMap` and no tangent attribute therefore
+ * references an undeclared varying, the program fails to link, and the broken
+ * program takes the whole frame to black. Nothing throws and nothing lands in
+ * pageerror, which is why this survived so long: `m4:metal` blacked the screen
+ * whenever the map inherit had not landed, and the only symptom was a black
+ * screen on weapon 1.
+ *
+ * Rather than trusting every material to be declared consistently, check.
+ */
+function guardAnisotropy(mats) {
+  for (const [name, m] of Object.entries(mats)) {
+    if (!m || !m.isMaterial || !m.anisotropy) continue;
+    if (m.normalMap) continue;
+    console.warn(`[guns] ${m.name || name}: anisotropy needs a normal map, dropping it`);
+    m.anisotropy = 0;
+    m.anisotropyRotation = 0;
+    m.needsUpdate = true;
+  }
   return mats;
 }
 
