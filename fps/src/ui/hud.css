@@ -1019,3 +1019,21 @@ input[type=range]::-moz-range-thumb {
   0%   { opacity: 0; transform: translateX(calc(10 * var(--px))); }
   100% { opacity: .9; transform: none; }
 }
+
+/* Short viewports: the control list is 13 rows and the title is large, which
+   overflows anything under about 700px tall. Scale the whole menu down rather
+   than letting the play prompt fall off the bottom. */
+@media (max-height: 780px) {
+  .menu__t { font-size: calc(48 * var(--px)); letter-spacing: calc(6 * var(--px)); }
+  .keys { margin-top: calc(20 * var(--px)); gap: calc(5 * var(--px)) calc(16 * var(--px)); }
+  .keys__cap { font-size: calc(10 * var(--px)); padding: calc(2 * var(--px)) calc(5 * var(--px)); }
+  .keys__w { font-size: calc(11 * var(--px)); }
+  .menu__go { margin-top: calc(22 * var(--px)); font-size: calc(13 * var(--px)); }
+}
+@media (max-height: 560px) {
+  .menu__t { font-size: calc(34 * var(--px)); }
+  .menu__s, .menu__k { display: none; }
+  .keys { margin-top: calc(12 * var(--px)); }
+}
+/* Last resort: never let the prompt be unreachable. */
+.menu__inner { max-height: 100vh; overflow-y: auto; padding: calc(16 * var(--px)) 0; }

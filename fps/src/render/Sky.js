@@ -36,6 +36,8 @@ const FILL_COLOR = 0x5c6a7a;
 // the shadow term room to read.
 const FILL_INTENSITY = 0.5;
 const SHADOW_EXTENT = 55;      // metres covered by the sun's ortho frustum
+const EXPOSURE_BASE = 0.58;    // matches Engine's initial toneMappingExposure
+const EXPOSURE_SQUINT = 0.55;  // how far down exposure goes staring at the sun
 
 const _v = new THREE.Vector3();
 const _center = new THREE.Vector3();
@@ -46,6 +48,7 @@ export class Sky {
   constructor(ctx) {
     this.ctx = ctx;
     this.sunDirection = new THREE.Vector3();
+    this._exposure = EXPOSURE_BASE;
     this.timeOfDay = 0.5;
     this._flare = 0;
     this._occTimer = 0;
@@ -243,6 +246,8 @@ export class Sky {
       this.sunLight.shadow.camera.updateProjectionMatrix();
     }
 
+    this._adaptExposure(dt, cam);
+
     if (this.fog) this.fog.update();
     if (this.dust) this.dust.update(dt, cam.position);
 
@@ -293,6 +298,30 @@ export class Sky {
   }
 
   /** Level calls this after building so every new material gets fog. */
+  /**
+   * Squint. Looking within about fifty degrees of a low sun put the frame
+   * somewhere no tonemap could bring it back from — a player reported it as
+   * simply "the sun is too bright", which it was.
+   *
+   * This is not histogram auto-exposure. Reading back the composed buffer to
+   * measure luminance means a pipeline stall every time, and the thing that
+   * actually blows out here is known ahead of time: it is the sun, and we know
+   * exactly where the sun is. So exposure is driven straight off the angle
+   * between the view and the sun, and damped over about a third of a second so
+   * it reads as an eye adjusting rather than as a slider moving.
+   */
+  _adaptExposure(dt, cam) {
+    cam.getWorldDirection(_camDir);
+    const facing = Math.max(0, _camDir.dot(this.sunDirection));
+    // ^6 keeps the compensation off entirely until you are genuinely looking
+    // into it — glancing across the sky should not dim the world.
+    const glare = Math.pow(facing, 6);
+    const target = EXPOSURE_BASE * (1 - glare * EXPOSURE_SQUINT);
+    const k = 1 - Math.exp(-dt * 4.5);
+    this._exposure += (target - this._exposure) * (dt > 0 ? k : 1);
+    this.ctx.renderer.toneMappingExposure = this._exposure;
+  }
+
   patchFog(root) { this.fog?.patch(root); }
 
   dispose() {

@@ -100,17 +100,31 @@ export class Weapons {
     this.rig.add(this.swayNode);
     this.swayNode.add(this.bobNode);
     this.bobNode.add(this.kickNode);
-    ctx.viewScene.add(this.rig);
+    // Parented to the view camera, NOT dropped loose in the view scene.
+    //
+    // Player writes the full look rotation onto ctx.viewCamera every frame, so
+    // a rig sitting in viewScene stays put in view-scene space while the camera
+    // swings around it: the weapon slides off the side of the screen as you
+    // turn, and at some angles it ends up spread across the near plane as an
+    // unlit wall of geometry — which is the "screen goes black as I look
+    // around" that got reported, and the same black frames the screenshot
+    // harness kept producing at particular cameras.
+    ctx.viewCamera.add(this.rig);
+    // A camera is not part of the scene graph by default, and its children are
+    // only drawn if it is.
+    if (!ctx.viewCamera.parent) ctx.viewScene.add(ctx.viewCamera);
 
     // The world sun does not light the viewmodel usefully, so give it a rig of
-    // its own parented to the view camera.
+    // its own — on the camera, so the key stays on the same side of the gun
+    // however the player is facing.
     const key = new THREE.DirectionalLight(0xffd7b0, 2.6);
     key.position.set(-0.6, 0.9, 0.5);
     const fill = new THREE.DirectionalLight(0x7d90a8, 1.15);
     fill.position.set(0.8, -0.2, 0.4);
     const rim = new THREE.DirectionalLight(0xbfd4ff, 1.9);
     rim.position.set(0.3, 0.4, -1.0);
-    ctx.viewScene.add(key, fill, rim);
+    ctx.viewCamera.add(key, fill, rim);
+    ctx.viewCamera.add(key.target, fill.target, rim.target);
     ctx.viewScene.environment = ctx.scene.environment;
     ctx.viewScene.environmentIntensity = 0.65;
 

@@ -498,7 +498,9 @@ export class Effects {
     this.muzzleGroup = g;
     this.muzzleStar = star;
     this.muzzleGlow = glow;
-    this.ctx.viewScene.add(g);
+    // On the camera, for the same reason the weapon rig is: the muzzle anchor
+    // it tracks is now in camera space.
+    this.ctx.viewCamera.add(g);
 
     this.muzzleLight = new THREE.PointLight(0xffb060, 0, 14, 2);
     this.muzzleLight.castShadow = false;
@@ -891,11 +893,14 @@ export class Effects {
     if (!muzzle) { this._muzzleT = -1; return; }
 
     this.muzzleGroup.visible = true;
-    // Position in view space, since the viewmodel lives in its own scene.
+    // The muzzle anchor and the flash are both children of the view camera
+    // now, so the anchor's world transform converts straight into the flash's
+    // parent space, and the flash needs no rotation of its own.
     muzzle.updateWorldMatrix(true, false);
     _v.setFromMatrixPosition(muzzle.matrixWorld);
+    this.ctx.viewCamera.worldToLocal(_v);
     this.muzzleGroup.position.copy(_v);
-    this.muzzleGroup.quaternion.copy(this.ctx.viewCamera.quaternion);
+    this.muzzleGroup.quaternion.identity();
 
     const fade = 1 - t;
     const s = this._muzzleScale * (0.7 + fade * 0.5);
