@@ -178,6 +178,51 @@ for (let slot = 0; slot < 3; slot++) {
       : '     => NOT the viewmodel; the world pass itself is black here');
 
     if (noRig.mean > 0) {
+      // Bisect: hide one mesh at a time and see which one's absence brings the
+      // frame back. Correlating properties of the failing weapons has produced
+      // two wrong answers now (optics, then transmission), so stop reasoning
+      // about what the culprit might be and just find it.
+      const culprit = await page.evaluate(async () => {
+        const { ctx } = window.__game;
+        const meshes = [];
+        ctx.weapons.rig.traverseVisible((o) => { if (o.isMesh || o.isSprite) meshes.push(o); });
+        const read = () => {
+          const c = document.querySelector('canvas');
+          const gl = ctx.renderer.getContext();
+          const px = new Uint8Array(c.width * c.height * 4);
+          gl.readPixels(0, 0, c.width, c.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          let sum = 0, n = 0;
+          for (let i = 0; i < px.length; i += 4 * 61, n++) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
+          return Math.round(sum / n);
+        };
+        const found = [];
+        for (const m of meshes) {
+          m.visible = false;
+          for (let i = 0; i < 5; i++) await new Promise((r) => requestAnimationFrame(r));
+          const mean = read();
+          m.visible = true;
+          if (mean > 4) {
+            found.push({
+              name: m.name || m.parent?.name || '(unnamed)',
+              mat: m.material?.name || m.material?.type || '?',
+              kind: m.isSprite ? 'Sprite' : 'Mesh',
+              mean,
+            });
+          }
+        }
+        return { total: meshes.length, found };
+      });
+      console.log(`     bisect: ${culprit.total} visible nodes tested`);
+      if (!culprit.found.length) {
+        console.log('       no single node is responsible — it is cumulative or state');
+      } else {
+        for (const f of culprit.found) {
+          console.log(`       hiding ${f.kind} ${String(f.name).padEnd(16)} ${f.mat.padEnd(18)} -> mean ${f.mean}`);
+        }
+      }
+    }
+
+    if (false) {
       // Which node? The equipped model measures small, so something else under
       // the rig is large. Walk every visible mesh and report the worst.
       const worst = await page.evaluate(() => {
