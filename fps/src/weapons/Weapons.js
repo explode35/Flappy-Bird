@@ -172,6 +172,24 @@ export class Weapons {
     bus.on('game:start', () => { this._resetAmmo(); });
   }
 
+  /**
+   * Add a fraction of each weapon's full reserve. Returns false when every
+   * weapon is already full, so a pickup can decline to be collected and stay
+   * on the map for when it is actually needed.
+   */
+  addReserve(fraction) {
+    let any = false;
+    for (const id of this.slots) {
+      const d = WEAPONS[id];
+      const st = this.state[id];
+      if (st.reserve >= d.reserve) continue;
+      st.reserve = Math.min(d.reserve, st.reserve + Math.ceil(d.reserve * fraction));
+      any = true;
+    }
+    if (any) this._emitAmmo();
+    return any;
+  }
+
   _resetAmmo() {
     for (const id of this.slots) {
       const d = WEAPONS[id];
@@ -243,11 +261,11 @@ export class Weapons {
     const def = this.def;
 
     // Weapon select
-    if (input.hit('Digit1')) this._equip(0);
-    if (input.hit('Digit2')) this._equip(1);
-    if (input.hit('Digit3')) this._equip(2);
+    if (input.actHit('slot1')) this._equip(0);
+    if (input.actHit('slot2')) this._equip(1);
+    if (input.actHit('slot3')) this._equip(2);
     if (input.wheel) this._equip((this.index + (input.wheel > 0 ? 1 : 2)) % 3);
-    if (input.hit('KeyF') && this._inspectT < 0 && !this._reloading) this._inspectT = 0;
+    if (input.actHit('inspect') && this._inspectT < 0 && !this._reloading) this._inspectT = 0;
 
     // ADS — blocked while sprinting or mid-swap
     this._adsWanted = input.mDown(2) && !player.isSprinting && !this._swapping && !this.isThrowing;
@@ -265,7 +283,7 @@ export class Weapons {
 
     // Reload
     const a = this.ammo;
-    if ((input.hit('KeyR') || (a.mag === 0 && input.mDown(0))) && !this._reloading &&
+    if ((input.actHit('reload') || (a.mag === 0 && input.mDown(0))) && !this._reloading &&
         a.mag < def.magSize && a.reserve > 0 && !this._swapping) {
       this._startReload();
     }
@@ -276,10 +294,10 @@ export class Weapons {
     else this._triggerHeld = input.mHit(0) && !player.isSprinting && !this._reloading && !this._swapping;
 
     // Grenade
-    if (input.hit('KeyG') && this._grenades > 0 && this._cookT < 0) this._cookT = 0;
+    if (input.actHit('grenade') && this._grenades > 0 && this._cookT < 0) this._cookT = 0;
     if (this._cookT >= 0) {
       this._cookT += dt;
-      if (!input.down('KeyG') || this._cookT > GRENADE.cook) this._throwGrenade();
+      if (!input.act('grenade') || this._cookT > GRENADE.cook) this._throwGrenade();
     }
   }
 

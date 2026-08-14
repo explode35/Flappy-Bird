@@ -3,6 +3,8 @@
  * Mouse deltas accumulate between frames and are drained by consumers via
  * `readLook()` exactly once per frame (Player owns that call).
  */
+import { ACTIONS, loadBindings, saveBindings, clearBindings, defaultBindings, findConflict } from './Bindings.js';
+
 export class Input {
   constructor(canvas, bus) {
     this.canvas = canvas;
@@ -21,9 +23,22 @@ export class Input {
     this.padIndex = null;
     this.pad = { lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0, buttons: [] };
 
+    // Named actions, so the layout can be changed. See core/Bindings.js.
+    this.bindings = loadBindings();
+    // While this is set, keys are handed to it instead of being recorded — the
+    // rebinding UI needs the next keypress without the game acting on it.
+    this._capture = null;
+
     this._onKeyDown = (e) => {
       if (e.repeat) return;
       const c = e.code;
+      if (this._capture) {
+        e.preventDefault();
+        const fn = this._capture;
+        this._capture = null;
+        fn(c === 'Escape' ? null : c);
+        return;
+      }
       if (!this.keys.has(c)) this.pressed.add(c);
       this.keys.add(c);
       if (c === 'Tab' || c.startsWith('Arrow') || c === 'Space' || c === 'Slash') e.preventDefault();
@@ -75,10 +90,55 @@ export class Input {
   mHit(b) { return this.mousePressed[b]; }
   mUp(b) { return this.mouseReleased[b]; }
 
+  // --- named actions -------------------------------------------------------
+
+  /** Is any key bound to this action held? */
+  act(id) {
+    const codes = this.bindings[id];
+    if (!codes) return false;
+    for (let i = 0; i < codes.length; i++) if (this.keys.has(codes[i])) return true;
+    return false;
+  }
+
+  /** Was any key bound to this action pressed this frame? */
+  actHit(id) {
+    const codes = this.bindings[id];
+    if (!codes) return false;
+    for (let i = 0; i < codes.length; i++) if (this.pressed.has(codes[i])) return true;
+    return false;
+  }
+
+  /**
+   * Point the primary key of an action at `code`. Any other action holding
+   * that code loses it, because two things on one key is never what someone
+   * meant, and silently leaving the older binding in place makes the new one
+   * look broken.
+   */
+  rebind(id, code) {
+    if (!this.bindings[id] || !code) return null;
+    const clash = findConflict(this.bindings, code, id);
+    if (clash) this.bindings[clash.id] = this.bindings[clash.id].filter((c) => c !== code);
+    const rest = this.bindings[id].slice(1).filter((c) => c !== code);
+    this.bindings[id] = [code, ...rest];
+    saveBindings(this.bindings);
+    this.bus.emit('input:bindings', {});
+    return clash;
+  }
+
+  resetBindings() {
+    this.bindings = defaultBindings();
+    clearBindings();
+    this.bus.emit('input:bindings', {});
+  }
+
+  /** Hand the next keypress to `fn` instead of the game. Escape cancels. */
+  captureNextKey(fn) { this._capture = fn; }
+  cancelCapture() { this._capture = null; }
+
   /** Movement axes, keyboard + left stick, normalised to a unit disc. */
   axes(out) {
-    let x = (this.down('KeyD') ? 1 : 0) - (this.down('KeyA') ? 1 : 0);
-    let y = (this.down('KeyW') ? 1 : 0) - (this.down('KeyS') ? 1 : 0);
+    let x = (this.act('right') ? 1 : 0) - (this.act('left') ? 1 : 0);
+    let y = (this.act('forward') ? 1 : 0) - (this.act('back') ? 1 : 0);
     x += this.pad.lx; y += -this.pad.ly;
     const l = Math.hypot(x, y);
     if (l > 1) { x /= l; y /= l; }

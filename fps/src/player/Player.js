@@ -171,8 +171,8 @@ export class Player {
 
     // --- sprint -------------------------------------------------------------
     const wantsFwd = _axes.y > T.SPRINT_MIN_FWD;
-    const sprintDown = input.down('ShiftLeft') || input.down('ShiftRight') || input.pad.buttons[10];
-    if (input.hit('ShiftLeft') || input.hit('ShiftRight')) {
+    const sprintDown = input.act('sprint') || input.pad.buttons[10];
+    if (input.actHit('sprint')) {
       if (this.time - this._sprintTapAt < T.TAC_DOUBLE_TAP) this._tacArmed = true;
       this._sprintTapAt = this.time;
       this._sprintHeldFor = 0;
@@ -184,8 +184,8 @@ export class Player {
       (this._tacArmed || this._sprintHeldFor > T.TAC_HOLD_TIME) && this.stamina > 5;
 
     // --- crouch / slide -----------------------------------------------------
-    const crouchKey = input.down('ControlLeft') || input.down('KeyC') || input.pad.buttons[1];
-    const crouchHit = input.hit('ControlLeft') || input.hit('KeyC');
+    const crouchKey = input.act('crouch') || input.pad.buttons[1];
+    const crouchHit = input.actHit('crouch');
     if (T.CROUCH_TOGGLE) { if (crouchHit) this._crouchWanted = !this._crouchWanted; }
     else this._crouchWanted = crouchKey;
 
@@ -197,11 +197,11 @@ export class Player {
     }
 
     // --- jump ---------------------------------------------------------------
-    if (input.hit('Space') || input.pad.buttons[0]) this._jumpBuffer = T.JUMP_BUFFER;
+    if (input.actHit('jump') || input.pad.buttons[0]) this._jumpBuffer = T.JUMP_BUFFER;
     this._jumpBuffer = Math.max(0, this._jumpBuffer - dt);
 
     // --- lean ---------------------------------------------------------------
-    const l = (input.down('KeyE') ? 1 : 0) - (input.down('KeyQ') ? 1 : 0);
+    const l = (input.act('leanRight') ? 1 : 0) - (input.act('leanLeft') ? 1 : 0);
     this._leanTarget = this.isSprinting || this.isSliding ? 0 : l;
 
     // --- mantle -------------------------------------------------------------
@@ -522,6 +522,18 @@ export class Player {
     this._deathT = 0;
     this.ctx.bus.emit('player:death', {});
   }
+
+  /** Top up, capped. Used by health pickups. */
+  heal(amount) {
+    const before = this.health;
+    this.health = Math.min(T.MAX_HEALTH, this.health + amount);
+    if (this.health !== before) {
+      this.ctx.bus.emit('player:health', { hp: this.health, max: T.MAX_HEALTH });
+    }
+    return this.health - before;
+  }
+
+  get maxHealth() { return T.MAX_HEALTH; }
 
   respawn() {
     this.dead = false;

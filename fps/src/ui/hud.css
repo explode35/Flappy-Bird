@@ -1037,3 +1037,30 @@ input[type=range]::-moz-range-thumb {
 }
 /* Last resort: never let the prompt be unreachable. */
 .menu__inner { max-height: 100vh; overflow-y: auto; padding: calc(16 * var(--px)) 0; }
+
+/* --- rebindable control list ------------------------------------------- */
+.binds { display: flex; flex-direction: column; align-items: center; }
+.keys__cap--bind { cursor: pointer; min-width: calc(46 * var(--px)); text-align: center; }
+.keys__cap--bind:hover { background: rgba(var(--base), .16); border-color: rgba(var(--base), .5); }
+.keys__cap--bind.listening {
+  color: rgb(var(--warn));
+  border-color: rgba(var(--warn), .8);
+  background: rgba(var(--warn), .12);
+}
+.keys__cap--fixed { opacity: .72; }
+.binds__foot {
+  display: flex; align-items: center; gap: calc(16 * var(--px));
+  margin-top: calc(18 * var(--px));
+}
+.binds__hint { font-size: calc(11 * var(--px)); letter-spacing: calc(1.6 * var(--px)); color: var(--fg-mute); }
+.binds__reset {
+  font-family: inherit;
+  font-size: calc(11 * var(--px));
+  letter-spacing: calc(2 * var(--px));
+  color: var(--fg-dim);
+  background: none;
+  border: 1px solid rgba(var(--base), .22);
+  padding: calc(4 * var(--px)) calc(10 * var(--px));
+  cursor: pointer;
+}
+.binds__reset:hover { color: var(--fg-hot); border-color: rgba(var(--base), .5); }

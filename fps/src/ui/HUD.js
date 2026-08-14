@@ -53,25 +53,7 @@ const WEAPON_ICON = {
 };
 const ICON_BY_NAME = { M4A1: 'm4', 'MP5A3': 'mp5', MP5: 'mp5', M1911: 'm1911' };
 
-/**
- * The control list, in the order a new player needs it: move, then look and
- * shoot, then everything else. Shown on the start menu and again on pause.
- */
-const CONTROLS = [
-  ['W A S D', 'Move'],
-  ['MOUSE', 'Look'],
-  ['LEFT-CLICK', 'Fire'],
-  ['RIGHT-CLICK', 'Aim down sights'],
-  ['R', 'Reload'],
-  ['1 / 2 / 3', 'Rifle / SMG / pistol'],
-  ['SHIFT', 'Sprint  (double-tap to run flat out)'],
-  ['CTRL / C', 'Crouch  (sprint + crouch to slide)'],
-  ['SPACE', 'Jump and mantle'],
-  ['G', 'Grenade  (hold to cook)'],
-  ['Q / E', 'Lean'],
-  ['F', 'Inspect weapon'],
-  ['ESC', 'Pause'],
-];
+import { ACTIONS, keyLabel } from '../core/Bindings.js';
 
 export class HUD {
   constructor(ctx) {
@@ -222,19 +204,7 @@ export class HUD {
       el('menu__t', 'div', 'HARBOUR'),
       el('menu__s', 'div', 'WAVE SURVIVAL — HOLD THE HARBOUR DISTRICT')
     );
-    const keys = el('keys');
-    for (const [k, what] of CONTROLS) {
-      const rowEl = el('keys__r');
-      const kEl = el('keys__k');
-      // A control can need more than one key: "1 / 2 / 3".
-      for (const cap of k.split(' ')) {
-        if (cap === '/') { kEl.appendChild(el('keys__or', 'span', '/')); continue; }
-        kEl.appendChild(el('keys__cap', 'kbd', cap));
-      }
-      rowEl.append(kEl, el('keys__w', 'div', what));
-      keys.appendChild(rowEl);
-    }
-    mi.appendChild(keys);
+    mi.appendChild(this._buildBindPanel());
     this.menuGo = el('menu__go', 'div', 'CLICK ANYWHERE TO PLAY');
     mi.appendChild(this.menuGo);
     this.menu.appendChild(mi);
@@ -250,18 +220,7 @@ export class HUD {
     );
     // Same control list as the menu — this is where people actually look for
     // it once they are already playing.
-    const pkeys = el('keys keys--sm');
-    for (const [k, what] of CONTROLS) {
-      const rowEl = el('keys__r');
-      const kEl = el('keys__k');
-      for (const cap of k.split(' ')) {
-        if (cap === '/') { kEl.appendChild(el('keys__or', 'span', '/')); continue; }
-        kEl.appendChild(el('keys__cap', 'kbd', cap));
-      }
-      rowEl.append(kEl, el('keys__w', 'div', what));
-      pkeys.appendChild(rowEl);
-    }
-    pi.appendChild(pkeys);
+    pi.appendChild(this._buildBindPanel(true));
     pi.appendChild(el('pause__s', 'div', 'CLICK — resume     R — restart'));
     this.pause.appendChild(pi);
     R.appendChild(this.pause);
@@ -279,6 +238,84 @@ export class HUD {
 
     // Everything except the loading screen is hidden until the game starts.
     this._setPlayVisible(false);
+  }
+
+  /**
+   * The control list, rendered from the live bindings so it is always the
+   * truth rather than a hand-maintained copy of it. Click a key to rebind.
+   * Built twice — once for the start menu, once for pause — and both instances
+   * refresh on 'input:bindings'.
+   */
+  _buildBindPanel(small) {
+    const wrap = el(`binds${small ? ' binds--sm' : ''}`);
+    const grid = el('keys');
+    this._bindRows = this._bindRows || [];
+
+    // Mouse is fixed. Saying so beats leaving a new player to guess.
+    for (const [cap, what] of [['LEFT-CLICK', 'Fire'], ['RIGHT-CLICK', 'Aim down sights'], ['MOUSE', 'Look']]) {
+      const r = el('keys__r');
+      const k = el('keys__k');
+      k.appendChild(el('keys__cap keys__cap--fixed', 'kbd', cap));
+      r.append(k, el('keys__w', 'div', what));
+      grid.appendChild(r);
+    }
+
+    for (const a of ACTIONS) {
+      const r = el('keys__r');
+      const k = el('keys__k');
+      const btn = el('keys__cap keys__cap--bind', 'kbd', '');
+      btn.tabIndex = 0;
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        this._beginRebind(a, btn);
+      });
+      k.appendChild(btn);
+      r.append(k, el('keys__w', 'div', a.label));
+      grid.appendChild(r);
+      this._bindRows.push({ action: a, btn });
+    }
+    wrap.appendChild(grid);
+
+    const foot = el('binds__foot');
+    const reset = el('binds__reset', 'button', 'RESET TO DEFAULTS');
+    reset.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.ctx.input.resetBindings();
+    });
+    foot.append(el('binds__hint', 'div', 'Click a key to change it · ESC cancels'), reset);
+    wrap.appendChild(foot);
+
+    this._refreshBinds();
+    return wrap;
+  }
+
+  _beginRebind(action, btn) {
+    if (this._rebinding) {
+      this.ctx.input.cancelCapture();
+      this._refreshBinds();
+    }
+    this._rebinding = btn;
+    btn.classList.add('listening');
+    btn.textContent = 'PRESS A KEY';
+    this.ctx.input.captureNextKey((code) => {
+      this._rebinding = null;
+      btn.classList.remove('listening');
+      if (code) {
+        const clash = this.ctx.input.rebind(action.id, code);
+        if (clash) this.objective(`${keyLabel(code).toUpperCase()} taken from ${clash.label.toUpperCase()}`);
+      }
+      this._refreshBinds();
+    });
+  }
+
+  /** Repaint every bind button from the current bindings. */
+  _refreshBinds() {
+    const b = this.ctx.input?.bindings;
+    if (!b || !this._bindRows) return;
+    for (const { action, btn } of this._bindRows) {
+      if (btn === this._rebinding) continue;
+      btn.textContent = keyLabel((b[action.id] || [])[0]);
+    }
   }
 
   /** Fade the loading screen out, then take it out of the layout entirely. */
@@ -360,6 +397,7 @@ export class HUD {
       this.pause.classList.remove('hidden');
       requestAnimationFrame(() => this.pause.classList.add('on'));
     });
+    bus.on('input:bindings', () => this._refreshBinds());
     bus.on('input:lock', () => {
       this._everStarted = true;
       this.pause.classList.remove('on');

@@ -11,6 +11,7 @@ import { Enemies } from './ai/Enemies.js';
 import { HUD } from './ui/HUD.js';
 import { Audio } from './audio/Audio.js';
 import { Director } from './game/Director.js';
+import { Pickups } from './game/Pickups.js';
 
 async function boot() {
   const canvas = document.getElementById('c');
@@ -27,6 +28,7 @@ async function boot() {
   ctx.player    = engine.add(new Player(ctx));
   ctx.weapons   = engine.add(new Weapons(ctx));
   ctx.enemies   = engine.add(new Enemies(ctx));
+  ctx.pickups   = engine.add(new Pickups(ctx));
   ctx.director  = engine.add(new Director(ctx));
   ctx.hud       = engine.add(new HUD(ctx));
 

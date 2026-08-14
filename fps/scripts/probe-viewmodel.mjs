@@ -55,11 +55,19 @@ await page.evaluate(() => {
   ctx.input.locked = true;
   ctx.player.frozen = false;
   ctx.player.dead = false;
-  ctx.player.yaw = 2.4;
-  ctx.player.pitch = 0;
+  // Down the plaza from the spawn pad, so there is a lit town behind the gun.
+  ctx.player.yaw = 0.15;
+  ctx.player.pitch = -0.04;
 });
 
-const grab = () => page.evaluate(async () => {
+const aim = () => page.evaluate(() => {
+  const { ctx } = window.__game;
+  ctx.player.yaw = 0.15;
+  ctx.player.pitch = -0.04;
+  ctx.camera.updateMatrixWorld(true);
+});
+
+const grabOnce = () => page.evaluate(async () => {
   const raf = () => new Promise((r) => requestAnimationFrame(r));
   for (let i = 0; i < 6; i++) await raf();
   const c = document.querySelector('canvas');
@@ -72,6 +80,23 @@ const grab = () => page.evaluate(async () => {
   for (let i = 0; i < px.length; i += 4 * 31) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
   return { w, h, mean: Math.round(sum / Math.ceil(px.length / (4 * 31))) };
 });
+
+/**
+ * Same retry the screenshot harness needs: a frame read across a task boundary
+ * comes back pure black some of the time on this container's software GL. All
+ * three weapons came back black on the first pass here and it had nothing to
+ * do with the weapons.
+ */
+const grab = async () => {
+  let p = await grabOnce();
+  for (let i = 1; i < 4 && p.mean === 0; i++) {
+    process.stdout.write(`  black frame, retry ${i}\n`);
+    await aim();
+    await page.waitForTimeout(250);
+    p = await grabOnce();
+  }
+  return p;
+};
 
 const bands = async (probe) => {
   const out = [];
@@ -129,6 +154,7 @@ for (let slot = 0; slot < 3; slot++) {
 
   const probe = await grab();
   writeFileSync(resolve(outDir, `${slot + 1}_${info.id}.png`), encodePng({ ...probe, bands: await bands(probe) }));
+  if (probe.mean === 0) console.log('  !! still black after retries — this one is real');
   console.log(
     `${slot + 1}     ${info.name.padEnd(7)} ${info.size.join(' x ').padEnd(22)} ` +
     `(${info.centre.join(', ')})`.padEnd(28) +
