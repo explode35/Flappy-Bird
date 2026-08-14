@@ -30,7 +30,20 @@ const _euler = new THREE.Euler();
 const _up = new THREE.Vector3(0, 1, 0);
 const _origin = new THREE.Vector3();
 
-const HIP_POS = new THREE.Vector3(0.086, -0.082, -0.335);
+// Where the weapon sits relative to the view camera at the hip.
+//
+// This was (0.086, -0.082, -0.335), which put a 0.63 m long rifle 29 cm from
+// a 55-degree camera. scripts/probe-viewmodel.mjs measured what that actually
+// covers: 180% of the frame wide and 328% tall for the M4, 224% x 360% for
+// the pistol. The near corner of the receiver sat about 3 cm from the lens, so
+// selecting weapon 1 filled the screen with unlit gun -- the "black screen"
+// that got reported, faithfully reproduced by the probe.
+//
+// Pushed out to a metre and offset further right and down to hold the same
+// place in the frame. Real scale is kept rather than shrinking the models,
+// because the sight and muzzle anchors are used for ADS alignment and for
+// spawning the flash, and both want to stay physically meaningful.
+const HIP_POS = new THREE.Vector3(0.245, -0.255, -1.0);
 const HIP_ROT = new THREE.Euler(0.026, -0.052, 0.014);
 const SPRINT_POS = new THREE.Vector3(0.118, -0.140, -0.300);
 const SPRINT_ROT = new THREE.Euler(-0.16, 0.55, 0.32);   // ~18deg cant
@@ -117,16 +130,19 @@ export class Weapons {
     // The world sun does not light the viewmodel usefully, so give it a rig of
     // its own — on the camera, so the key stays on the same side of the gun
     // however the player is facing.
-    const key = new THREE.DirectionalLight(0xffd7b0, 2.6);
+    // Toned well down from 2.6/1.15/1.9. A 1.9 rim on metal at roughness 0.28
+    // put a white edge on every surface of the gun and, with the environment
+    // reflecting a bright dusk sky on top, the whole weapon read as chrome.
+    const key = new THREE.DirectionalLight(0xffd7b0, 1.5);
     key.position.set(-0.6, 0.9, 0.5);
-    const fill = new THREE.DirectionalLight(0x7d90a8, 1.15);
+    const fill = new THREE.DirectionalLight(0x7d90a8, 0.55);
     fill.position.set(0.8, -0.2, 0.4);
-    const rim = new THREE.DirectionalLight(0xbfd4ff, 1.9);
+    const rim = new THREE.DirectionalLight(0xbfd4ff, 0.7);
     rim.position.set(0.3, 0.4, -1.0);
     ctx.viewCamera.add(key, fill, rim);
     ctx.viewCamera.add(key.target, fill.target, rim.target);
     ctx.viewScene.environment = ctx.scene.environment;
-    ctx.viewScene.environmentIntensity = 0.65;
+    ctx.viewScene.environmentIntensity = 0.28;
 
     // --- models -------------------------------------------------------------
     let tris = 0;

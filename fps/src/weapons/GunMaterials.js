@@ -46,13 +46,13 @@ export function buildGunMaterials(ctx) {
   // --- Parkerised receiver / machined aluminium -------------------------
   const metal = new THREE.MeshPhysicalMaterial({
     color: 0x4a4c50,
-    roughness: 0.44,
+    roughness: 0.58,
     metalness: 1.0,
     anisotropy: 0.55,
     anisotropyRotation: anisoRot,
     clearcoat: 0.18,
     clearcoatRoughness: 0.55,
-    envMapIntensity: 1.15,
+    envMapIntensity: 0.85,
     emissive: 0x0a0c10,
     emissiveIntensity: 0.55,
   });
@@ -62,13 +62,13 @@ export function buildGunMaterials(ctx) {
   // --- Blued / nitrided steel: barrel, bolt, pins -----------------------
   const steel = new THREE.MeshPhysicalMaterial({
     color: 0x2a2c31,
-    roughness: 0.28,
+    roughness: 0.46,
     metalness: 1.0,
     anisotropy: 0.72,
     anisotropyRotation: anisoRot,
     clearcoat: 0.3,
     clearcoatRoughness: 0.3,
-    envMapIntensity: 1.35,
+    envMapIntensity: 0.9,
     emissive: 0x090b0f,
     emissiveIntensity: 0.5,
   });

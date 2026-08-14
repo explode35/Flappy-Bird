@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { Engine } from './core/Engine.js';
 import { Materials } from './render/Materials.js';
 import { Sky } from './render/Sky.js';
@@ -35,7 +36,9 @@ async function boot() {
   ctx.physics.build();
 
   engine.start();
-  window.__game = { engine, ctx };   // debug handle for the visual-review harness
+  // Debug handle for the review harnesses. THREE rides along so a probe can
+  // build vectors and boxes without resolving the module itself.
+  window.__game = { engine, ctx, THREE };
   document.body.classList.add('ready');
 
   // Pointer lock. `Input.requestLock()` has existed since the input system was
