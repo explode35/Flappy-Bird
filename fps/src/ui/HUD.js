@@ -177,7 +177,7 @@ export class HUD {
     this.pause.append(
       el('pause__h', 'div', 'PAUSED'),
       el('pause__t', 'div', 'Click to resume'),
-      el('pause__s', 'div', 'ESC — resume    R — restart')
+      el('pause__s', 'div', 'CLICK — resume    R — restart')
     );
     R.appendChild(this.pause);
 

@@ -223,8 +223,14 @@ export class Player {
     input.axes(_axes);
 
     // Basis from yaw only — pitch must never tilt the movement plane.
+    //
+    // `right` was (-cos, 0, sin), which is the negative of the actual right
+    // vector: with the camera facing -Z at yaw 0 it pointed at -X. Strafing
+    // was mirrored, so D went left and A went right. It went unnoticed because
+    // pointer lock was never requested, so nobody could turn far enough to
+    // tell which way they were sliding.
     _fwd.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    _right.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
+    _right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     this.forward.copy(_fwd);
     this.right.copy(_right);
 

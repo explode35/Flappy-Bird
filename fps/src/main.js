@@ -37,6 +37,27 @@ async function boot() {
   engine.start();
   window.__game = { engine, ctx };   // debug handle for the visual-review harness
   document.body.classList.add('ready');
+
+  // Pointer lock. `Input.requestLock()` has existed since the input system was
+  // written and nothing ever called it, so `input.locked` stayed false for the
+  // whole session — and that one flag gates look, jump, sprint, crouch, slide,
+  // lean, firing, aiming, reloading, weapon switching and grenades, plus the
+  // audio graph, which only starts on the first lock. What was left was
+  // walking, in silence. Browsers only grant the lock inside a user gesture,
+  // so it has to hang off a real click.
+  const grabPointer = () => {
+    if (ctx.input.locked || ctx.player?.dead) return;
+    ctx.input.requestLock();
+  };
+  // On the document, not the canvas: the pause and loading screens sit over it
+  // with pointer-events enabled, and clicking them has to get you back in.
+  document.addEventListener('mousedown', grabPointer);
+
+  // Escape drops the lock (the browser does that itself, we cannot stop it),
+  // which raises the pause screen. The simulation has to stop with it —
+  // otherwise the enemies keep shooting at a player who is reading a menu.
+  ctx.bus.on('input:unlock', () => { if (engine.frame > 120) engine.paused = true; });
+  ctx.bus.on('input:lock', () => { engine.paused = false; });
 }
 
 boot().catch((err) => {
