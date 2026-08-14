@@ -35,9 +35,22 @@ right mouse to aim.
 
 ```bash
 node tests/physics.test.mjs        # 13 capsule-controller / raycast cases
-node scripts/shoot.mjs out/        # boots the real game headless, writes 10 PNGs
+node scripts/probe-input.mjs       # drives real key/mouse events into the game
+node scripts/shoot.mjs out/        # boots the real game headless, writes 14 PNGs
 node scripts/check.mjs <file>      # syntax/import check for one module
 ```
+
+`probe-input.mjs` exists because of a bug that shipped for the life of the
+project: `Input.requestLock()` was written and never called, so pointer lock
+was never requested, `input.locked` was permanently false, and that one flag
+gates look, jump, sprint, crouch, slide, lean, firing, aiming, reloading,
+weapon switching, grenades and the audio graph. All that worked was walking.
+Thirteen physics tests covered the capsule in detail and not one of them
+joined a key press to the player.
+
+It reports movement in the player's own frame — `fwd` and `right` — because
+strafing was simultaneously mirrored, and any check that only asked "did the
+player move" would have passed on both bugs.
 
 `scripts/shoot.mjs` is the visual review harness. It runs the shipping build in
 headless Chromium, drives the camera to ten scripted vantage points, and writes

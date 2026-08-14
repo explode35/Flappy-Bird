@@ -12,10 +12,16 @@
  */
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// Static half of the check: the runtime half cannot see this, because the
+// probe forces input.locked itself in order to test anything at all.
+const mainSrc = readFileSync(resolve(root, 'src/main.js'), 'utf8');
+const hasLockCall = /requestLock\s*\(/.test(mainSrc);
 const server = await createServer({ root, server: { port: 5231, host: '127.0.0.1' }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({
@@ -121,9 +127,11 @@ const idle = await testKey('KeyZ', 50);   // a key nothing binds
 console.log(`idle  fwd=${idle.fwd} right=${idle.right} dy=${idle.dy} grounded=${idle.isGrounded}`);
 
 console.log('--- movement (fwd/right are in the player\'s own frame) ---');
+const moves = {};
 for (const code of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) {
   await respawn();
   const r = await testKey(code);
+  moves[code] = r;
   console.log(`${code}  fwd=${String(r.fwd).padStart(6)} right=${String(r.right).padStart(6)} dy=${String(r.dy).padStart(6)}` +
     `  peakSpeed=${String(r.peakSpeed).padStart(5)}  grounded=${r.isGrounded}  keySeen=${r.keySeen}`);
 }
@@ -137,6 +145,33 @@ console.log('--- fire ---');
 await respawn();
 const f = await testFire();
 console.log(`mouse0 shots=${f.shots} ammo ${f.ammoBefore}->${f.ammoAfter} mouseSeen=${f.mouseSeen} weapon=${f.weaponName}`);
+
+// ---------------------------------------------------------------------------
+//  Assertions. This is the regression test the project did not have: thirteen
+//  physics cases covering the capsule, and nothing joining a key press to the
+//  player. Pointer lock going unrequested for the life of the project is
+//  exactly the kind of thing an integration check catches and a unit test
+//  never will.
+// ---------------------------------------------------------------------------
+const fails = [];
+const check = (name, ok, detail) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
+  if (!ok) fails.push(name);
+};
+
+console.log('--- checks ---');
+check('idle player rests, does not drift or fall',
+  Math.abs(idle.dy) < 0.05 && Math.abs(idle.fwd) < 0.05 && Math.abs(idle.right) < 0.05,
+  `dy=${idle.dy} fwd=${idle.fwd} right=${idle.right}`);
+check('W walks forward', moves.KeyW.fwd > 2 && Math.abs(moves.KeyW.right) < 1, `fwd=${moves.KeyW.fwd}`);
+check('S walks back', moves.KeyS.fwd < -1 && Math.abs(moves.KeyS.right) < 1, `fwd=${moves.KeyS.fwd}`);
+// Direction matters, not just magnitude: strafing was mirrored for the whole
+// life of the project and every "did it move" check would have passed.
+check('A strafes LEFT', moves.KeyA.right < -1 && Math.abs(moves.KeyA.fwd) < 1, `right=${moves.KeyA.right}`);
+check('D strafes RIGHT', moves.KeyD.right > 1 && Math.abs(moves.KeyD.fwd) < 1, `right=${moves.KeyD.right}`);
+check('Space jumps', j.peakUp > 2, `peakUp=${j.peakUp}`);
+check('mouse fires', f.shots > 0, `shots=${f.shots}`);
+check('pointer lock is requested somewhere', hasLockCall, hasLockCall ? '' : 'Input.requestLock() has no call sites');
 
 console.log('--- state ---');
 console.log(await page.evaluate(() => {
@@ -159,3 +194,9 @@ if (errors.length) {
 
 await browser.close();
 await server.close();
+
+if (fails.length) {
+  console.log(`\n${fails.length} FAILED: ${fails.join(', ')}`);
+  process.exit(1);
+}
+console.log('\nall input checks passed');
