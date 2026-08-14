@@ -176,6 +176,47 @@ for (let slot = 0; slot < 3; slot++) {
     console.log(noRig.mean > 0
       ? '     => the viewmodel is what is blacking the frame'
       : '     => NOT the viewmodel; the world pass itself is black here');
+
+    if (noRig.mean > 0) {
+      // Which node? The equipped model measures small, so something else under
+      // the rig is large. Walk every visible mesh and report the worst.
+      const worst = await page.evaluate(() => {
+        const { ctx, THREE } = window.__game;
+        const cam = ctx.viewCamera;
+        cam.updateMatrixWorld(true);
+        ctx.weapons.rig.updateWorldMatrix(true, true);
+        const rows = [];
+        ctx.weapons.rig.traverseVisible((o) => {
+          if (!o.isMesh || !o.geometry) return;
+          const box = new THREE.Box3().setFromObject(o);
+          if (!isFinite(box.min.x)) return;
+          let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, nearest = 1e9;
+          for (const cx of [box.min.x, box.max.x])
+            for (const cy of [box.min.y, box.max.y])
+              for (const cz of [box.min.z, box.max.z]) {
+                const v = new THREE.Vector3(cx, cy, cz);
+                const local = cam.worldToLocal(v.clone());
+                nearest = Math.min(nearest, -local.z);
+                const p = v.project(cam);
+                x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+                y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+              }
+          rows.push({
+            name: o.name || o.parent?.name || '(unnamed)',
+            mat: o.material?.name || o.material?.type || '?',
+            w: +((x1 - x0) / 2).toFixed(2), h: +((y1 - y0) / 2).toFixed(2),
+            near: +nearest.toFixed(3),
+          });
+        });
+        rows.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+        return rows.slice(0, 6);
+      });
+      console.log('     largest visible meshes in the rig:');
+      for (const r of worst) {
+        console.log(`       ${String(r.name).padEnd(18)} ${r.mat.padEnd(20)} ` +
+          `${(r.w * 100).toFixed(0)}% x ${(r.h * 100).toFixed(0)}%  nearest z=${r.near}`);
+      }
+    }
   }
   console.log(
     `${slot + 1}     ${info.name.padEnd(7)} ${info.size.join(' x ').padEnd(22)} ` +
