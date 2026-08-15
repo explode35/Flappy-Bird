@@ -18,8 +18,48 @@ import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * Name the cache-key fields instead of eyeballing a string diff.
+ *
+ * Six diagnoses of this bug were read off a truncated key window and all six
+ * were wrong. three.js builds the key as
+ *
+ *     shaderID, ...getProgramCacheKeyParameters, booleanMask,
+ *     renderer.outputColorSpace, customProgramCacheKey
+ *
+ * so token[0] is the shader id and token[1 + i] is parameters[i], in the push
+ * order of getProgramCacheKeyParameters. That order is scraped straight out of
+ * the installed three.js rather than hardcoded, so it cannot drift out of date.
+ * Confirmed against a real key: srgb-linear,306,1024,uv lines up with
+ * outputColorSpace, envMapMode, envMapCubeUVHeight, mapUv.
+ *
+ * customProgramCacheKey is last and can itself contain commas, so fields are
+ * only labelled up to the boolean mask and the rest is reported verbatim.
+ */
+const KEY_FIELDS = (() => {
+  const src = readFileSync(resolve(root, 'node_modules/three/src/renderers/webgl/WebGLPrograms.js'), 'utf8');
+  const i = src.indexOf('function getProgramCacheKeyParameters');
+  const j = src.indexOf('\n\t}', i);
+  const params = [...src.slice(i, j).matchAll(/array\.push\(\s*parameters\.(\w+)/g)].map((m) => m[1]);
+  return ['shaderID', ...params, 'booleanMask', 'outputColorSpace'];
+})();
+
+function labelledDiff(a, b) {
+  const ta = a.split(','), tb = b.split(',');
+  const out = [];
+  for (let i = 0; i < Math.max(ta.length, tb.length); i++) {
+    if (ta[i] === tb[i]) continue;
+    const name = KEY_FIELDS[i] ?? (i >= KEY_FIELDS.length ? 'customProgramCacheKey' : `field[${i}]`);
+    if (name === 'customProgramCacheKey' && out.some((o) => o.startsWith('customProgramCacheKey'))) continue;
+    const clip = (s) => (s === undefined ? '(absent)' : s.length > 60 ? `${s.slice(0, 60)}…` : s);
+    out.push(`${name}: ${clip(ta[i])}  ->  ${clip(tb[i])}`);
+  }
+  return out;
+}
 const server = await createServer({ root, server: { port: 5243, host: '127.0.0.1' }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({
@@ -153,6 +193,8 @@ const { out: rows, added, diffs, spawned } = await page.evaluate(async () => {
     }
     return {
       at: bestAt,
+      key: k,
+      nearest: best || '',
       newTail: k.slice(Math.max(0, bestAt - 40), bestAt + 60),
       oldTail: best ? best.slice(Math.max(0, bestAt - 40), bestAt + 60) : '',
       name: (ctx.renderer.info.programs || []).find((p) => progKey(p) === k)?.name || '?',
@@ -209,12 +251,17 @@ if (added.length) {
   for (let i = 0; i < added.length; i++) {
     const d = diffs[i];
     console.log(`  --- new program ${i + 1} (${d.name}), diverges from the nearest existing key at char ${d.at}`);
-    console.log(`      existing: ...${d.oldTail}`);
-    console.log(`      new     : ...${d.newTail}`);
+    const named = labelledDiff(d.nearest, d.key);
+    console.log(`      differs from the nearest existing program in ${named.length} field(s):`);
+    for (const n of named) console.log(`        ${n}`);
     console.log(`      used by : ${d.owners.length ? d.owners.join('\n                ') : '(no live object still holds it)'}`);
   }
 } else {
   console.log('\nno programs compiled during the burst');
+}
+if (added.length === 2) {
+  console.log('\nthe two new programs differ from each other in:');
+  for (const n of labelledDiff(diffs[0].key, diffs[1].key)) console.log(`  ${n}`);
 }
 console.log(`\nmeshes added to the scene during the burst: ${spawned.length ? spawned.join(', ') : '(none)'}`);
 if (errs.length) console.log(`\n${errs.length} errors:\n` + [...new Set(errs)].slice(0, 4).join('\n'));
