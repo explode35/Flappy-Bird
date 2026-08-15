@@ -508,9 +508,20 @@ export class Effects {
     this._muzzleT = -1;
 
     // A pool of short-lived point lights for impacts and explosions.
+    //
+    // They stay visible for the life of the game and are driven by intensity
+    // alone. Toggling `visible` on a light changes three.js's lights hash,
+    // which changes every affected material's program cache key, which
+    // recompiles those programs — mid-fight, at four times the frame budget.
+    // That is measurably what happened: firing compiled two MeshPhysicalMaterial
+    // programs, and the physical materials in this game are the gun.
+    //
+    // Four always-on point lights at intensity 0 cost a few instructions per
+    // lit fragment. A recompile costs a visible hitch. Easy trade, and the
+    // same reason the interior practicals are a fixed-size pool.
     for (let i = 0; i < 4; i++) {
       const l = new THREE.PointLight(0xffffff, 0, 20, 2);
-      l.visible = false;
+      l.visible = true;
       this.ctx.scene.add(l);
       this._lights.push({ light: l, t: -1, dur: 0, peak: 0 });
     }
@@ -520,7 +531,6 @@ export class Effects {
     let slot = this._lights.find((l) => l.t < 0) || this._lights[0];
     slot.light.position.copy(pos);
     slot.light.color.setHex(color);
-    slot.light.visible = true;
     slot.t = 0; slot.dur = dur; slot.peak = peak;
   }
 
@@ -997,7 +1007,8 @@ export class Effects {
       if (l.t < 0) continue;
       l.t += dt;
       const k = 1 - l.t / l.dur;
-      if (k <= 0) { l.t = -1; l.light.visible = false; l.light.intensity = 0; continue; }
+      // Intensity to zero, never visibility — see the pool comment above.
+      if (k <= 0) { l.t = -1; l.light.intensity = 0; continue; }
       l.light.intensity = l.peak * k * k;
     }
   }
