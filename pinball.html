@@ -1722,12 +1722,58 @@ function glow(ctx, x, y, r, color, strength) {
 }
 
 /* ============================================================== backdrop ==
-   Painted once per level into an offscreen table-sized canvas. */
-let bgCanvas = null, bgLevel = -1;
+   Painted once per level into an offscreen table-sized canvas.
+
+   That canvas is written once and then only ever read, which makes it exactly
+   the kind of surface a browser is entitled to throw away when memory or
+   power gets tight — and it comes back blank, silently, with nothing thrown.
+   The symptom is a table with no water, no walls and no rails while every
+   per-frame sprite keeps drawing perfectly.  Three defences: keep the surface
+   in CPU memory so it is not a GPU resource at all, listen for an explicit
+   context loss, and probe a few pixels we know we painted bright so a blank
+   backdrop repaints itself within a second even if nothing told us. */
+let bgCanvas = null, bgCtx = null, bgLevel = -1, bgProbe = null;
+
+function bgContext() {
+  if (bgCanvas && bgCtx) return bgCtx;
+  bgCanvas = document.createElement('canvas');
+  bgCanvas.width = TW; bgCanvas.height = TH;
+  /* willReadFrequently keeps the backing store on the CPU side */
+  bgCtx = bgCanvas.getContext('2d', { willReadFrequently: true });
+  const lost = () => { bgLevel = -1; bgProbe = null; for (const k in _glowCache) delete _glowCache[k]; };
+  bgCanvas.addEventListener('contextlost', lost);
+  bgCanvas.addEventListener('contextrestored', lost);
+  return bgCtx;
+}
+
+/* Remember a handful of pixels this paint made bright, so we can tell later
+   whether the surface still holds what we drew. */
+function bgTakeProbe() {
+  bgProbe = [];
+  try {
+    const d = bgCtx.getImageData(0, 0, TW, TH).data;
+    for (let y = 40; y < TH - 40 && bgProbe.length < 6; y += 17) {
+      for (let x = 8; x < TW - 8; x += 13) {
+        const i = (y * TW + x) * 4;
+        if (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2] > 120) { bgProbe.push([x, y]); break; }
+      }
+    }
+  } catch (e) { bgProbe = null; }
+}
+function bgIntact() {
+  if (!bgProbe || !bgProbe.length) return true;      /* nothing to check against */
+  try {
+    for (const [x, y] of bgProbe) {
+      const d = bgCtx.getImageData(x, y, 1, 1).data;
+      if (0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2] > 60) return true;
+    }
+  } catch (e) { return true; }
+  return false;                                       /* every bright probe went dark */
+}
+
 function paintBackdrop(level) {
   const L = LEVELS[clamp(level, 0, LEVELS.length - 1)];
-  if (!bgCanvas) { bgCanvas = document.createElement('canvas'); bgCanvas.width = TW; bgCanvas.height = TH; }
-  const c = bgCanvas.getContext('2d');
+  const c = bgContext();
   c.fillStyle = PAL.ink; c.fillRect(0, 0, TW, TH);
   seedRnd(1337 + level * 77);
 
@@ -1821,6 +1867,7 @@ function paintBackdrop(level) {
   paintPlayfieldArt(c, L, level);
   paintStaticGeometry(c);
   bgLevel = level;
+  bgTakeProbe();
 }
 
 /* ------------ the artwork silkscreened onto the playfield itself --------- */
@@ -2351,9 +2398,19 @@ function drawPlunger(c) {
 }
 
 /* ============================================================== the frame */
+let bgCheck = 0;
 function render(ctx, t) {
   const T = G.T, p = G.players[G.cur];
-  if (bgLevel !== (p ? p.level : 0)) paintBackdrop(p ? p.level : 0);
+  const want = p ? p.level : 0;
+  /* Roughly once a second, confirm the backdrop still holds what we painted.
+     If the surface was discarded under us, this is what puts the table back. */
+  if (++bgCheck >= 60) { bgCheck = 0; if (bgLevel >= 0 && !bgIntact()) bgLevel = -1; }
+  if (bgLevel !== want) {
+    /* A throw part-way through would otherwise leave a half-painted table for
+       the rest of the game, repainting black over and over. */
+    try { paintBackdrop(want); }
+    catch (e) { bgLevel = want; bgProbe = null; }
+  }
 
   ctx.save();
   const sx = Math.round(G.shake.x), sy = Math.round(G.shake.y);
