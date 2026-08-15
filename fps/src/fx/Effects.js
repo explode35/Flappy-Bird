@@ -858,8 +858,35 @@ export class Effects {
     force(this.muzzleGlow);
     if (this.decalGroup) force(this.decalGroup);
 
+    // Every gun material, on a scratch mesh each.
+    //
+    // The last two programs compiling mid-fight were physical materials with
+    // no texture maps at all — the cache key diff showed `uv` in the map slots
+    // of everything already loaded and `false` across the board in the new
+    // ones. In this codebase that is the handful of gun materials with no
+    // inheritMaps() call: brass, copper, paint, tritium. Brass and copper turn
+    // up when the dropped magazine spawns on the first reload, which is why it
+    // landed 27 frames into a 30-round burst rather than on the first shot.
+    const gunMats = this.ctx.weapons?.mats;
+    let scratch = null;
+    if (gunMats) {
+      scratch = new THREE.Group();
+      scratch.name = 'fx.warmScratch';
+      const cube = new THREE.BoxGeometry(0.01, 0.01, 0.01);
+      for (const m of gunMats._all || Object.values(gunMats)) {
+        if (m && m.isMaterial) scratch.add(new THREE.Mesh(cube, m));
+      }
+      scratch.position.set(0, -400, 0);
+      this.ctx.viewScene.add(scratch);
+    }
+
     r.compile?.(this.ctx.scene, this.ctx.camera);
     r.compile?.(this.ctx.viewScene, this.ctx.viewCamera);
+
+    if (scratch) {
+      this.ctx.viewScene.remove(scratch);
+      scratch.children[0]?.geometry?.dispose?.();
+    }
 
     for (const [o, vis, count] of saved) {
       o.visible = vis;

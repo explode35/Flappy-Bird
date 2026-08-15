@@ -38,7 +38,7 @@ await page.waitForFunction(() => !!window.__game, { timeout: 220000 });
 await page.waitForFunction(() => window.__game.engine.frame > 30, { timeout: 220000 }).catch(() => {});
 await page.waitForTimeout(2500);
 
-const { out: rows, added, diffs } = await page.evaluate(async () => {
+const { out: rows, added, diffs, spawned } = await page.evaluate(async () => {
   const { ctx, engine } = window.__game;
   ctx.enemies?.clearAll?.();
   ctx.player.respawn?.();
@@ -90,8 +90,50 @@ const { out: rows, added, diffs } = await page.evaluate(async () => {
   // programs look identical to each other and to what was already there,
   // which is worse than useless.
   const progKey = (pr) => String(pr.cacheKey || pr.name || '?');
+  // Walk both scenes and ask the renderer which program each material is
+  // actually using, so a new key can be named instead of inferred from a
+  // diff. Four inferences from the key alone have now been wrong.
+  const owners = (keys) => {
+    const want = new Set(keys);
+    const found = [];
+    const visit = (root, tag) => root?.traverse?.((o) => {
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of mats) {
+        const p = ctx.renderer.properties.get(m);
+        const cur = p?.currentProgram;
+        const all = cur ? [cur] : [];
+        if (p?.programs) for (const v of p.programs.values()) all.push(v);
+        for (const pr of all) {
+          if (!want.has(progKey(pr))) continue;
+          const chain = [];
+          for (let n = o; n && chain.length < 5; n = n.parent) chain.push(n.name || n.type);
+          const maps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap']
+            .filter((k) => m[k]);
+          const attrs = Object.keys(o.geometry?.attributes || {}).join('+');
+          found.push(
+            `${tag}: ${chain.join(' < ')} | ${m.type}${m.name ? ` "${m.name}"` : ''} ` +
+            `maps=[${maps.join(',') || 'none'}] transparent=${m.transparent} ` +
+            `attrs=[${attrs}] tris=${(o.geometry?.index?.count || o.geometry?.attributes?.position?.count || 0) / 3 | 0}`
+          );
+          return;
+        }
+      }
+    });
+    visit(ctx.scene, 'scene');
+    visit(ctx.viewScene, 'view');
+    return [...new Set(found)];
+  };
   const beforeKeys = (ctx.renderer.info.programs || []).map(progKey);
   const before = new Set(beforeKeys);
+
+  // Also record what appears in the scene graph during the burst. The program
+  // owner search finds a material; this finds the object that brought it.
+  const census = () => {
+    const m = new Map();
+    ctx.scene.traverse((o) => { if (o.isMesh) m.set(o.uuid, o.name || o.type); });
+    return m;
+  };
+  const sceneBefore = census();
 
   for (let i = 0; i < 14; i++) await step('idle', i === 12);
   window.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
@@ -113,9 +155,21 @@ const { out: rows, added, diffs } = await page.evaluate(async () => {
       at: bestAt,
       newTail: k.slice(Math.max(0, bestAt - 40), bestAt + 60),
       oldTail: best ? best.slice(Math.max(0, bestAt - 40), bestAt + 60) : '',
+      name: (ctx.renderer.info.programs || []).find((p) => progKey(p) === k)?.name || '?',
+      owners: owners([k]),
     };
   });
-  return { out, added, diffs };
+  const spawned = [];
+  {
+    const after = census();
+    const tally = new Map();
+    for (const [uuid, name] of after) {
+      if (sceneBefore.has(uuid)) continue;
+      tally.set(name, (tally.get(name) || 0) + 1);
+    }
+    for (const [name, n] of tally) spawned.push(`${name} x${n}`);
+  }
+  return { out, added, diffs, spawned };
 });
 
 console.log('phase    frame   ms   mean  programs  dpr   calls');
@@ -154,13 +208,15 @@ if (added.length) {
   console.log(`\nprograms compiled during the burst (${added.length}):`);
   for (let i = 0; i < added.length; i++) {
     const d = diffs[i];
-    console.log(`  --- new program ${i + 1}, diverges from the nearest existing key at char ${d.at}`);
+    console.log(`  --- new program ${i + 1} (${d.name}), diverges from the nearest existing key at char ${d.at}`);
     console.log(`      existing: ...${d.oldTail}`);
     console.log(`      new     : ...${d.newTail}`);
+    console.log(`      used by : ${d.owners.length ? d.owners.join('\n                ') : '(no live object still holds it)'}`);
   }
 } else {
   console.log('\nno programs compiled during the burst');
 }
+console.log(`\nmeshes added to the scene during the burst: ${spawned.length ? spawned.join(', ') : '(none)'}`);
 if (errs.length) console.log(`\n${errs.length} errors:\n` + [...new Set(errs)].slice(0, 4).join('\n'));
 
 await browser.close();
