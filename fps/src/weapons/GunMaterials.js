@@ -258,25 +258,34 @@ export function buildGunMaterials(ctx) {
 }
 
 /**
- * Anisotropy without a normal map does not compile.
+ * No anisotropy on the viewmodel. This is the black screen.
  *
- * three.js builds the tangent frame anisotropy needs out of the normal map's
- * UV set — `getTangentFrame(-vViewPosition, normal, vNormalMapUv)` — and
- * `vNormalMapUv` only exists when USE_NORMALMAP is defined. A material with
- * `anisotropy > 0`, no `normalMap` and no tangent attribute therefore
- * references an undeclared varying, the program fails to link, and the broken
- * program takes the whole frame to black. Nothing throws and nothing lands in
- * pageerror, which is why this survived so long: `m4:metal` blacked the screen
- * whenever the map inherit had not landed, and the only symptom was a black
- * screen on weapon 1.
+ * Established by experiment, after four wrong guesses. Bisecting the rig named
+ * one mesh, `m4:metal`; a feature ladder on that mesh gave:
  *
- * Rather than trusting every material to be declared consistently, check.
+ *     baseline                      mean =  0   (normalMap: true)
+ *     anisotropy = 0                mean = 80
+ *     clearcoat = 0                 mean =  2
+ *     plain MeshStandardMaterial    mean = 97
+ *
+ * So it is anisotropy, and it is not the missing-tangent compile error I first
+ * assumed — the material has a normal map and the program links cleanly; the
+ * only GL console message in the whole run is a shadow-map deprecation notice.
+ * The anisotropic BRDF simply evaluates to NaN on this driver.
+ *
+ * A handful of NaN pixels is enough to lose the entire frame, which is what
+ * made this so hard to see. They land in the HDR buffer, UnrealBloomPass
+ * downsamples that buffer through a mip chain, and NaN spreads across every
+ * texel it touches on the way down and back up. By the time the tonemap runs,
+ * every pixel is NaN and the frame is black — so a mesh covering 9% of the
+ * screen blacks 100% of it, intermittently, with nothing logged anywhere.
+ *
+ * Brushed-metal anisotropy on a gun held at arm's length is worth close to
+ * nothing visually. It is not worth a black screen.
  */
 function guardAnisotropy(mats) {
-  for (const [name, m] of Object.entries(mats)) {
+  for (const m of Object.values(mats)) {
     if (!m || !m.isMaterial || !m.anisotropy) continue;
-    if (m.normalMap) continue;
-    console.warn(`[guns] ${m.name || name}: anisotropy needs a normal map, dropping it`);
     m.anisotropy = 0;
     m.anisotropyRotation = 0;
     m.needsUpdate = true;
