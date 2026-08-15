@@ -212,12 +212,13 @@ export class Audio {
 
     // (b) body — filtered noise burst, fast exponential decay
     const bodySrc = noiseSrc(ac, this.noise.white, t0, S.decay * 3, jit(r, 0.04), r);
+    // bandpass() hands back filterChain()'s { in, out, nodes }, not an array.
     const bp = bandpass(ac, S.body * jit(r, 0.06), S.bodyQ, 2);
     const bodyGain = ac.createGain();
     bodyGain.gain.setValueAtTime(1.1 * lvl, t0);
     bodyGain.gain.exponentialRampToValueAtTime(0.0008, t0 + S.decay * 3);
-    bodySrc.connect(bp[0]);
-    bp[bp.length - 1].connect(bodyGain).connect(out);
+    bodySrc.connect(bp.in);
+    bp.out.connect(bodyGain).connect(out);
 
     // (c) resonant crack — a narrow peak riding on top
     const crackSrc = noiseSrc(ac, this.noise.white, t0, 0.05, 1, r);
@@ -225,7 +226,9 @@ export class Audio {
     const crackGain = ac.createGain();
     crackGain.gain.setValueAtTime(0.55 * lvl, t0);
     crackGain.gain.exponentialRampToValueAtTime(0.0008, t0 + 0.05);
-    crackSrc.connect(pk).connect(crackGain).connect(out);
+    // peaking() is a filterChain too: connect through .in / .out.
+    crackSrc.connect(pk.in);
+    pk.out.connect(crackGain).connect(out);
 
     // (d) chest thump — real energy below 120 Hz
     const sub = osc(ac, 'sine', S.sub * jit(r, 0.08), t0, 0.13);
@@ -283,8 +286,8 @@ export class Audio {
     const g = ac.createGain();
     g.gain.setValueAtTime(S.g * jitDb(r, 2), t0);
     g.gain.exponentialRampToValueAtTime(0.0006, t0 + S.dur);
-    src.connect(bp[0]);
-    bp[bp.length - 1].connect(g).connect(out);
+    src.connect(bp.in);
+    bp.out.connect(g).connect(out);
 
     // Ringing partials for metal and glass.
     if (S.tone > 0) {
@@ -306,8 +309,8 @@ export class Audio {
     const g = ac.createGain();
     g.gain.setValueAtTime((running ? 0.22 : 0.13) * jitDb(r, 2.5), t0);
     g.gain.exponentialRampToValueAtTime(0.0004, t0 + 0.09);
-    src.connect(bp[0]);
-    bp[bp.length - 1].connect(g).connect(out);
+    src.connect(bp.in);
+    bp.out.connect(g).connect(out);
   }
 
   reload(phase, empty) {
@@ -349,8 +352,8 @@ export class Audio {
     g.gain.setValueAtTime(0.001, t0);
     g.gain.linearRampToValueAtTime(lvl, t0 + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0004, t0 + 0.09);
-    src.connect(bp[0]);
-    bp[bp.length - 1].connect(g).connect(out);
+    src.connect(bp.in);
+    bp.out.connect(g).connect(out);
   }
 
   explosion(pos) {
