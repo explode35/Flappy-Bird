@@ -118,7 +118,11 @@ export class Player {
   async init() {
     const spawn = this.ctx.level?.spawnPoint || new THREE.Vector3(0, 0.2, 0);
     this.teleport(spawn.x, spawn.y, spawn.z);
-    this.yaw = Math.PI;    // face down the plaza toward -Z
+    // Face down the plaza, toward -Z. This was Math.PI, which with the
+    // forward basis (-sin yaw, 0, -cos yaw) points at +Z -- so the player
+    // spawned facing the back edge of the map, and walking forward walked
+    // them off it. The comment said -Z the whole time; the value did not.
+    this.yaw = this.spawnYaw = 0;
     const bus = this.ctx.bus;
     bus.on('shake', (e) => this.addTrauma(e.amount ?? 0.3));
     bus.on('player:damage', (e) => this.applyDamage(e));
@@ -542,6 +546,10 @@ export class Player {
     this._trauma = 0;
     const s = this.ctx.level?.spawnPoint || new THREE.Vector3();
     this.teleport(s.x, s.y, s.z);
+    // Face back into the map on respawn too, rather than keeping whatever
+    // direction you happened to die looking in.
+    this.yaw = this.spawnYaw ?? 0;
+    this.pitch = 0;
     this.ctx.bus.emit('player:health', { hp: this.health, max: T.MAX_HEALTH });
   }
 
