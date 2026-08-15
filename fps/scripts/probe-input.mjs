@@ -50,10 +50,19 @@ await page.evaluate(() => {
   ctx.player.frozen = false;
 });
 
-/** Put the player back on the spawn pad and let them settle. */
+/**
+ * Put the player back on the spawn pad and let them settle, on an empty map.
+ *
+ * Clearing enemies matters: the probe forces pointer lock at boot, which is
+ * what starts the director spawning, so by the time the movement tests run
+ * there is a live firefight going on. "W walks forward" failed intermittently
+ * across runs (7.94, 11.92, 0.16, 0) for want of this — a soldier standing in
+ * front of the player is a wall, and the test was measuring the wall.
+ */
 const respawn = () => page.evaluate(async () => {
   const { ctx } = window.__game;
   const p = ctx.player;
+  ctx.enemies?.clearAll?.();
   if (p.respawn) p.respawn();
   else {
     const s = ctx.level.spawnPoint;
