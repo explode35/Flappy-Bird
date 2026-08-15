@@ -42,6 +42,15 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
 page.setDefaultTimeout(240000);
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+// three.js reports a failed program link through console.error, not by
+// throwing. Not capturing this is why four rounds of diagnosis had no error
+// message to work from.
+const consoleErrors = [];
+page.on('console', (m) => {
+  if (m.type() !== 'error' && m.type() !== 'warning') return;
+  const t = m.text();
+  if (/shader|program|glsl|webgl|uniform|varying|attribute/i.test(t)) consoleErrors.push(t);
+});
 
 await page.goto('http://127.0.0.1:5237/?quality=medium&capture=1', { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.__game, { timeout: 220000 });
@@ -214,6 +223,59 @@ for (let slot = 0; slot < 3; slot++) {
       });
       console.log(`     bisect: ${culprit.total} visible nodes tested`);
       if (culprit.found.length === 1) {
+        // Ladder: turn off one material feature at a time on the offending
+        // mesh and see which one brings the frame back. This tests the thing
+        // itself rather than a property I believe it to have.
+        const ladder = await page.evaluate(async (name) => {
+          const { ctx, THREE } = window.__game;
+          let target = null;
+          ctx.weapons.rig.traverse((o) => { if ((o.name || o.parent?.name) === name && o.isMesh) target = o; });
+          if (!target) return null;
+          const m = target.material;
+          const read = async () => {
+            for (let i = 0; i < 6; i++) await new Promise((r) => requestAnimationFrame(r));
+            const c = document.querySelector('canvas');
+            const gl = ctx.renderer.getContext();
+            const px = new Uint8Array(c.width * c.height * 4);
+            gl.readPixels(0, 0, c.width, c.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+            let sum = 0, n = 0;
+            for (let i = 0; i < px.length; i += 4 * 61, n++) sum += (px[i] + px[i + 1] + px[i + 2]) / 3;
+            return Math.round(sum / n);
+          };
+          const out = [];
+          const saved = {
+            anisotropy: m.anisotropy, clearcoat: m.clearcoat,
+            normalMap: m.normalMap, hasNormalMap: !!m.normalMap,
+          };
+          out.push({ step: 'baseline (nothing changed)', mean: await read(), hasNormalMap: saved.hasNormalMap });
+
+          m.anisotropy = 0; m.needsUpdate = true;
+          out.push({ step: 'anisotropy = 0', mean: await read() });
+          m.anisotropy = saved.anisotropy; m.needsUpdate = true;
+
+          m.clearcoat = 0; m.needsUpdate = true;
+          out.push({ step: 'clearcoat = 0', mean: await read() });
+          m.clearcoat = saved.clearcoat; m.needsUpdate = true;
+
+          const plain = new THREE.MeshStandardMaterial({ color: 0x4a4c50, roughness: 0.6, metalness: 1 });
+          target.material = plain;
+          out.push({ step: 'plain MeshStandardMaterial', mean: await read() });
+          target.material = m;
+
+          target.geometry.computeVertexNormals();
+          out.push({ step: 'recomputed vertex normals', mean: await read() });
+          return out;
+        }, culprit.found[0].name);
+        if (ladder) {
+          console.log('     feature ladder on the offending mesh:');
+          for (const r of ladder) {
+            console.log(`       ${String(r.step).padEnd(30)} mean=${String(r.mean).padStart(3)}` +
+              (r.hasNormalMap !== undefined ? `  (normalMap: ${r.hasNormalMap})` : ''));
+          }
+        }
+      }
+
+      if (false) {
         // Name it, then look inside it. A mesh covering 9% of the frame cannot
         // black the frame by being in the way, so the answer is in its data.
         const d = await page.evaluate((name) => {
@@ -306,6 +368,13 @@ for (let slot = 0; slot < 3; slot++) {
     `(${info.centre.join(', ')})`.padEnd(28) +
     ` ${(info.coverW * 100).toFixed(0)}% wide x ${(info.coverH * 100).toFixed(0)}% tall`
   );
+}
+
+if (consoleErrors.length) {
+  console.log(`\n--- ${consoleErrors.length} shader/GL console messages ---`);
+  for (const t of [...new Set(consoleErrors)].slice(0, 4)) console.log(t.slice(0, 1400));
+} else {
+  console.log('\nno shader/GL console messages');
 }
 
 await browser.close();
