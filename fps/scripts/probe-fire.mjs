@@ -38,7 +38,7 @@ await page.waitForFunction(() => !!window.__game, { timeout: 220000 });
 await page.waitForFunction(() => window.__game.engine.frame > 30, { timeout: 220000 }).catch(() => {});
 await page.waitForTimeout(2500);
 
-const { out: rows, added } = await page.evaluate(async () => {
+const { out: rows, added, diffs } = await page.evaluate(async () => {
   const { ctx, engine } = window.__game;
   ctx.enemies?.clearAll?.();
   ctx.player.respawn?.();
@@ -86,8 +86,12 @@ const { out: rows, added } = await page.evaluate(async () => {
   // Snapshot exactly which programs exist before the trigger, so the ones
   // that appear during the burst can be named rather than guessed at. Three
   // guesses at these have now been wrong.
-  const progKey = (pr) => `${pr.name || '?'} | ${(pr.cacheKey || '').slice(0, 140)}`;
-  const before = new Set((ctx.renderer.info.programs || []).map(progKey));
+  // Full key, not a 140-char slice: the truncated version made the two new
+  // programs look identical to each other and to what was already there,
+  // which is worse than useless.
+  const progKey = (pr) => String(pr.cacheKey || pr.name || '?');
+  const beforeKeys = (ctx.renderer.info.programs || []).map(progKey);
+  const before = new Set(beforeKeys);
 
   for (let i = 0; i < 14; i++) await step('idle', i === 12);
   window.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
@@ -96,7 +100,22 @@ const { out: rows, added } = await page.evaluate(async () => {
   for (let i = 0; i < 45; i++) await step('after', i === 2 || i === 20 || i === 43);
 
   const added = (ctx.renderer.info.programs || []).map(progKey).filter((k) => !before.has(k));
-  return { out, added };
+  // For each new key, find the pre-existing key it most closely resembles and
+  // report where they first diverge. That names the define that flipped.
+  const diffs = added.map((k) => {
+    let best = null, bestAt = -1;
+    for (const b of beforeKeys) {
+      let i = 0;
+      while (i < k.length && i < b.length && k[i] === b[i]) i++;
+      if (i > bestAt) { bestAt = i; best = b; }
+    }
+    return {
+      at: bestAt,
+      newTail: k.slice(Math.max(0, bestAt - 40), bestAt + 60),
+      oldTail: best ? best.slice(Math.max(0, bestAt - 40), bestAt + 60) : '',
+    };
+  });
+  return { out, added, diffs };
 });
 
 console.log('phase    frame   ms   mean  programs  dpr   calls');
@@ -133,7 +152,12 @@ console.log(`dpr range: ${Math.min(...rows.map((r) => r.dpr))} .. ${Math.max(...
 console.log(`shader programs: ${rows[0].programs} -> ${rows[rows.length - 1].programs}`);
 if (added.length) {
   console.log(`\nprograms compiled during the burst (${added.length}):`);
-  for (const k of added) console.log('  ' + k);
+  for (let i = 0; i < added.length; i++) {
+    const d = diffs[i];
+    console.log(`  --- new program ${i + 1}, diverges from the nearest existing key at char ${d.at}`);
+    console.log(`      existing: ...${d.oldTail}`);
+    console.log(`      new     : ...${d.newTail}`);
+  }
 } else {
   console.log('\nno programs compiled during the burst');
 }
