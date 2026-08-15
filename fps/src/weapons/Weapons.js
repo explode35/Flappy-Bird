@@ -43,7 +43,9 @@ const _origin = new THREE.Vector3();
 // place in the frame. Real scale is kept rather than shrinking the models,
 // because the sight and muzzle anchors are used for ADS alignment and for
 // spawning the flash, and both want to stay physically meaningful.
-const HIP_POS = new THREE.Vector3(0.245, -0.255, -1.0);
+// A metre out framed correctly but sat the weapon low and small, clipped by
+// the bottom edge. Pulled in and lifted after looking at the frames.
+const HIP_POS = new THREE.Vector3(0.205, -0.205, -0.85);
 const HIP_ROT = new THREE.Euler(0.026, -0.052, 0.014);
 const SPRINT_POS = new THREE.Vector3(0.118, -0.140, -0.300);
 const SPRINT_ROT = new THREE.Euler(-0.16, 0.55, 0.32);   // ~18deg cant
