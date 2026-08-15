@@ -147,37 +147,6 @@ const f = await testFire();
 console.log(`mouse0 shots=${f.shots} ammo ${f.ammoBefore}->${f.ammoAfter} mouseSeen=${f.mouseSeen} weapon=${f.weaponName}`);
 
 // ---------------------------------------------------------------------------
-//  Assertions. This is the regression test the project did not have: thirteen
-//  physics cases covering the capsule, and nothing joining a key press to the
-//  player. Pointer lock going unrequested for the life of the project is
-//  exactly the kind of thing an integration check catches and a unit test
-//  never will.
-// ---------------------------------------------------------------------------
-const fails = [];
-const check = (name, ok, detail) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
-  if (!ok) fails.push(name);
-};
-
-console.log('--- checks ---');
-check('idle player rests, does not drift or fall',
-  Math.abs(idle.dy) < 0.05 && Math.abs(idle.fwd) < 0.05 && Math.abs(idle.right) < 0.05,
-  `dy=${idle.dy} fwd=${idle.fwd} right=${idle.right}`);
-check('W walks forward', moves.KeyW.fwd > 2 && Math.abs(moves.KeyW.right) < 1, `fwd=${moves.KeyW.fwd}`);
-check('S walks back', moves.KeyS.fwd < -1 && Math.abs(moves.KeyS.right) < 1, `fwd=${moves.KeyS.fwd}`);
-// Direction matters, not just magnitude: strafing was mirrored for the whole
-// life of the project and every "did it move" check would have passed.
-check('A strafes LEFT', moves.KeyA.right < -1 && Math.abs(moves.KeyA.fwd) < 1, `right=${moves.KeyA.right}`);
-check('D strafes RIGHT', moves.KeyD.right > 1 && Math.abs(moves.KeyD.fwd) < 1, `right=${moves.KeyD.right}`);
-check('Space jumps', j.peakUp > 2, `peakUp=${j.peakUp}`);
-check('mouse fires', f.shots > 0, `shots=${f.shots}`);
-check('pointer lock is requested somewhere', hasLockCall, hasLockCall ? '' : 'Input.requestLock() has no call sites');
-check('mouse fires after going through the menu wiring', wired.shots > 0, `shots=${wired.shots}, paused=${wired.pausedNow}`);
-check('unlock pauses, lock unpauses', wired.pausedAfterUnlock === true && wired.pausedNow === false,
-  `unlock->${wired.pausedAfterUnlock}, lock->${wired.pausedNow}`);
-check('a key bound to fire shoots', keyFire.shots > 0, `shots=${keyFire.shots}`);
-
-// ---------------------------------------------------------------------------
 //  The real flow. The checks above force input.locked directly, which skips
 //  every piece of wiring between clicking the menu and being able to shoot —
 //  and "left click does nothing" was reported from a session that had gone
@@ -236,6 +205,37 @@ const keyFire = await page.evaluate(async () => {
   return { shots, fireBind: ctx.input.bindings.fire.join(','), jumpBind: ctx.input.bindings.jump.join(',') };
 });
 console.log(`  fire bound to ${keyFire.fireBind}, jump to ${keyFire.jumpBind} -> shots=${keyFire.shots}`);
+
+// ---------------------------------------------------------------------------
+//  Assertions. This is the regression test the project did not have: thirteen
+//  physics cases covering the capsule, and nothing joining a key press to the
+//  player. Pointer lock going unrequested for the life of the project is
+//  exactly the kind of thing an integration check catches and a unit test
+//  never will.
+// ---------------------------------------------------------------------------
+const fails = [];
+const check = (name, ok, detail) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
+  if (!ok) fails.push(name);
+};
+
+console.log('--- checks ---');
+check('idle player rests, does not drift or fall',
+  Math.abs(idle.dy) < 0.05 && Math.abs(idle.fwd) < 0.05 && Math.abs(idle.right) < 0.05,
+  `dy=${idle.dy} fwd=${idle.fwd} right=${idle.right}`);
+check('W walks forward', moves.KeyW.fwd > 2 && Math.abs(moves.KeyW.right) < 1, `fwd=${moves.KeyW.fwd}`);
+check('S walks back', moves.KeyS.fwd < -1 && Math.abs(moves.KeyS.right) < 1, `fwd=${moves.KeyS.fwd}`);
+// Direction matters, not just magnitude: strafing was mirrored for the whole
+// life of the project and every "did it move" check would have passed.
+check('A strafes LEFT', moves.KeyA.right < -1 && Math.abs(moves.KeyA.fwd) < 1, `right=${moves.KeyA.right}`);
+check('D strafes RIGHT', moves.KeyD.right > 1 && Math.abs(moves.KeyD.fwd) < 1, `right=${moves.KeyD.right}`);
+check('Space jumps', j.peakUp > 2, `peakUp=${j.peakUp}`);
+check('mouse fires', f.shots > 0, `shots=${f.shots}`);
+check('pointer lock is requested somewhere', hasLockCall, hasLockCall ? '' : 'Input.requestLock() has no call sites');
+check('mouse fires after going through the menu wiring', wired.shots > 0, `shots=${wired.shots}, paused=${wired.pausedNow}`);
+check('unlock pauses, lock unpauses', wired.pausedAfterUnlock === true && wired.pausedNow === false,
+  `unlock->${wired.pausedAfterUnlock}, lock->${wired.pausedNow}`);
+check('a key bound to fire shoots', keyFire.shots > 0, `shots=${keyFire.shots}`);
 
 console.log('--- state ---');
 console.log(await page.evaluate(() => {
