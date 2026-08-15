@@ -735,7 +735,30 @@ export class Effects {
   //  Decals
   // -------------------------------------------------------------------------
 
+  /**
+   * Height fog is applied here rather than being left to HeightFog's sweep.
+   *
+   * HeightFog.update() re-sweeps the scene every 20 frames and patches any
+   * material it has not seen, which rewrites onBeforeCompile and
+   * customProgramCacheKey and sets needsUpdate. Decal materials are created
+   * lazily on the first bullet impact, so the first hole rendered unpatched
+   * (one compile), the sweep then caught it and the same material compiled
+   * again patched (a second compile) -- 13 frames apart, inside the 20-frame
+   * sweep window, and both at roughly four times the frame budget. That was
+   * the first-fire hitch, and no amount of warming could have fixed it: the
+   * second compile is caused by the material changing after it is already in
+   * use, not by the program being cold.
+   *
+   * Patching at construction means one variant exists, ever, and the warm-up
+   * compiles exactly the one the game will draw.
+   */
   _decalMaterial(map, opacity, color) {
+    const mat = this._newDecalMaterial(map, opacity, color);
+    this.ctx.sky?.fog?.patchMaterial?.(mat);
+    return mat;
+  }
+
+  _newDecalMaterial(map, opacity, color) {
     return new THREE.MeshStandardMaterial({
       map, transparent: true, opacity,
       depthTest: true, depthWrite: false,
