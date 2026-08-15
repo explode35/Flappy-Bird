@@ -916,8 +916,40 @@ export class Effects {
     }
     this.ctx.scene.add(decalScratch);
 
-    r.compile?.(this.ctx.scene, this.ctx.camera);
-    r.compile?.(this.ctx.viewScene, this.ctx.viewCamera);
+    // Compile against the render targets the game actually draws into.
+    //
+    // This is why three rounds of warming added programs without ever removing
+    // the two that compiled mid-burst. `toneMapping` and `outputColorSpace` are
+    // both in the program cache key, and WebGLPrograms derives them from
+    // whatever render target is bound at the time:
+    //
+    //     toneMapping = ( currentRenderTarget === null ) ? renderer.toneMapping
+    //                                                    : NoToneMapping
+    //     outputColorSpace: ( currentRenderTarget === null )
+    //         ? renderer.outputColorSpace : ColorManagement.workingColorSpace
+    //
+    // renderer.compile() uses the bound target, and nothing was bound during
+    // warm-up, so every program warmed was the canvas variant -- sRGB out, AgX
+    // tone mapping. The world renders into the composer's half-float linear
+    // target instead, which is a different key and therefore a different
+    // program. Twenty-six programs were being compiled at load and none of them
+    // could ever be used.
+    //
+    // Compile once per distinct target: both composer buffers (it ping-pongs)
+    // and the canvas, since the final passes do resolve there.
+    const composer = this.ctx.engine?.composer;
+    const targets = [composer?.renderTarget1, composer?.renderTarget2, null];
+    const seen = new Set();
+    const restore = r.getRenderTarget();
+    for (const t of targets) {
+      const id = t ? t.uuid : 'null';
+      if (seen.has(id)) continue;
+      seen.add(id);
+      r.setRenderTarget(t ?? null);
+      r.compile?.(this.ctx.scene, this.ctx.camera);
+      r.compile?.(this.ctx.viewScene, this.ctx.viewCamera);
+    }
+    r.setRenderTarget(restore);
 
     if (scratch) {
       this.ctx.viewScene.remove(scratch);
