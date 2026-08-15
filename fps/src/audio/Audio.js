@@ -207,7 +207,8 @@ export class Audio {
 
     // (a) transient — the initial crack of the muzzle blast, under 2 ms
     const tr = transient(ac, t0, this.noise.white, { dur: 0.0018, gain: 0.9 * lvl });
-    if (tr) tr.connect(out);
+    // transient() returns { out, src, end }, not a node.
+    if (tr) tr.out.connect(out);
 
     // (b) body — filtered noise burst, fast exponential decay
     const bodySrc = noiseSrc(ac, this.noise.white, t0, S.decay * 3, jit(r, 0.04), r);
@@ -236,7 +237,7 @@ export class Audio {
 
     // (e) mechanical action
     const mech = metallic(ac, t0 + 0.012, { freq: 1800 * jit(r, 0.1), dur: 0.05, gain: 0.18 * lvl });
-    if (mech) mech.connect(out);
+    if (mech) mech.out.connect(out);
 
     // Distant shots get a bigger, later tail.
     if (!isPlayer) {
@@ -288,7 +289,7 @@ export class Audio {
     // Ringing partials for metal and glass.
     if (S.tone > 0) {
       const m = metallic(ac, t0, { freq: S.f * jit(r, 0.2), dur: S.dur * 1.6, gain: 0.22 * S.tone });
-      if (m) m.connect(out);
+      if (m) m.out.connect(out);
     }
   }
 
@@ -322,7 +323,7 @@ export class Audio {
       const out = this._voice('weapon', 2);
       if (!out) continue;
       const m = metallic(ac, t0 + dt, { freq: f * jit(this.rng, 0.08), dur: 0.07, gain: g });
-      if (m) m.connect(out);
+      if (m) m.out.connect(out);
     }
   }
 
@@ -334,7 +335,7 @@ export class Audio {
       freq: 3200 * jit(this.rng, 0.25), dur: 0.14,
       gain: clamp(speed * 0.03, 0.02, 0.12),
     });
-    if (m) m.connect(out);
+    if (m) m.out.connect(out);
   }
 
   whizz(distance) {
@@ -401,7 +402,7 @@ export class Audio {
     };
     const [f, dur, g] = table[name] || table.click;
     const m = metallic(ac, t0, { freq: f, dur, gain: g });
-    if (m) m.connect(out);
+    if (m) m.out.connect(out);
   }
 
   // -------------------------------------------------------------------------
