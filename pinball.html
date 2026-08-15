@@ -1856,17 +1856,19 @@ function paintPlayfieldArt(c, L, level) {
     }
   }
   c.globalAlpha = 1;
-  /* the table's name, silkscreened across the apron */
-  drawTextC(c, 'FATHOM', 222, 902, 5, PAL.ink);
-  drawTextC(c, 'FATHOM', 221, 901, 5, acc);
+  /* The table's name, silkscreened across the apron.  The wordmark is seven
+     rows tall at its pixel size, so the strapline clears it by six. */
+  drawTextC(c, 'FATHOM', 222, 897, 4, PAL.ink);
+  drawTextC(c, 'FATHOM', 221, 896, 4, acc);
   drawTextC(c, 'DESCENT OF THE KRAKENS EYE', 222, 930, 1, PAL.gray);
   /* zone lettering */
   /* vertical=true stacks the letters, for labels in the narrow side lanes */
   const label = (s, x, y, px, col, vertical) => {
     if (!vertical) { drawTextC(c, s, x + 1, y + 1, px, PAL.ink); drawTextC(c, s, x, y, px, col); return; }
+    /* 7 rows of glyph plus a 1px shadow needs an 11px step to breathe */
     for (let i = 0; i < s.length; i++) {
-      drawTextC(c, s[i], x + 1, y + i * 9 + 1, px, PAL.ink);
-      drawTextC(c, s[i], x, y + i * 9, px, col);
+      drawTextC(c, s[i], x + 1, y + i * 11 + 1, px, PAL.ink);
+      drawTextC(c, s[i], x, y + i * 11, px, col);
     }
   };
   label('SKILL LANES', 250, 70, 1, PAL.silver);
@@ -2420,12 +2422,12 @@ function drawBackglass(ctx, t) {
   ctx.fillStyle = PAL.blue; ctx.fillRect(0, BG_H - 2, CW, 1);
 
   if (!p || G.mode === 'attract') {
-    drawTextC(ctx, 'FATHOM', CW / 2, 10, 5, PAL.cyan);
-    drawTextC(ctx, 'DESCENT OF THE KRAKENS EYE', CW / 2, 46, 1, PAL.sky);
+    drawTextC(ctx, 'FATHOM', CW / 2, 8, 5, PAL.cyan);
+    drawTextC(ctx, 'DESCENT OF THE KRAKENS EYE', CW / 2, 49, 1, PAL.sky);
     const hs = 'BEST  ' + fmt(G.hiscores[0].s) + '  ' + G.hiscores[0].n;
-    drawTextC(ctx, hs, CW / 2, 62, 1, PAL.amber);
+    drawTextC(ctx, hs, CW / 2, 64, 1, PAL.amber);
     drawTextC(ctx, Math.sin(G.t * 3) > 0 ? 'PRESS 1-4 FOR PLAYERS' : 'TEN STATIONS DOWN THE TRENCH',
-      CW / 2, 78, 1, PAL.lime);
+      CW / 2, 80, 1, PAL.lime);
     ctx.globalAlpha = 0.22; ctx.fillStyle = PAL.ink;
     for (let yy = 0; yy < BG_H; yy += 2) ctx.fillRect(0, yy, CW, 1);
     ctx.globalAlpha = 1;
@@ -2437,12 +2439,12 @@ function drawBackglass(ctx, t) {
   const px = s.length > 9 ? 2 : 3;
   dmdText(ctx, s, CW - 8 - textWidth(s, px), 8, px, PAL.amber);
   drawText(ctx, (p.idx + 1) + 'UP', 6, 8, 2, PAL.cyan);
-  drawText(ctx, 'BALL ' + Math.min(p.ball, 3), 6, 24, 1, PAL.silver);
+  drawText(ctx, 'BALL ' + Math.min(p.ball, 3), 6, 26, 1, PAL.silver);
   if (G.nPlayers > 1) {
     let x = 60;
     for (const q of G.players) {
       if (q === p) continue;
-      drawText(ctx, (q.idx + 1) + ':' + fmt(q.score), x, 24, 1, PAL.gray);
+      drawText(ctx, (q.idx + 1) + ':' + fmt(q.score), x, 26, 1, PAL.gray);
       x += textWidth((q.idx + 1) + ':' + fmt(q.score), 1) + 8;
     }
   }
@@ -2988,9 +2990,9 @@ function drawAttract() {
   const page = Math.floor(t / 7) % 2;
   panel(28, 150, CW - 56, 300);
   /* title */
-  drawTextC(ctx, 'FATHOM', CW / 2, 172, 6, PAL.cyan);
-  drawTextC(ctx, 'DESCENT OF THE KRAKENS EYE', CW / 2, 214, 1, PAL.sky);
-  ctx.fillStyle = PAL.blue; ctx.fillRect(60, 228, CW - 120, 1);
+  drawTextC(ctx, 'FATHOM', CW / 2, 170, 6, PAL.cyan);
+  drawTextC(ctx, 'DESCENT OF THE KRAKENS EYE', CW / 2, 218, 1, PAL.sky);
+  ctx.fillStyle = PAL.blue; ctx.fillRect(60, 232, CW - 120, 1);
   if (page === 0) {
     drawTextC(ctx, 'PILOT SABLE VANCE', CW / 2, 244, 1, PAL.lime);
     drawTextC(ctx, 'TEN STATIONS DOWN THE TRENCH', CW / 2, 258, 1, PAL.silver);
