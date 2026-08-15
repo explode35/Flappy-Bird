@@ -48,41 +48,46 @@ const rows = await page.evaluate(async () => {
 
   const c = document.querySelector('canvas');
   const gl = ctx.renderer.getContext();
-  // Small sample: this runs every frame, so it must not itself be the stall.
+  // NOT called per frame. gl.readPixels forces the pipeline to finish, which
+  // on software GL costs the better part of a second — the first version of
+  // this probe sampled eight pixels every frame and flagged every frame in the
+  // run as a stall, including the idle ones. The instrument was the stall.
+  // Timing is collected with no readback at all; brightness is sampled only at
+  // a handful of checkpoints, and those frames are excluded from the timings.
   const sample = () => {
-    const px = new Uint8Array(4 * 64);
     let sum = 0;
     for (let i = 0; i < 8; i++) {
       const p = new Uint8Array(4);
       gl.readPixels((c.width * (i + 1) / 9) | 0, c.height >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, p);
       sum += (p[0] + p[1] + p[2]) / 3;
     }
-    void px;
     return Math.round(sum / 8);
   };
 
   const out = [];
   let last = performance.now();
-  const step = async (label) => {
+  // `probe` frames take a brightness reading and are marked so the timing
+  // summary can drop them; every other frame is pure timing.
+  const step = async (label, probeIt) => {
     await new Promise((r) => requestAnimationFrame(r));
     const now = performance.now();
-    const dt = now - last;
-    last = now;
-    out.push({
-      label,
-      ms: Math.round(dt),
-      mean: sample(),
+    const ms = Math.round(now - last);
+    const row = {
+      label, ms, probed: !!probeIt,
       programs: ctx.renderer.info.programs?.length ?? 0,
       dpr: +ctx.renderer.getPixelRatio().toFixed(2),
       calls: ctx.renderer.info.render.calls,
-    });
+      mean: probeIt ? sample() : null,
+    };
+    out.push(row);
+    last = performance.now();   // exclude the readback from the next delta
   };
 
-  for (let i = 0; i < 12; i++) await step('idle');
+  for (let i = 0; i < 14; i++) await step('idle', i === 12);
   window.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
-  for (let i = 0; i < 30; i++) await step('FIRING');
+  for (let i = 0; i < 30; i++) await step('FIRING', i === 2 || i === 14 || i === 28);
   window.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
-  for (let i = 0; i < 45; i++) await step('after');
+  for (let i = 0; i < 45; i++) await step('after', i === 2 || i === 20 || i === 43);
   return out;
 });
 
@@ -92,24 +97,31 @@ for (let i = 0; i < rows.length; i++) {
   const r = rows[i];
   const grew = r.programs > prevPrograms ? `  +${r.programs - prevPrograms} SHADERS` : '';
   prevPrograms = r.programs;
-  const slow = r.ms > 120 ? '  <-- STALL' : '';
-  const dark = r.mean < 6 ? '  <-- BLACK' : '';
-  console.log(
-    `${r.label.padEnd(8)} ${String(i).padStart(3)}  ${String(r.ms).padStart(4)}  ` +
-    `${String(r.mean).padStart(4)}  ${String(r.programs).padStart(6)}  ${String(r.dpr).padStart(4)}  ` +
-    `${String(r.calls).padStart(5)}${grew}${slow}${dark}`
-  );
+  if (r.probed || grew || r.ms > 200 || i < 2) {
+    const dark = r.mean !== null && r.mean < 6 ? '  <-- BLACK' : '';
+    console.log(
+      `${r.label.padEnd(8)} ${String(i).padStart(3)}  ${String(r.ms).padStart(5)}  ` +
+      `${r.mean === null ? '   -' : String(r.mean).padStart(4)}  ${String(r.programs).padStart(6)}  ` +
+      `${String(r.dpr).padStart(4)}  ${String(r.calls).padStart(5)}${grew}${dark}`
+    );
+  }
 }
 
 const idle = rows.filter((r) => r.label === 'idle');
 const fire = rows.filter((r) => r.label === 'FIRING');
 const after = rows.filter((r) => r.label === 'after');
-const avg = (a) => Math.round(a.reduce((s, r) => s + r.ms, 0) / Math.max(1, a.length));
-const worst = (a) => Math.max(...a.map((r) => r.ms));
+// Drop the frames that took a brightness reading: readPixels is a full
+// pipeline sync and would dominate any timing it appears in.
+const clean = (a) => a.filter((r) => !r.probed);
+const avg = (a) => Math.round(clean(a).reduce((s, r) => s + r.ms, 0) / Math.max(1, clean(a).length));
+const worst = (a) => Math.max(...clean(a).map((r) => r.ms));
 console.log(`\nidle   avg ${avg(idle)} ms, worst ${worst(idle)} ms`);
 console.log(`firing avg ${avg(fire)} ms, worst ${worst(fire)} ms`);
 console.log(`after  avg ${avg(after)} ms, worst ${worst(after)} ms`);
-console.log(`black frames: ${rows.filter((r) => r.mean < 6).length} of ${rows.length}`);
+const probed = rows.filter((r) => r.probed);
+console.log(`brightness checkpoints: ${probed.map((r) => `${r.label}=${r.mean}`).join('  ')}`);
+console.log(`slowest non-probe frame: ${Math.max(...clean(rows).map((r) => r.ms))} ms`);
+console.log(`dpr range: ${Math.min(...rows.map((r) => r.dpr))} .. ${Math.max(...rows.map((r) => r.dpr))}`);
 console.log(`shader programs: ${rows[0].programs} -> ${rows[rows.length - 1].programs}`);
 if (errs.length) console.log(`\n${errs.length} errors:\n` + [...new Set(errs)].slice(0, 4).join('\n'));
 
