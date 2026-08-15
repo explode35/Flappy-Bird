@@ -270,7 +270,12 @@ export class Weapons {
     if (input.actHit('inspect') && this._inspectT < 0 && !this._reloading) this._inspectT = 0;
 
     // ADS — blocked while sprinting or mid-swap
-    this._adsWanted = input.mDown(2) && !player.isSprinting && !this._swapping && !this.isThrowing;
+    // Mouse or a bound key, for both of these.
+    const adsDown = input.mDown(2) || input.act('ads');
+    const fireDown = input.mDown(0) || input.act('fire');
+    const fireHit = input.mHit(0) || input.actHit('fire');
+
+    this._adsWanted = adsDown && !player.isSprinting && !this._swapping && !this.isThrowing;
     const adsRate = this._adsWanted ? 1 / def.adsIn : -1 / def.adsOut;
     this.adsFactor = clamp(this.adsFactor + adsRate * dt, 0, 1);
     player.setADS?.(this.adsFactor > 0.5);
@@ -285,15 +290,15 @@ export class Weapons {
 
     // Reload
     const a = this.ammo;
-    if ((input.actHit('reload') || (a.mag === 0 && input.mDown(0))) && !this._reloading &&
+    if ((input.actHit('reload') || (a.mag === 0 && fireDown)) && !this._reloading &&
         a.mag < def.magSize && a.reserve > 0 && !this._swapping) {
       this._startReload();
     }
 
     // Trigger
-    const wantFire = input.mDown(0) && !player.isSprinting && !this._reloading && !this._swapping;
-    if (def.auto) this._triggerHeld = wantFire;
-    else this._triggerHeld = input.mHit(0) && !player.isSprinting && !this._reloading && !this._swapping;
+    const clear = !player.isSprinting && !this._reloading && !this._swapping;
+    if (def.auto) this._triggerHeld = fireDown && clear;
+    else this._triggerHeld = fireHit && clear;
 
     // Grenade
     if (input.actHit('grenade') && this._grenades > 0 && this._cookT < 0) this._cookT = 0;

@@ -172,6 +172,70 @@ check('D strafes RIGHT', moves.KeyD.right > 1 && Math.abs(moves.KeyD.fwd) < 1, `
 check('Space jumps', j.peakUp > 2, `peakUp=${j.peakUp}`);
 check('mouse fires', f.shots > 0, `shots=${f.shots}`);
 check('pointer lock is requested somewhere', hasLockCall, hasLockCall ? '' : 'Input.requestLock() has no call sites');
+check('mouse fires after going through the menu wiring', wired.shots > 0, `shots=${wired.shots}, paused=${wired.pausedNow}`);
+check('unlock pauses, lock unpauses', wired.pausedAfterUnlock === true && wired.pausedNow === false,
+  `unlock->${wired.pausedAfterUnlock}, lock->${wired.pausedNow}`);
+check('a key bound to fire shoots', keyFire.shots > 0, `shots=${keyFire.shots}`);
+
+// ---------------------------------------------------------------------------
+//  The real flow. The checks above force input.locked directly, which skips
+//  every piece of wiring between clicking the menu and being able to shoot —
+//  and "left click does nothing" was reported from a session that had gone
+//  through that wiring. Emit the lock the way the browser would and try again.
+// ---------------------------------------------------------------------------
+console.log('--- fire through the real menu wiring ---');
+const wired = await page.evaluate(async () => {
+  const { ctx, engine } = window.__game;
+  // Undo the shortcut the probe took at the top.
+  ctx.input.locked = false;
+  ctx.bus.emit('input:unlock', {});
+  for (let i = 0; i < 5; i++) await new Promise((r) => requestAnimationFrame(r));
+  const pausedAfterUnlock = engine.paused;
+
+  // Now the click: this is what main.js's mousedown handler does, followed by
+  // what the browser does when it grants the lock.
+  document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+  ctx.input.locked = true;
+  ctx.bus.emit('input:lock', {});
+  for (let i = 0; i < 10; i++) await new Promise((r) => requestAnimationFrame(r));
+
+  let shots = 0;
+  const off = ctx.bus.on('weapon:fire', () => { shots++; });
+  window.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+  for (let i = 0; i < 30; i++) await new Promise((r) => requestAnimationFrame(r));
+  window.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+  if (typeof off === 'function') off();
+
+  const w = ctx.weapons;
+  return {
+    pausedAfterUnlock,
+    pausedNow: engine.paused,
+    locked: ctx.input.locked,
+    menuHidden: document.querySelector('.menu')?.classList.contains('hidden') ?? null,
+    swapping: w._swapping, reloading: w._reloading,
+    sprinting: ctx.player.isSprinting,
+    shots,
+  };
+});
+console.log(`  paused after unlock=${wired.pausedAfterUnlock}  paused now=${wired.pausedNow}  ` +
+  `locked=${wired.locked}  menuHidden=${wired.menuHidden}`);
+console.log(`  swapping=${wired.swapping} reloading=${wired.reloading} sprinting=${wired.sprinting}  ` +
+  `shots=${wired.shots}`);
+
+console.log('--- fire from a bound key ---');
+const keyFire = await page.evaluate(async () => {
+  const { ctx } = window.__game;
+  ctx.input.rebind('fire', 'Space');
+  ctx.input.rebind('jump', 'KeyJ');
+  let shots = 0;
+  const off = ctx.bus.on('weapon:fire', () => { shots++; });
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }));
+  for (let i = 0; i < 25; i++) await new Promise((r) => requestAnimationFrame(r));
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', bubbles: true }));
+  if (typeof off === 'function') off();
+  return { shots, fireBind: ctx.input.bindings.fire.join(','), jumpBind: ctx.input.bindings.jump.join(',') };
+});
+console.log(`  fire bound to ${keyFire.fireBind}, jump to ${keyFire.jumpBind} -> shots=${keyFire.shots}`);
 
 console.log('--- state ---');
 console.log(await page.evaluate(() => {

@@ -1064,3 +1064,25 @@ input[type=range]::-moz-range-thumb {
   cursor: pointer;
 }
 .binds__reset:hover { color: var(--fg-hot); border-color: rgba(var(--base), .5); }
+
+/* The play button. Was a line of text saying "click anywhere", which
+   contradicted the rebinding panel directly above it. */
+.menu__go {
+  font-family: inherit;
+  margin-top: calc(26 * var(--px));
+  font-size: calc(18 * var(--px));
+  letter-spacing: calc(6 * var(--px));
+  color: rgb(var(--ink));
+  background: rgba(var(--warn), .92);
+  border: none;
+  padding: calc(11 * var(--px)) calc(46 * var(--px));
+  cursor: pointer;
+  animation: none;
+}
+.menu__go:hover { background: rgb(var(--warn)); }
+.menu__note {
+  margin-top: calc(14 * var(--px));
+  font-size: calc(11 * var(--px));
+  letter-spacing: calc(1.4 * var(--px));
+  color: var(--fg-mute);
+}

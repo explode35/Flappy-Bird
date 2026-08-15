@@ -33,6 +33,12 @@ export const ACTIONS = [
   { id: 'leanLeft',  label: 'Lean left',      group: 'Movement', def: ['KeyQ'] },
   { id: 'leanRight', label: 'Lean right',     group: 'Movement', def: ['KeyE'] },
 
+  // Fire and aim are mouse buttons by default and always will be, but they
+  // are listed and bindable because a keyboard binding is a reasonable thing
+  // to want and there was no way to ask for one. Both keep working from the
+  // mouse whatever is bound here.
+  { id: 'fire',      label: 'Fire (also mouse)',  group: 'Combat', def: [] },
+  { id: 'ads',       label: 'Aim (also mouse)',   group: 'Combat', def: [] },
   { id: 'reload',    label: 'Reload',         group: 'Combat', def: ['KeyR'] },
   { id: 'grenade',   label: 'Grenade',        group: 'Combat', def: ['KeyG'] },
   { id: 'inspect',   label: 'Inspect weapon', group: 'Combat', def: ['KeyF'] },
@@ -62,7 +68,7 @@ export function loadBindings() {
   if (!raw || typeof raw !== 'object') return out;
   for (const a of ACTIONS) {
     const v = raw[a.id];
-    if (Array.isArray(v) && v.length && v.every((c) => typeof c === 'string' && c)) out[a.id] = v.slice();
+    if (Array.isArray(v) && v.every((c) => typeof c === 'string' && c)) out[a.id] = v.slice();
   }
   return out;
 }

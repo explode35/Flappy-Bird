@@ -205,8 +205,14 @@ export class HUD {
       el('menu__s', 'div', 'WAVE SURVIVAL — HOLD THE HARBOUR DISTRICT')
     );
     mi.appendChild(this._buildBindPanel());
-    this.menuGo = el('menu__go', 'div', 'CLICK ANYWHERE TO PLAY');
+    // A real button, not "click anywhere". "Click anywhere to play" sitting
+    // under "click a key to change it" was a direct contradiction, and it was
+    // not just wording: clicking a rebind key started the game.
+    this.menuGo = el('menu__go', 'button', 'PLAY');
+    this.menuGo.addEventListener('click', () => this.ctx.input.requestLock());
     mi.appendChild(this.menuGo);
+    mi.appendChild(el('menu__note', 'div',
+      'Walk over the lit crates to pick up ammo and health — there is no key for it.'));
     this.menu.appendChild(mi);
     R.appendChild(this.menu);
 
@@ -282,7 +288,7 @@ export class HUD {
       ev.stopPropagation();
       this.ctx.input.resetBindings();
     });
-    foot.append(el('binds__hint', 'div', 'Click a key to change it · ESC cancels'), reset);
+    foot.append(el('binds__hint', 'div', 'Click a key below to change it · ESC cancels'), reset);
     wrap.appendChild(foot);
 
     this._refreshBinds();

@@ -50,8 +50,14 @@ async function boot() {
   // audio graph, which only starts on the first lock. What was left was
   // walking, in silence. Browsers only grant the lock inside a user gesture,
   // so it has to hang off a real click.
-  const grabPointer = () => {
+  const grabPointer = (e) => {
     if (ctx.input.locked || ctx.player?.dead) return;
+    // "Click a key to change it" and "click anywhere to play" were in direct
+    // conflict: clicking a rebind key also started the game. The button's
+    // click handler calls stopPropagation, but this listens for mousedown,
+    // which has already been and gone by then. Anything inside the controls
+    // panel is for the controls panel.
+    if (e.target?.closest?.('.binds')) return;
     ctx.input.requestLock();
   };
   // On the document, not the canvas: the pause and loading screens sit over it
