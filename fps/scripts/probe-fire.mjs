@@ -45,15 +45,37 @@ const KEY_FIELDS = (() => {
   const i = src.indexOf('function getProgramCacheKeyParameters');
   const j = src.indexOf('\n\t}', i);
   const params = [...src.slice(i, j).matchAll(/array\.push\(\s*parameters\.(\w+)/g)].map((m) => m[1]);
-  return ['shaderID', ...params, 'booleanMask', 'outputColorSpace'];
+  // getProgramCacheKeyBooleans pushes _programLayers.mask twice -- three.js
+  // needs more than 32 boolean slots, so there are two mask words, not one.
+  const k = src.indexOf('function getProgramCacheKeyBooleans');
+  const masks = [...src.slice(k, src.indexOf('\n\t}', k)).matchAll(/array\.push\(\s*_programLayers\.mask/g)];
+  return [...params, ...masks.map((_, n) => `booleanMask${n + 1}`), 'outputColorSpace'];
 })();
+
+/**
+ * Index of parameters[0] within the token list.
+ *
+ * The key starts with the shader id, then a variable number of tokens for
+ * material.defines (a name and a value per define), so counting from token 0
+ * silently mislabels every material that carries defines -- which is how a
+ * `shadowMapType` difference got reported as `numClippingPlanes` in a project
+ * that sets no clipping planes anywhere. parameters[0] is `precision`, whose
+ * value is one of three known strings, so anchor on that instead.
+ */
+function paramBase(tokens) {
+  const at = tokens.findIndex((t) => t === 'highp' || t === 'mediump' || t === 'lowp');
+  return at === -1 ? 1 : at;
+}
 
 function labelledDiff(a, b) {
   const ta = a.split(','), tb = b.split(',');
+  const base = paramBase(ta.length >= tb.length ? ta : tb);
   const out = [];
   for (let i = 0; i < Math.max(ta.length, tb.length); i++) {
     if (ta[i] === tb[i]) continue;
-    const name = KEY_FIELDS[i] ?? (i >= KEY_FIELDS.length ? 'customProgramCacheKey' : `field[${i}]`);
+    const f = i - base;
+    const name = i < base ? (i === 0 ? 'shaderID' : `define[${i}]`)
+      : KEY_FIELDS[f] ?? 'customProgramCacheKey';
     if (name === 'customProgramCacheKey' && out.some((o) => o.startsWith('customProgramCacheKey'))) continue;
     const clip = (s) => (s === undefined ? '(absent)' : s.length > 60 ? `${s.slice(0, 60)}…` : s);
     out.push(`${name}: ${clip(ta[i])}  ->  ${clip(tb[i])}`);
