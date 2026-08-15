@@ -119,6 +119,69 @@ mismatch, and `preserveDrawingBuffer` alone. Two defensive fixes made while
 chasing it — an explicit composer resize in the governor, and viewport/scissor
 restore around PMREM — are correct on their own merits and were kept.
 
+### The hitch on the first burst, and the one part still open
+
+Reported as "after shooting the game glitches out and goes black for a few
+seconds then gets jumpy". Three separate faults, measured with
+`scripts/probe-fire.mjs`.
+
+**Jumpy** was the dynamic-resolution governor thrashing after a frame-time
+spike. Fixed with hysteresis — three agreeing verdicts before acting, a hold
+after a change. `dpr range: 1 .. 1` on every run since.
+
+**The multi-second stall** was two shader programs compiling mid-burst, and it
+took six wrong diagnoses to name, every one of them read off a truncated
+cache-key string rather than measured. What it actually was:
+
+    the two new programs differ from each other in:
+      customProgramCacheKey: onBeforeCompile() {}  ->  hfog|function (shader
+
+One field. The same material, compiled once unpatched and once patched.
+`HeightFog.update()` re-sweeps the scene every 20 frames and patches any
+material it has not seen, rewriting `onBeforeCompile` and
+`customProgramCacheKey` and setting `needsUpdate`. Decal materials are built
+lazily on the first bullet impact, so the first hole rendered unpatched and
+compiled, the sweep then caught the material and it compiled again — 13 frames
+apart, inside the 20-frame window. Decal materials are patched at construction
+now. Worst firing frame 3272 ms → 1583 ms, programs compiled during a burst
+2 → 1.
+
+Five rounds of shader warm-up preceded that and none of them could have worked:
+warming fixes a *cold* program, and the second compile was caused by the
+material changing after it was already in use.
+
+**Still open: one program still compiles on the first burst.** It is the decal
+program's genuine first compile, and the labelled diff names the field:
+
+    shadowMapType: 2  ->  1
+
+`renderer.shadowMap.type` is assigned once, in the Engine constructor, to
+`PCFSoftShadowMap` (2), and never changed. `PCFShadowMap` (1) is
+`WebGLShadowMap`'s own default. So `renderer.compile()` inside `Effects.warm()`
+is building programs against a renderer state that does not exist during
+gameplay, which is why the warm-up keeps producing near-misses. The same class
+of bug was already found and fixed once here for render targets —
+`toneMapping` and `outputColorSpace` enter the cache key from whatever target
+is bound, and warm bound none, so 26 programs were being compiled at load in a
+variant the game can never use.
+
+The robust fix is probably to stop using `compile()` for this and render one
+real frame with the effect meshes present, since that reproduces the draw state
+by construction instead of trying to reconstruct it. That is not done. On
+software GL the residual costs ~700 ms; on a real GPU a single shader compile
+is normally single-digit milliseconds, so it may not be perceptible at all —
+which is exactly why it should be judged on real hardware before more time goes
+into it.
+
+One caution about `probe-fire.mjs` itself: it labels cache-key fields by
+scraping `getProgramCacheKeyParameters`' push order out of the installed
+three.js, and it anchors on `precision` rather than counting from token 0,
+because the key begins with the shader id followed by a variable number of
+`material.defines` tokens. An earlier version counted from the start and
+confidently reported `numClippingPlanes` in a project that sets no clipping
+planes anywhere. An instrument that names the wrong field is worse than one
+that prints a raw diff, because the name gets believed.
+
 ## Independent art-direction review
 
 An outside reviewer went through fourteen frames at Medium against
