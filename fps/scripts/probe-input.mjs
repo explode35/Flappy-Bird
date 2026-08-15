@@ -155,6 +155,14 @@ console.log(`mouse0 shots=${f.shots} ammo ${f.ammoBefore}->${f.ammoAfter} mouseS
 console.log('--- fire through the real menu wiring ---');
 const wired = await page.evaluate(async () => {
   const { ctx, engine } = window.__game;
+  // The director has been spawning waves since the probe forced the lock at
+  // the top, so by now the player may well be dead — and a dead player cannot
+  // fire, which would look exactly like the bug under test. Clear the board
+  // first, and report health either way so a future failure is not ambiguous.
+  ctx.enemies?.clearAll?.();
+  ctx.player.respawn?.();
+  for (let i = 0; i < 10; i++) await new Promise((r) => requestAnimationFrame(r));
+
   // Undo the shortcut the probe took at the top.
   ctx.input.locked = false;
   ctx.bus.emit('input:unlock', {});
@@ -179,6 +187,8 @@ const wired = await page.evaluate(async () => {
   return {
     pausedAfterUnlock,
     pausedNow: engine.paused,
+    dead: ctx.player.dead,
+    health: Math.round(ctx.player.health),
     locked: ctx.input.locked,
     menuHidden: document.querySelector('.menu')?.classList.contains('hidden') ?? null,
     swapping: w._swapping, reloading: w._reloading,
@@ -188,12 +198,15 @@ const wired = await page.evaluate(async () => {
 });
 console.log(`  paused after unlock=${wired.pausedAfterUnlock}  paused now=${wired.pausedNow}  ` +
   `locked=${wired.locked}  menuHidden=${wired.menuHidden}`);
-console.log(`  swapping=${wired.swapping} reloading=${wired.reloading} sprinting=${wired.sprinting}  ` +
-  `shots=${wired.shots}`);
+console.log(`  dead=${wired.dead} health=${wired.health} swapping=${wired.swapping} ` +
+  `reloading=${wired.reloading} sprinting=${wired.sprinting}  shots=${wired.shots}`);
 
 console.log('--- fire from a bound key ---');
 const keyFire = await page.evaluate(async () => {
   const { ctx } = window.__game;
+  ctx.enemies?.clearAll?.();
+  ctx.player.respawn?.();
+  for (let i = 0; i < 8; i++) await new Promise((r) => requestAnimationFrame(r));
   ctx.input.rebind('fire', 'Space');
   ctx.input.rebind('jump', 'KeyJ');
   let shots = 0;
@@ -202,9 +215,13 @@ const keyFire = await page.evaluate(async () => {
   for (let i = 0; i < 25; i++) await new Promise((r) => requestAnimationFrame(r));
   window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', bubbles: true }));
   if (typeof off === 'function') off();
-  return { shots, fireBind: ctx.input.bindings.fire.join(','), jumpBind: ctx.input.bindings.jump.join(',') };
+  return {
+    shots, dead: ctx.player.dead,
+    fireBind: ctx.input.bindings.fire.join(','),
+    jumpBind: ctx.input.bindings.jump.join(','),
+  };
 });
-console.log(`  fire bound to ${keyFire.fireBind}, jump to ${keyFire.jumpBind} -> shots=${keyFire.shots}`);
+console.log(`  fire bound to ${keyFire.fireBind}, jump to ${keyFire.jumpBind} -> shots=${keyFire.shots} (dead=${keyFire.dead})`);
 
 // ---------------------------------------------------------------------------
 //  Assertions. This is the regression test the project did not have: thirteen
