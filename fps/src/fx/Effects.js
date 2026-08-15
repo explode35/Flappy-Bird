@@ -880,6 +880,42 @@ export class Effects {
       this.ctx.viewScene.add(scratch);
     }
 
+    // Decals, both attribute profiles.
+    //
+    // DecalGeometry only writes a normal attribute when the triangles it
+    // clipped against had one:
+    //
+    //     if ( normals.length > 0 ) this.setAttribute( 'normal', ... );
+    //
+    // The BVH collider is a merge of several source geometries and they do not
+    // all carry normals, so a hole punched into one surface comes out
+    // position+normal+uv and one punched into another comes out position+uv.
+    // Those are two different programs off the same material, and projecting
+    // warm-up decals onto the spawn pad only ever covers whichever profile the
+    // pad happens to have. That is the pair that kept compiling on the first
+    // burst -- one at the first shot, one when a round first landed on a
+    // surface of the other kind.
+    //
+    // Scratch quads instead of projected decals: no dependency on the collider
+    // existing yet, on the projection returning geometry, or on which surface
+    // the player happens to be standing over.
+    const decalMats = [
+      (this._holeMat ||= this._decalMaterial(this.holes, 0.95)),
+      (this._bloodMat ||= this._decalMaterial(this.holes, 0.85, 0x5a0a06)),
+      (this._scorchMat ||= this._decalMaterial(this.holes, 0.8, 0x1a1714)),
+    ];
+    const decalScratch = new THREE.Group();
+    decalScratch.name = 'fx.warmDecalScratch';
+    decalScratch.position.set(0, -400, 0);
+    for (const withNormals of [false, true]) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0.01, 0, 0, 0, 0.01, 0], 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
+      if (withNormals) g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
+      for (const m of decalMats) decalScratch.add(new THREE.Mesh(g, m));
+    }
+    this.ctx.scene.add(decalScratch);
+
     r.compile?.(this.ctx.scene, this.ctx.camera);
     r.compile?.(this.ctx.viewScene, this.ctx.viewCamera);
 
@@ -887,6 +923,8 @@ export class Effects {
       this.ctx.viewScene.remove(scratch);
       scratch.children[0]?.geometry?.dispose?.();
     }
+    this.ctx.scene.remove(decalScratch);
+    for (const m of decalScratch.children) m.geometry.dispose();
 
     for (const [o, vis, count] of saved) {
       o.visible = vis;
