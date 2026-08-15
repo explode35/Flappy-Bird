@@ -821,11 +821,33 @@ export class Effects {
     } catch (err) {
       console.warn('[fx] warm-up incomplete', err);
     }
-    // One render of each scene compiles anything now in the graph, including
-    // the viewmodel, which is the other thing that stutters on first use.
+    // renderer.compile() walks the scene graph and skips anything that would
+    // not be drawn, so the pooled instanced meshes sitting at count = 0 and
+    // the hidden muzzle flash were still compiling on first use -- three
+    // programs were still appearing mid-burst after the first version of this.
+    // Force them into a drawable state across the compile, then put them back.
     const r = this.ctx.renderer;
+    const saved = [];
+    const force = (o, count) => {
+      if (!o) return;
+      saved.push([o, o.visible, o.count]);
+      o.visible = true;
+      if (count != null && o.count != null) o.count = Math.max(o.count, count);
+    };
+    force(this.tracerMesh, 1);
+    force(this.shellMesh, 1);
+    force(this.muzzleGroup);
+    force(this.muzzleStar);
+    force(this.muzzleGlow);
+    if (this.decalGroup) force(this.decalGroup);
+
     r.compile?.(this.ctx.scene, this.ctx.camera);
     r.compile?.(this.ctx.viewScene, this.ctx.viewCamera);
+
+    for (const [o, vis, count] of saved) {
+      o.visible = vis;
+      if (count != null) o.count = count;
+    }
     console.log(`[fx] warmed, ${r.info.programs?.length ?? 0} programs`);
   }
 
