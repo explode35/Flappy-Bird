@@ -100,6 +100,8 @@ export class Engine {
     // Frame-time smoothed FPS for the dynamic-resolution governor.
     this._fpsAvg = 60;
     this._dprScale = 1;
+    this._dprVotes = 0;      // consecutive agreeing verdicts before acting
+    this._dprHold = 0;       // checks to sit still for after a change
   }
 
   _buildPipeline() {
@@ -218,17 +220,43 @@ export class Engine {
     this._governor(dt);
   }
 
-  /** Dynamic resolution: keeps frame time under budget on weak GPUs. */
+  /**
+   * Dynamic resolution: keeps frame time under budget on weak GPUs.
+   *
+   * Changing the scale is not cheap. It calls composer.setSize(), which
+   * reallocates every render target in the chain — the HDR buffer, the GTAO
+   * targets, the bloom mip pyramid. Measured at 3156 ms on software GL, and a
+   * clearly visible hitch anywhere. So the governor must be reluctant: a
+   * resolution change that costs a 3-second stall to avoid a few dropped
+   * frames is a bad trade, and one that oscillates is the "jumpy" a player
+   * reports after firing.
+   *
+   * Two brakes. It has to see the same verdict several checks running before
+   * it acts, so a single spike -- a shader compiling, a garbage collection,
+   * the tab being backgrounded -- cannot move it. And after any change it
+   * sits still for a while, so it cannot ping-pong.
+   */
   _governor() {
     // Give the FPS average time to mean something before acting on it, and
     // leave the resolution alone while paused — a menu is not a perf sample.
     if (this.frame < 120 || this.paused) return;
     if (this.frame % 45 !== 0) return;
+    if (this._dprHold > 0) { this._dprHold--; this._dprVotes = 0; return; }
+
     const targetLo = 52, targetHi = 58;
+    const want = this._fpsAvg < targetLo ? -1 : this._fpsAvg > targetHi ? 1 : 0;
+    // Votes have to agree in direction; a change of mind resets the count.
+    if (want === 0 || want !== Math.sign(this._dprVotes || want)) { this._dprVotes = 0; return; }
+    this._dprVotes += want;
+    if (Math.abs(this._dprVotes) < 3) return;
+    this._dprVotes = 0;
+
     let s = this._dprScale;
-    if (this._fpsAvg < targetLo && s > 0.62) s -= 0.08;
-    else if (this._fpsAvg > targetHi && s < 1) s += 0.04;
+    if (want < 0 && s > 0.62) s -= 0.08;
+    else if (want > 0 && s < 1) s += 0.04;
     else return;
+    // Roughly six seconds of quiet at 45-frame checks and 60 fps.
+    this._dprHold = 8;
     this._dprScale = clamp(s, 0.62, 1);
 
     const w = window.innerWidth, h = window.innerHeight;

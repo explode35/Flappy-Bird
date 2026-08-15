@@ -37,6 +37,12 @@ async function boot() {
   // Level geometry is registered during Level.init(); freeze the BVH now.
   ctx.physics.build();
 
+  // Compile the effect and viewmodel shaders now, while the loading screen is
+  // still up. Doing it lazily meant the first shot of a fight cost 3141 ms
+  // against a 700 ms average, and the spike then tripped the resolution
+  // governor into a second multi-second hitch.
+  ctx.fx?.warm?.();
+
   engine.start();
   // Debug handle for the review harnesses. THREE rides along so a probe can
   // build vectors and boxes without resolving the module itself.

@@ -788,6 +788,47 @@ export class Effects {
 
   // -------------------------------------------------------------------------
 
+  /**
+   * Compile everything that firing will need, behind the loading screen.
+   *
+   * Measured: the first shot of a burst cost 3141 ms against a 700 ms average
+   * because a new effect material compiled mid-fight, and the frame-time spike
+   * then tripped the resolution governor into a second 3-second hitch. Both
+   * are avoidable by paying the compile cost while the player is still looking
+   * at a progress bar.
+   *
+   * Effects are spawned far under the map, stepped once so their programs are
+   * created, then cleared. Position does not matter -- the compile happens
+   * because the material is drawn at all.
+   */
+  warm() {
+    const y = -400;
+    const p = new THREE.Vector3(0, y, 0);
+    const n = new THREE.Vector3(0, 1, 0);
+    const d = new THREE.Vector3(0, -1, 0);
+    try {
+      for (const surface of ['concrete', 'metal', 'wood', 'sand', 'flesh']) {
+        this.impact({ point: p, normal: n, dir: d, surface });
+      }
+      this.tracer({ from: p, to: new THREE.Vector3(0, y + 4, 0) });
+      this.shell({ pos: p, dir: n });
+      this.decal(p, n, d, {});
+      this.bloodDecal(p, n);
+      this.scorch(p);
+      this.deathPuff({ pos: p });
+      this.footDust({ pos: p });
+      this.explosion({ pos: p, radius: 1 });
+    } catch (err) {
+      console.warn('[fx] warm-up incomplete', err);
+    }
+    // One render of each scene compiles anything now in the graph, including
+    // the viewmodel, which is the other thing that stutters on first use.
+    const r = this.ctx.renderer;
+    r.compile?.(this.ctx.scene, this.ctx.camera);
+    r.compile?.(this.ctx.viewScene, this.ctx.viewCamera);
+    console.log(`[fx] warmed, ${r.info.programs?.length ?? 0} programs`);
+  }
+
   update(dt, time) {
     this.time = time;
     this.pMat.uniforms.uTime.value = time;
