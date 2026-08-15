@@ -802,10 +802,17 @@ export class Effects {
    * because the material is drawn at all.
    */
   warm() {
-    const y = -400;
-    const p = new THREE.Vector3(0, y, 0);
+    // On real ground, not out in the void. Decals are projected onto whatever
+    // geometry is behind the hit point, so warming them at y = -400 built an
+    // empty DecalGeometry, drew nothing, and compiled nothing -- two programs
+    // were still appearing on the first burst because of it. Warm at the spawn
+    // pad, where there is a floor, and clear the marks afterwards.
+    const spawn = this.ctx.level?.spawnPoint;
+    const y = spawn ? spawn.y + 0.02 : -400;
+    const p = new THREE.Vector3(spawn ? spawn.x : 0, y, spawn ? spawn.z : 0);
     const n = new THREE.Vector3(0, 1, 0);
     const d = new THREE.Vector3(0, -1, 0);
+    const decalsBefore = this.decals.length;
     try {
       for (const surface of ['concrete', 'metal', 'wood', 'sand', 'flesh']) {
         this.impact({ point: p, normal: n, dir: d, surface });
@@ -847,6 +854,14 @@ export class Effects {
     for (const [o, vis, count] of saved) {
       o.visible = vis;
       if (count != null) o.count = count;
+    }
+
+    // Take the warm-up marks back off the spawn pad.
+    for (let i = this.decals.length - 1; i >= decalsBefore; i--) {
+      const dec = this.decals[i];
+      dec?.mesh?.parent?.remove(dec.mesh);
+      dec?.mesh?.geometry?.dispose?.();
+      this.decals.splice(i, 1);
     }
     console.log(`[fx] warmed, ${r.info.programs?.length ?? 0} programs`);
   }
