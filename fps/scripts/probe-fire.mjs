@@ -38,7 +38,7 @@ await page.waitForFunction(() => !!window.__game, { timeout: 220000 });
 await page.waitForFunction(() => window.__game.engine.frame > 30, { timeout: 220000 }).catch(() => {});
 await page.waitForTimeout(2500);
 
-const rows = await page.evaluate(async () => {
+const { out: rows, added } = await page.evaluate(async () => {
   const { ctx, engine } = window.__game;
   ctx.enemies?.clearAll?.();
   ctx.player.respawn?.();
@@ -83,12 +83,20 @@ const rows = await page.evaluate(async () => {
     last = performance.now();   // exclude the readback from the next delta
   };
 
+  // Snapshot exactly which programs exist before the trigger, so the ones
+  // that appear during the burst can be named rather than guessed at. Three
+  // guesses at these have now been wrong.
+  const progKey = (pr) => `${pr.name || '?'} | ${(pr.cacheKey || '').slice(0, 140)}`;
+  const before = new Set((ctx.renderer.info.programs || []).map(progKey));
+
   for (let i = 0; i < 14; i++) await step('idle', i === 12);
   window.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
   for (let i = 0; i < 30; i++) await step('FIRING', i === 2 || i === 14 || i === 28);
   window.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
   for (let i = 0; i < 45; i++) await step('after', i === 2 || i === 20 || i === 43);
-  return out;
+
+  const added = (ctx.renderer.info.programs || []).map(progKey).filter((k) => !before.has(k));
+  return { out, added };
 });
 
 console.log('phase    frame   ms   mean  programs  dpr   calls');
@@ -123,6 +131,12 @@ console.log(`brightness checkpoints: ${probed.map((r) => `${r.label}=${r.mean}`)
 console.log(`slowest non-probe frame: ${Math.max(...clean(rows).map((r) => r.ms))} ms`);
 console.log(`dpr range: ${Math.min(...rows.map((r) => r.dpr))} .. ${Math.max(...rows.map((r) => r.dpr))}`);
 console.log(`shader programs: ${rows[0].programs} -> ${rows[rows.length - 1].programs}`);
+if (added.length) {
+  console.log(`\nprograms compiled during the burst (${added.length}):`);
+  for (const k of added) console.log('  ' + k);
+} else {
+  console.log('\nno programs compiled during the burst');
+}
 if (errs.length) console.log(`\n${errs.length} errors:\n` + [...new Set(errs)].slice(0, 4).join('\n'));
 
 await browser.close();
