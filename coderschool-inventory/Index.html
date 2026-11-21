@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <style>
+    :root {
+      --bg: #f4f6fa; --card: #ffffff; --ink: #1b2430; --muted: #5d6b7e; --line: #dde3ec;
+      --brand: #1f3a5f; --accent: #2f7de1; --ok: #1f9d55; --warn: #c27c0e; --err: #c0392b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f141b; --card: #18202b; --ink: #e8edf4; --muted: #9aa8bb; --line: #2a3544;
+              --brand: #8fb4e8; --accent: #5aa0ff; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+           background: var(--bg); color: var(--ink); }
+    header { background: #1f3a5f; color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 5; }
+    header h1 { margin: 0; font-size: 18px; }
+    header p { margin: 2px 0 0; font-size: 13px; opacity: .8; }
+    main { max-width: 560px; margin: 0 auto; padding: 16px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+    .btn { display: block; width: 100%; border: 0; border-radius: 12px; padding: 14px; font-size: 17px;
+           font-weight: 600; cursor: pointer; text-align: center; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ok { background: var(--ok); color: #fff; }
+    .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+    .btn:disabled { opacity: .55; }
+    .row { display: flex; gap: 10px; } .row > * { flex: 1; min-width: 0; }
+    .stack > * + * { margin-top: 10px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    input, select, textarea { width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px;
+           border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+    textarea { min-height: 64px; resize: vertical; }
+    #preview { width: 100%; max-height: 300px; object-fit: contain; border-radius: 10px; background: #000; display: none; }
+    .status { padding: 12px; border-radius: 10px; font-size: 15px; display: none; }
+    .status.info { display: block; background: rgba(47,125,225,.12); }
+    .status.ok { display: block; background: rgba(31,157,85,.14); }
+    .status.err { display: block; background: rgba(192,57,43,.14); }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor;
+               border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite;
+               vertical-align: -3px; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .price { font-size: 28px; font-weight: 700; color: var(--brand); }
+    .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+    .sources a { color: var(--accent); word-break: break-word; font-size: 14px; }
+    .sources li { margin: 4px 0; }
+    .hidden { display: none !important; }
+    .recent li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .recent ul { list-style: none; margin: 0; padding: 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    h2 { font-size: 16px; margin: 0 0 8px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>CoderSchool Inventory</h1>
+  <p>Snap a photo → get a price → save to Google Sheets</p>
+</header>
+
+<main>
+  <!-- Step 1: capture -->
+  <section class="card stack" id="captureCard">
+    <img id="preview" alt="Item photo">
+    <input type="file" id="photo" accept="image/*" capture="environment" class="hidden">
+    <button class="btn btn-primary" id="takeBtn">📷 Take photo of item</button>
+    <input type="text" id="hint" placeholder="Optional hint: e.g. “Dell laptop” or “IKEA desk, 120cm”">
+    <button class="btn btn-ok hidden" id="analyzeBtn">🔎 Identify &amp; find price</button>
+    <button class="btn btn-ghost" id="manualBtn">✏️ Enter an item without a photo</button>
+    <div class="status" id="status"></div>
+  </section>
+
+  <!-- Step 2: review -->
+  <section class="card hidden" id="reviewCard">
+    <h2>Review &amp; save</h2>
+    <div id="priceBox" class="hidden">
+      <div class="price" id="priceBig"></div>
+      <div class="muted" id="priceRange"></div>
+      <span class="pill" id="confidence"></span>
+    </div>
+
+    <label for="f_name">Item name *</label>
+    <input id="f_name" required>
+
+    <div class="row">
+      <div><label for="f_category">Category</label>
+        <select id="f_category">
+          <? for (var i = 0; i < categories.length; i++) { ?>
+            <option><?= categories[i] ?></option>
+          <? } ?>
+        </select></div>
+      <div><label for="f_condition">Condition</label>
+        <select id="f_condition">
+          <option>New</option><option>Like New</option><option selected>Good</option><option>Fair</option><option>Poor</option>
+        </select></div>
+    </div>
+
+    <div class="row">
+      <div><label for="f_brand">Brand</label><input id="f_brand"></div>
+      <div><label for="f_model">Model / SKU</label><input id="f_model"></div>
+    </div>
+
+    <label for="f_description">Description</label>
+    <textarea id="f_description"></textarea>
+
+    <div class="row">
+      <div><label for="f_quantity">Quantity</label><input id="f_quantity" type="number" min="1" value="1" inputmode="numeric"></div>
+      <div><label for="f_price">Unit price (USD)</label><input id="f_price" type="number" step="0.01" min="0" inputmode="decimal"></div>
+    </div>
+
+    <div class="row">
+      <div><label for="f_location">Location / Room</label><input id="f_location" list="locations" placeholder="e.g. Lab A"></div>
+      <div><label for="f_tag">Asset tag</label><input id="f_tag" placeholder="optional"></div>
+    </div>
+    <datalist id="locations"></datalist>
+
+    <label for="f_notes">Notes</label>
+    <textarea id="f_notes"></textarea>
+
+    <div id="sourcesBox" class="hidden">
+      <label>Price sources</label>
+      <ul class="sources" id="sources"></ul>
+    </div>
+
+    <div class="stack" style="margin-top:14px">
+      <label class="muted"><input type="checkbox" id="f_savePhoto" checked style="width:auto"> Save photo to Google Drive</label>
+      <button class="btn btn-ok" id="saveBtn">✅ Save to Google Sheet</button>
+      <button class="btn btn-ghost" id="cancelBtn">Start over</button>
+    </div>
+  </section>
+
+  <!-- Recent -->
+  <section class="card recent">
+    <h2>Recently added</h2>
+    <div class="muted" id="summary">Loading…</div>
+    <ul id="recentList"></ul>
+    <p><a id="sheetLink" href="#" target="_blank" class="hidden">Open the Google Sheet ↗</a></p>
+  </section>
+</main>
+
+<script>
+  var photoB64 = null;      // resized JPEG, base64
+  var lastResult = null;    // AI result
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function setStatus(kind, html) {
+    var s = $('status'); s.className = 'status ' + (kind || ''); s.innerHTML = html || '';
+  }
+
+  // Remember locations per device for quicker entry
+  function loadLocations() {
+    try {
+      var locs = JSON.parse(localStorage.getItem('locations') || '[]');
+      $('locations').innerHTML = locs.map(function (l) { return '<option value="' + escapeHtml(l) + '">'; }).join('');
+      var last = localStorage.getItem('lastLocation'); if (last) $('f_location').value = last;
+    } catch (e) {}
+  }
+  function rememberLocation(loc) {
+    if (!loc) return;
+    try {
+      var locs = JSON.parse(localStorage.getItem('locations') || '[]');
+      if (locs.indexOf(loc) === -1) locs.unshift(loc);
+      localStorage.setItem('locations', JSON.stringify(locs.slice(0, 20)));
+      localStorage.setItem('lastLocation', loc);
+    } catch (e) {}
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function money(n) { return n || n === 0 ? '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''; }
+
+  // Resize to keep uploads small and fast (max 1280px, JPEG 0.8)
+  function resizeImage(file, cb) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1280, w = img.width, h = img.height;
+        if (w > max || h > max) { var r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r); }
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        var dataUrl = c.toDataURL('image/jpeg', 0.8);
+        cb(dataUrl, dataUrl.split(',')[1]);
+      };
+      img.onerror = function () { setStatus('err', 'Could not read that image. Try again.'); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  $('takeBtn').onclick = function () { $('photo').click(); };
+  $('photo').onchange = function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setStatus('info', '<span class="spinner"></span>Preparing photo…');
+    resizeImage(file, function (dataUrl, b64) {
+      photoB64 = b64;
+      $('preview').src = dataUrl; $('preview').style.display = 'block';
+      $('takeBtn').textContent = '📷 Retake photo';
+      $('analyzeBtn').classList.remove('hidden');
+      setStatus('', '');
+    });
+  };
+
+  $('analyzeBtn').onclick = function () {
+    if (!photoB64) return;
+    $('analyzeBtn').disabled = true; $('takeBtn').disabled = true;
+    setStatus('info', '<span class="spinner"></span>Identifying item and searching the web for prices… (usually 15–45 seconds)');
+    google.script.run
+      .withSuccessHandler(function (r) {
+        lastResult = r;
+        $('analyzeBtn').disabled = false; $('takeBtn').disabled = false;
+        setStatus('ok', 'Found it! Review the details below.');
+        showReview(r);
+      })
+      .withFailureHandler(function (err) {
+        $('analyzeBtn').disabled = false; $('takeBtn').disabled = false;
+        setStatus('err', escapeHtml(err.message || err) + '<br><br>You can also tap “Enter an item without a photo”.');
+      })
+      .analyzeImage(photoB64, $('hint').value);
+  };
+
+  $('manualBtn').onclick = function () { lastResult = null; showReview({}); };
+
+  function showReview(r) {
+    $('f_name').value = r.item_name || $('hint').value || '';
+    if (r.category) $('f_category').value = r.category;
+    if (r.condition_guess) $('f_condition').value = r.condition_guess;
+    $('f_brand').value = r.brand || '';
+    $('f_model').value = r.model || '';
+    $('f_description').value = r.description || '';
+    $('f_price').value = r.unit_price != null ? r.unit_price : '';
+    $('f_notes').value = r.notes || '';
+    $('f_quantity').value = 1;
+    $('f_tag').value = '';
+    loadLocations();
+
+    if (r.unit_price != null) {
+      $('priceBox').classList.remove('hidden');
+      $('priceBig').textContent = money(r.unit_price);
+      $('priceRange').textContent = (r.price_low != null && r.price_high != null)
+        ? 'Typical range ' + money(r.price_low) + ' – ' + money(r.price_high) : '';
+      $('confidence').textContent = 'Confidence: ' + (r.confidence || '—');
+    } else { $('priceBox').classList.add('hidden'); }
+
+    var srcs = r.sources || [];
+    $('sourcesBox').classList.toggle('hidden', !srcs.length);
+    $('sources').innerHTML = srcs.map(function (s) {
+      return '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener">' + escapeHtml(s.title || s.url) +
+        '</a>' + (s.price ? ' — ' + money(s.price) : '') + '</li>';
+    }).join('');
+
+    $('f_savePhoto').parentNode.classList.toggle('hidden', !photoB64);
+    $('reviewCard').classList.remove('hidden');
+    $('reviewCard').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  $('saveBtn').onclick = function () {
+    var name = $('f_name').value.trim();
+    if (!name) { $('f_name').focus(); return; }
+    var r = lastResult || {};
+    var item = {
+      item_name: name, category: $('f_category').value, condition: $('f_condition').value,
+      brand: $('f_brand').value, model: $('f_model').value, description: $('f_description').value,
+      quantity: $('f_quantity').value, unit_price: $('f_price').value,
+      price_low: r.price_low, price_high: r.price_high, sources: r.sources || [],
+      confidence: r.confidence, location: $('f_location').value.trim(), asset_tag: $('f_tag').value,
+      notes: $('f_notes').value,
+    };
+    rememberLocation(item.location);
+    $('saveBtn').disabled = true; $('saveBtn').innerHTML = '<span class="spinner"></span>Saving…';
+    google.script.run
+      .withSuccessHandler(function () {
+        $('saveBtn').disabled = false; $('saveBtn').textContent = '✅ Save to Google Sheet';
+        reset();
+        setStatus('ok', '✅ Saved “' + escapeHtml(name) + '” to the sheet. Ready for the next item.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        loadRecent();
+      })
+      .withFailureHandler(function (err) {
+        $('saveBtn').disabled = false; $('saveBtn').textContent = '✅ Save to Google Sheet';
+        alert('Save failed: ' + (err.message || err));
+      })
+      .saveItem(item, $('f_savePhoto').checked ? photoB64 : null);
+  };
+
+  $('cancelBtn').onclick = function () { reset(); setStatus('', ''); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+
+  function reset() {
+    photoB64 = null; lastResult = null;
+    $('photo').value = ''; $('hint').value = '';
+    $('preview').style.display = 'none'; $('preview').removeAttribute('src');
+    $('takeBtn').textContent = '📷 Take photo of item';
+    $('analyzeBtn').classList.add('hidden');
+    $('reviewCard').classList.add('hidden');
+  }
+
+  function loadRecent() {
+    google.script.run
+      .withSuccessHandler(function (d) {
+        $('summary').textContent = d.count + ' item rows · total value ' + money(d.total || 0);
+        $('recentList').innerHTML = d.items.map(function (i) {
+          return '<li><span>' + escapeHtml(i.name) + (i.qty > 1 ? ' ×' + i.qty : '') +
+            '<br><span class="muted">' + escapeHtml(i.category) + (i.location ? ' · ' + escapeHtml(i.location) : '') +
+            '</span></span><strong>' + money(i.total) + '</strong></li>';
+        }).join('');
+        if (d.sheetUrl) { $('sheetLink').href = d.sheetUrl; $('sheetLink').classList.remove('hidden'); }
+      })
+      .withFailureHandler(function (err) { $('summary').textContent = 'Could not load: ' + (err.message || err); })
+      .getRecentItems();
+  }
+
+  loadRecent();
+</script>
+</body>
+</html>
