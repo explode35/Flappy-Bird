@@ -73,7 +73,8 @@ After editing the code, go to **Deploy → Manage deployments → ✏️ Edit �
 | Problem | Fix |
 |---|---|
 | "No API key set" | Run **Inventory Scanner → Set up** again from the Sheet. |
-| "Invalid Anthropic API key" | Create a new key in the Anthropic console and run Set up again. |
+| "Anthropic rejected the API key" | In the Sheet run **Inventory Scanner → Test API key**. If it fails, create a new key at console.anthropic.com → API Keys (use the Copy button), then run Set up again and deploy a new version. A Claude.ai chat subscription does not include an API key. |
+| "Out of credits" | Add credits at console.anthropic.com → Billing. |
 | "AI service is busy" | Wait a few seconds and try again. |
 | Scan takes too long or times out | Try again, or add a hint. Lower `MAX_WEB_SEARCHES` in `Code.gs` to make scans faster. |
 | Camera doesn't open | Make sure the browser has camera/photo permission. You can also pick an existing photo. |

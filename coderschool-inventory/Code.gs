@@ -40,6 +40,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Inventory Scanner')
     .addItem('Set up / set API key', 'setup')
+    .addItem('Test API key', 'testApiKey')
     .addItem('Show web app link', 'showWebAppLink')
     .addToUi();
 }
@@ -58,8 +59,20 @@ function setup() {
     ui.ButtonSet.OK_CANCEL
   );
   if (resp.getSelectedButton() === ui.Button.OK) {
-    const key = resp.getResponseText().trim();
-    if (key) props.setProperty('ANTHROPIC_API_KEY', key);
+    const key = cleanKey_(resp.getResponseText());
+    if (key) {
+      if (key.indexOf('sk-ant-') !== 0) {
+        ui.alert('That doesn\'t look like an Anthropic API key',
+          'API keys start with "sk-ant-". Create one at console.anthropic.com > API Keys ' +
+          '(a Claude.ai chat subscription does not include an API key). Nothing was saved.',
+          ui.ButtonSet.OK);
+        return;
+      }
+      props.setProperty('ANTHROPIC_API_KEY', key);
+      const test = checkKey_(key);
+      ui.alert(test.ok ? 'API key works ✅' : 'API key problem ❌', test.message, ui.ButtonSet.OK);
+      if (!test.ok) return;
+    }
   }
   ui.alert(
     'Setup complete',
@@ -67,6 +80,45 @@ function setup() {
       'Deploy > New deployment > Web app, then open the link on your phone.',
     ui.ButtonSet.OK
   );
+}
+
+/** Removes spaces, line breaks and quote marks that sneak in when copy/pasting a key. */
+function cleanKey_(raw) {
+  return String(raw || '').replace(/[\s"'\u201C\u201D\u2018\u2019]/g, '');
+}
+
+function getApiKey_() {
+  return cleanKey_(PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY'));
+}
+
+/** Makes a tiny request to confirm the key is accepted. */
+function checkKey_(key) {
+  const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/models?limit=1', {
+    method: 'get',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    muteHttpExceptions: true,
+  });
+  const code = res.getResponseCode();
+  if (code === 200) {
+    return { ok: true, message: 'Anthropic accepted the key (' + key.slice(0, 10) + '…' + key.slice(-4) + '). You\'re ready to scan.' };
+  }
+  let detail = '';
+  try { detail = JSON.parse(res.getContentText()).error.message; } catch (e) { detail = res.getContentText().slice(0, 200); }
+  return {
+    ok: false,
+    message: 'Anthropic rejected the key (HTTP ' + code + '): ' + detail +
+      '\n\nSaved key: ' + key.slice(0, 10) + '…' + key.slice(-4) + ' (' + key.length + ' characters).' +
+      '\n\nFix: in console.anthropic.com > API Keys, create a NEW key, copy it with the Copy button, ' +
+      'and run Inventory Scanner > Set up again.',
+  };
+}
+
+function testApiKey() {
+  const ui = SpreadsheetApp.getUi();
+  const key = getApiKey_();
+  if (!key) { ui.alert('No API key saved yet. Run Inventory Scanner > Set up.'); return; }
+  const test = checkKey_(key);
+  ui.alert(test.ok ? 'API key works ✅' : 'API key problem ❌', test.message, ui.ButtonSet.OK);
 }
 
 function showWebAppLink() {
@@ -116,7 +168,7 @@ function doGet() {
  * @param {string} hint        Optional text the user typed (e.g. "Dell laptop, 2022")
  */
 function analyzeImage(base64Jpeg, hint) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  const apiKey = getApiKey_();
   if (!apiKey) throw new Error('No API key set. Open the Sheet and run Inventory Scanner > Set up.');
 
   const prompt =
@@ -206,7 +258,8 @@ function callClaude_(apiKey, messages) {
   const json = JSON.parse(res.getContentText() || '{}');
   if (code !== 200) {
     const msg = (json.error && json.error.message) || res.getContentText();
-    if (code === 401) throw new Error('Invalid Anthropic API key. Re-run Inventory Scanner > Set up.');
+    if (code === 401) throw new Error('Anthropic rejected the API key (' + msg + '). In the Sheet, run Inventory Scanner > Test API key for details.');
+    if (code === 400 && /credit balance/i.test(msg)) throw new Error('Your Anthropic account is out of credits. Add credits at console.anthropic.com > Billing.');
     if (code === 429 || code === 529) throw new Error('The AI service is busy. Wait a moment and try again.');
     throw new Error('AI request failed (' + code + '): ' + msg);
   }
